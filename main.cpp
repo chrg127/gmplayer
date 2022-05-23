@@ -5,7 +5,7 @@
 #include <gme/gme.h>
 #include <fmt/core.h>
 
-using u8 = uint8_t;
+using u8  = uint8_t;
 using u32 = uint32_t;
 
 const int FREQUENCY = 44100;
@@ -14,10 +14,18 @@ const int CHANNELS  = 2;
 
 Music_Emu *emu;
 
+void play_siren(Music_Emu *, long count, short *out)
+{
+    static double a, a2;
+    while (count--)
+        *out++ = 0x2000 * std::sin(a += 0.1 + 0.05 * std::sin(a2 += 0.00005));
+}
+
 void audio_callback(void *, u8 *stream, int)
 {
     short buf[SAMPLES * CHANNELS];
     gme_play(emu, std::size(buf), buf);
+    play_siren(emu, std::size(buf), buf);
     std::memcpy(stream, buf, sizeof(buf));
     // mix from one buffer into another
     // SDL_MixAudio(stream, (const u8 *) buf, sizeof(buf), SDL_MIX_MAXVOLUME);
@@ -83,8 +91,10 @@ int main(int argc, char *argv[])
     }
 
     SDL_PauseAudio(0);
-    while (gme_tell(emu) < info->length)
+    gme_set_fade(emu, info->length);
+    while (!gme_track_ended(emu)) {
         fmt::print("{} / {} (elapsed / length)\r", gme_tell(emu) / 1000, info->length / 1000);
+    }
 
     gme_delete(emu);
     SDL_CloseAudio();
