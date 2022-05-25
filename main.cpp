@@ -10,7 +10,7 @@ using u8  = uint8_t;
 using u32 = uint32_t;
 
 const int FREQUENCY = 44100;
-const int SAMPLES   = 4096;
+const int SAMPLES   = 2048;
 const int CHANNELS  = 2;
 
 inline constexpr std::size_t operator"" _s(unsigned long long secs) { return secs * 1000ull; }
@@ -106,21 +106,22 @@ int main(int argc, char *argv[])
     int cur_track = 0;
     int length = load_track(cur_track);
 
-    SDL_AudioSpec spec;
-    std::memset(&spec, 0, sizeof(spec));
-    spec.freq       = 44100;
-    spec.format     = AUDIO_S16SYS;
-    spec.channels   = CHANNELS;
-    spec.samples    = SAMPLES;
-    spec.callback   = audio_callback;
-    spec.userdata   = nullptr;
+    SDL_AudioSpec desired, obtained;
+    std::memset(&desired, 0, sizeof(desired));
+    desired.freq       = 44100;
+    desired.format     = AUDIO_S16SYS;
+    desired.channels   = CHANNELS;
+    desired.samples    = SAMPLES;
+    desired.callback   = audio_callback;
+    desired.userdata   = nullptr;
 
-    if (SDL_OpenAudio(&spec, nullptr) < 0) {
+    auto dev = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
+    if (dev == 0) {
         fmt::print(stderr, "couldn't open audio: {}\n", SDL_GetError());
         return 1;
     }
 
-    SDL_PauseAudio(0);
+    SDL_PauseAudioDevice(dev, 0);
 
     for (bool running = true; running && cur_track != track_count; ) {
         for (SDL_Event ev; SDL_PollEvent(&ev); ) {
@@ -150,7 +151,8 @@ int main(int argc, char *argv[])
         gme_delete(emu);
         emu = nullptr;
     }
-    SDL_CloseAudio();
+
+    SDL_CloseAudioDevice(dev);
     SDL_Quit();
 
     return 0;
