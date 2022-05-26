@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.1.0)
 
-project(main VERSION 1.0.0 LANGUAGES CXX)
+project(gmplayer VERSION 1.0.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -18,9 +18,9 @@ find_package(SDL2 REQUIRED)
 find_package(fmt REQUIRED)
 
 include_directories(${SDL2_INCLUDE_DIRS})
+include_directories(gme/include)
+link_directories(gme/lib)
 
-add_executable(main
-    main.cpp
-)
+add_executable(gmplayer main.cpp)
 
-target_link_libraries(main Qt5::Widgets ${SDL2_LIBRARIES} fmt pthread gme)
+target_link_libraries(gmplayer Qt5::Widgets ${SDL2_LIBRARIES} fmt pthread gme)
