@@ -5,41 +5,36 @@
 #include <SDL.h>
 #include <fmt/core.h>
 #include <gme/gme.h>
+#include "mainwindow.hpp"
 
-bool running = true;
+bool sdl_running = true;
 
-bool handle_sdl_events()
+void handle_sdl_events()
 {
     for (SDL_Event ev; SDL_PollEvent(&ev); ) {
         switch (ev.type) {
         case SDL_QUIT:
-            running = false;
-            return true;
+            sdl_running = false;
         }
     }
-    return false;
 }
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-    QDialog d;
-    QPushButton b("hello", &d);
+    MainWindow mw;
     SDL_Init(SDL_INIT_AUDIO);
     std::thread th([&]() {
-        while (running) {
-            if (handle_sdl_events()) {
-                d.close();
-            }
+        while (sdl_running) {
+            handle_sdl_events();
+            SDL_Delay(16);
         }
+        mw.close();
     });
-    d.show();
-    Music_Emu *emu;
-    gme_open_file("ynbarracks.spc", &emu, 44100);
+    mw.show();
     a.exec();
-    running = false;
+    sdl_running = false;
     th.join();
     SDL_Quit();
     return 0;
 }
-

@@ -4,7 +4,7 @@ project(gmplayer VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_VERBOSE_MAKEFILE ON)
+# set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -21,6 +21,6 @@ include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(gme/include)
 link_directories(gme/lib)
 
-add_executable(gmplayer main.cpp)
+add_executable(gmplayer main.cpp mainwindow.cpp)
 
 target_link_libraries(gmplayer Qt5::Widgets ${SDL2_LIBRARIES} fmt pthread gme)
