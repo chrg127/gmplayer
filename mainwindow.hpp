@@ -17,11 +17,14 @@ signals:
     void next();
     void prev();
     void change_volume(int volume);
+    void mute();
 };
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
     QLabel *title, *game, *system, *author, *comment;
+    QLabel *duration_label;
+    QString last_dir = ".";
     MediaControls *controls;
 public:
     explicit MainWindow(QWidget *parent = nullptr);

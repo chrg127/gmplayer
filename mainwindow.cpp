@@ -1,6 +1,6 @@
 #include "mainwindow.hpp"
 
-#include <functional>
+#include <tuple>
 #include <QWidget>
 #include <QMenuBar>
 #include <QLabel>
@@ -17,27 +17,9 @@
 #include <QComboBox>
 #include <QSlider>
 #include <QToolButton>
+#include <QFileDialog>
 #include <fmt/core.h>
-
-template <typename T> void add_to_layout(T *lt, QWidget *w) { lt->addWidget(w); }
-template <typename T> void add_to_layout(T *lt, QLayout *l) { lt->addLayout(l); }
-
-template <typename T>
-T *make_layout(auto... widgets)
-{
-    auto *lt = new T;
-    (add_to_layout(lt, widgets), ...);
-    return lt;
-}
-
-inline QGridLayout *make_grid_layout(auto... widget_tuples)
-{
-    auto *lt = new QGridLayout;
-    (lt->addWidget(std::get<0>(widget_tuples),
-                   std::get<1>(widget_tuples),
-                   std::get<2>(widget_tuples)), ...);
-    return lt;
-}
+#include "qtutils.hpp"
 
 MediaControls::MediaControls(QWidget *parent)
     : QWidget(parent)
@@ -84,19 +66,34 @@ MainWindow::MainWindow(QWidget *parent)
     comment   = new QLabel;
 
     auto *labels = make_grid_layout(
-        std::tuple { new QLabel("Title:"),   0, 0 },
-        std::tuple { new QLabel("Game:"),    1, 0 },
-        std::tuple { new QLabel("System:"),  2, 0 },
-        std::tuple { new QLabel("Author:"),  3, 0 },
-        std::tuple { new QLabel("Comment:"), 4, 0 },
-        std::tuple { title,                  0, 1 },
-        std::tuple { game ,                  0, 2 },
-        std::tuple { system,                 0, 3 },
-        std::tuple { author,                 0, 4 },
-        std::tuple { comment,                0, 5 }
+        std::tuple { new QLabel(tr("Title:")),   0, 0 },
+        std::tuple { new QLabel(tr("Game:")),    1, 0 },
+        std::tuple { new QLabel(tr("System:")),  2, 0 },
+        std::tuple { new QLabel(tr("Author:")),  3, 0 },
+        std::tuple { new QLabel(tr("Comment:")), 4, 0 },
+        std::tuple { title,                      0, 1 },
+        std::tuple { game,                       0, 2 },
+        std::tuple { system,                     0, 3 },
+        std::tuple { author,                     0, 4 },
+        std::tuple { comment,                    0, 5 }
     );
 
-    auto *lt = make_layout<QVBoxLayout>(labels, new MediaControls, new QWidget);
+    auto *duration_slider = new QSlider(Qt::Horizontal);
+    // change its value with setValue
+    connect(duration_slider, &QSlider::sliderMoved, this, [&](int secs) {
+        fmt::print("{}\n", secs);
+    });
+    duration_label = new QLabel("00:00 / 00:00");
+
+    auto *lt = make_layout<QVBoxLayout>(
+        labels,
+        make_layout<QHBoxLayout>(
+            duration_slider,
+            duration_label
+        ),
+        new MediaControls,
+        new QWidget
+    );
     center->setLayout(lt);
 }
 
@@ -104,7 +101,7 @@ QMenu *MainWindow::create_menu(const char *name, auto... actions)
 {
     auto *menu = menuBar()->addMenu(tr(name));
     auto f = [&](auto &a) {
-        auto *act = new QAction(std::get<0>(a), this);
+        auto *act = new QAction(tr(std::get<0>(a)), this);
         connect(act, &QAction::triggered, this, std::get<1>(a));
         menu->addAction(act);
     };
@@ -114,7 +111,11 @@ QMenu *MainWindow::create_menu(const char *name, auto... actions)
 
 void MainWindow::open_file()
 {
-
+    auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir,
+        "Game music files (*.spc *.nsf)");
+    if (filename.isEmpty())
+        return;
+    last_dir = filename;
 }
 
 void MainWindow::edit_settings()
