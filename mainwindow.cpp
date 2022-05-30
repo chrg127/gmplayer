@@ -30,17 +30,18 @@ MediaControls::MediaControls(QWidget *parent)
         connect(b, &QAbstractButton::clicked, this, f);
         return b;
     };
-    auto *slider = new QSlider(Qt::Horizontal, this);
-    slider->setRange(0, 100);
-    connect(slider, &QSlider::valueChanged, this, [&]() {
+    auto *volume = new QSlider(Qt::Horizontal);
+    volume->setRange(0, 100);
+    connect(volume, &QSlider::valueChanged, this, [&]() {
         emit change_volume(0);
     });
     setLayout(make_layout<QHBoxLayout>(
-        make_btn(QStyle::SP_MediaSkipBackward, &MediaControls::prev),
-        make_btn(QStyle::SP_MediaPlay,         &MediaControls::play),
-        make_btn(QStyle::SP_MediaSkipForward,  &MediaControls::next),
-        make_btn(QStyle::SP_MediaStop,         &MediaControls::stop),
-        slider
+        make_btn(QStyle::SP_MediaSkipBackward, []() { player::prev(); }),
+        make_btn(QStyle::SP_MediaPlay,         []() { player::start_or_resume(); }),
+        make_btn(QStyle::SP_MediaStop,         []() { player::stop(); }),
+        make_btn(QStyle::SP_MediaSkipForward,  []() { player::next(); }),
+        make_btn(QStyle::SP_MediaVolume,       []() { /* mute */ }),
+        volume
     ));
 }
 
