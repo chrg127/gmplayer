@@ -23,9 +23,8 @@ void handle_sdl_events()
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-    MainWindow mw;
     SDL_Init(SDL_INIT_AUDIO);
-    player::init();
+    MainWindow mw;
 
     std::thread th([&]() {
         while (sdl_running) {
@@ -47,7 +46,6 @@ int main(int argc, char *argv[])
 
     sdl_running = false;
     th.join();
-    player::quit();
     SDL_Quit();
     return 0;
 }

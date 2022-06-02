@@ -49,6 +49,8 @@ void PlayButton::set_state(State state)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    player = new Player(this);
+
     setWindowTitle("gmplayer");
     auto *center = new QWidget(this);
     setCentralWidget(center);
@@ -81,8 +83,8 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     play_btn = new PlayButton;
-    connect(play_btn, &PlayButton::play,  this, []() { fmt::print("play\n"); player::start_or_resume(); });
-    connect(play_btn, &PlayButton::pause, this, []() { fmt::print("pause\n"); player::pause(); });
+    connect(play_btn, &PlayButton::play,  this, [&]() { fmt::print("play\n");  player->start_or_resume(); });
+    connect(play_btn, &PlayButton::pause, this, [&]() { fmt::print("pause\n"); player->pause(); });
 
     auto make_btn = [&](auto icon, auto f) {
         auto *b = new QToolButton(this);
@@ -109,11 +111,11 @@ MainWindow::MainWindow(QWidget *parent)
             duration_label
         ),
         make_layout<QHBoxLayout>(
-            make_btn(QStyle::SP_MediaSkipBackward, []() { player::prev(); }),
+            make_btn(QStyle::SP_MediaSkipBackward, [&]() { player->prev(); }),
             play_btn,
-            make_btn(QStyle::SP_MediaStop,         []() { player::stop(); }),
-            make_btn(QStyle::SP_MediaSkipForward,  []() { player::next(); }),
-            make_btn(QStyle::SP_MediaVolume,       []() { /* mute */ }),
+            make_btn(QStyle::SP_MediaStop,         [&]() { player->stop(); }),
+            make_btn(QStyle::SP_MediaSkipForward,  [&]() { player->next(); }),
+            make_btn(QStyle::SP_MediaVolume,       [&]() { /* mute */ }),
             volume
         ),
         new QWidget
@@ -138,13 +140,13 @@ void MainWindow::open_file()
         "Game music files (*.spc *.nsf)");
     if (filename.isEmpty())
         return;
-    player::use_file(filename);
-    auto metadata = player::get_track_metadata();
-    title->setText(metadata.info->song);
-    game->setText(metadata.info->game);
-    author->setText(metadata.info->author);
-    system->setText(metadata.info->system);
-    comment->setText(metadata.info->comment);
+    player->use_file(filename);
+    auto info = player->track_info();
+    title->setText(info.metadata->song);
+    game->setText(info.metadata->game);
+    author->setText(info.metadata->author);
+    system->setText(info.metadata->system);
+    comment->setText(info.metadata->comment);
     play_btn->set_state(PlayButton::State::Play); // also calls start_or_resume
     last_dir = filename;
 }

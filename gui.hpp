@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QMainWindow>
 #include <QToolButton>
+#include "player.hpp"
 
 class QLabel;
 
@@ -20,6 +21,8 @@ signals:
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
+
+    Player *player;
     QLabel *title, *game, *system, *author, *comment;
     QLabel *duration_label;
     QString last_dir = ".";
