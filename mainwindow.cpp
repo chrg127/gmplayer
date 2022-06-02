@@ -19,30 +19,31 @@
 #include <QToolButton>
 #include <QFileDialog>
 #include <fmt/core.h>
+#include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
+#include "player.hpp"
 
-MediaControls::MediaControls(QWidget *parent)
-    : QWidget(parent)
+PlayButton::PlayButton(QWidget *parent)
+    : QToolButton(parent)
 {
-    auto make_btn = [&](auto icon, auto f) {
-        auto *b = new QToolButton(this);
-        b->setIcon(style()->standardIcon(icon));
-        connect(b, &QAbstractButton::clicked, this, f);
-        return b;
-    };
-    auto *volume = new QSlider(Qt::Horizontal);
-    volume->setRange(0, 100);
-    connect(volume, &QSlider::valueChanged, this, [&]() {
-        emit change_volume(0);
+    setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    connect(this, &QToolButton::clicked, this, [&]() {
+        set_state(state == State::Play ? State::Pause : State::Play);
     });
-    setLayout(make_layout<QHBoxLayout>(
-        make_btn(QStyle::SP_MediaSkipBackward, []() { player::prev(); }),
-        make_btn(QStyle::SP_MediaPlay,         []() { player::start_or_resume(); }),
-        make_btn(QStyle::SP_MediaStop,         []() { player::stop(); }),
-        make_btn(QStyle::SP_MediaSkipForward,  []() { player::next(); }),
-        make_btn(QStyle::SP_MediaVolume,       []() { /* mute */ }),
-        volume
-    ));
+}
+
+void PlayButton::set_state(State state)
+{
+    switch (this->state = state) {
+    case State::Play:
+        setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+        emit play();
+        break;
+    case State::Pause:
+        setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+        emit pause();
+        break;
+    }
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -60,45 +61,66 @@ MainWindow::MainWindow(QWidget *parent)
         std::tuple { "Settings", &MainWindow::edit_settings }
     );
 
-    title     = new QLabel;
-    game      = new QLabel;
-    system    = new QLabel;
-    author    = new QLabel;
-    comment   = new QLabel;
+    title     = new QLabel("title");
+    game      = new QLabel("game");
+    system    = new QLabel("system");
+    author    = new QLabel("author");
+    comment   = new QLabel("comment");
 
-    auto *labels = make_grid_layout(
-        std::tuple { new QLabel(tr("Title:")),   0, 0 },
-        std::tuple { new QLabel(tr("Game:")),    1, 0 },
-        std::tuple { new QLabel(tr("System:")),  2, 0 },
-        std::tuple { new QLabel(tr("Author:")),  3, 0 },
-        std::tuple { new QLabel(tr("Comment:")), 4, 0 },
-        std::tuple { title,                      0, 1 },
-        std::tuple { game,                       0, 2 },
-        std::tuple { system,                     0, 3 },
-        std::tuple { author,                     0, 4 },
-        std::tuple { comment,                    0, 5 }
-    );
-
+    duration_label = new QLabel("00:00 / 00:00");
     auto *duration_slider = new QSlider(Qt::Horizontal);
     // change its value with setValue
     connect(duration_slider, &QSlider::sliderMoved, this, [&](int secs) {
         fmt::print("{}\n", secs);
     });
-    duration_label = new QLabel("00:00 / 00:00");
 
-    auto *lt = make_layout<QVBoxLayout>(
-        labels,
+    auto *volume = new QSlider(Qt::Horizontal);
+    volume->setRange(0, 100);
+    connect(volume, &QSlider::valueChanged, this, [&]() {
+        fmt::print("changing volume\n");
+    });
+
+    play_btn = new PlayButton;
+    connect(play_btn, &PlayButton::play,  this, []() { fmt::print("play\n"); player::start_or_resume(); });
+    connect(play_btn, &PlayButton::pause, this, []() { fmt::print("pause\n"); player::pause(); });
+
+    auto make_btn = [&](auto icon, auto f) {
+        auto *b = new QToolButton(this);
+        b->setIcon(style()->standardIcon(icon));
+        connect(b, &QAbstractButton::clicked, this, f);
+        return b;
+    };
+
+    center->setLayout(make_layout<QVBoxLayout>(
+        make_grid_layout(
+            std::tuple { new QLabel(tr("Title:")),   0, 0 },
+            std::tuple { title,                      0, 1 },
+            std::tuple { new QLabel(tr("Game:")),    1, 0 },
+            std::tuple { game,                       1, 1 },
+            std::tuple { new QLabel(tr("System:")),  0, 2 },
+            std::tuple { system,                     0, 3 },
+            std::tuple { new QLabel(tr("Author:")),  1, 2 },
+            std::tuple { author,                     1, 3 },
+            std::tuple { new QLabel(tr("Comment:")), 2, 0 },
+            std::tuple { comment,                    2, 1 }
+        ),
         make_layout<QHBoxLayout>(
             duration_slider,
             duration_label
         ),
-        new MediaControls,
+        make_layout<QHBoxLayout>(
+            make_btn(QStyle::SP_MediaSkipBackward, []() { player::prev(); }),
+            play_btn,
+            make_btn(QStyle::SP_MediaStop,         []() { player::stop(); }),
+            make_btn(QStyle::SP_MediaSkipForward,  []() { player::next(); }),
+            make_btn(QStyle::SP_MediaVolume,       []() { /* mute */ }),
+            volume
+        ),
         new QWidget
-    );
-    center->setLayout(lt);
+    ));
 }
 
-QMenu *MainWindow::create_menu(const char *name, auto... actions)
+QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 {
     auto *menu = menuBar()->addMenu(tr(name));
     auto f = [&](auto &a) {
@@ -116,10 +138,17 @@ void MainWindow::open_file()
         "Game music files (*.spc *.nsf)");
     if (filename.isEmpty())
         return;
+    player::use_file(filename);
+    auto metadata = player::get_track_metadata();
+    title->setText(metadata.info->song);
+    game->setText(metadata.info->game);
+    author->setText(metadata.info->author);
+    system->setText(metadata.info->system);
+    comment->setText(metadata.info->comment);
+    play_btn->set_state(PlayButton::State::Play); // also calls start_or_resume
     last_dir = filename;
 }
 
 void MainWindow::edit_settings()
 {
-
 }

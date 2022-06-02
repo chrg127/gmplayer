@@ -3,21 +3,19 @@
 #include <QObject>
 #include <QWidget>
 #include <QMainWindow>
+#include <QToolButton>
 
 class QLabel;
 
-class MediaControls : public QWidget {
+class PlayButton : public QToolButton {
     Q_OBJECT
 public:
-    explicit MediaControls(QWidget *parent = nullptr);
+    enum class State { Play, Pause } state = State::Pause;
+    PlayButton(QWidget *parent = nullptr);
+    void set_state(State state);
 signals:
     void play();
     void pause();
-    void stop();
-    void next();
-    void prev();
-    void change_volume(int volume);
-    void mute();
 };
 
 class MainWindow : public QMainWindow {
@@ -25,10 +23,11 @@ class MainWindow : public QMainWindow {
     QLabel *title, *game, *system, *author, *comment;
     QLabel *duration_label;
     QString last_dir = ".";
-    MediaControls *controls;
-public:
-    explicit MainWindow(QWidget *parent = nullptr);
-    QMenu *create_menu(const char *name, auto... actions);
+    PlayButton *play_btn;
+
+    QMenu *create_menu(const char *name, auto&&... actions);
     void edit_settings();
     void open_file();
+public:
+    explicit MainWindow(QWidget *parent = nullptr);
 };

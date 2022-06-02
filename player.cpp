@@ -51,7 +51,8 @@ struct Player {
         std::lock_guard<std::mutex> lock(emu_mutex);
         gme_open_file(filename, &emu, 44100);
         track_count = gme_track_count(emu);
-        cur_track = -1;
+        cur_track = 0;
+        load_track(0);
     }
 
     void load_track(int num)
@@ -64,16 +65,22 @@ struct Player {
     void start_or_resume()
     {
         std::lock_guard<std::mutex> lock(emu_mutex);
-        if (gme_track_ended(emu) && cur_track+1 != track_count) {
-            load_track(++cur_track);
-        }
-        stopped = false;
+        SDL_PauseAudioDevice(dev_id, 0);
+        // if (gme_track_ended(emu) && cur_track+1 != track_count) {
+        //     load_track(++cur_track);
+        // }
+    }
+
+    void pause()
+    {
+        std::lock_guard<std::mutex> lock(emu_mutex);
+        SDL_PauseAudioDevice(dev_id, 1);
     }
 
     void stop()
     {
         std::lock_guard<std::mutex> lock(emu_mutex);
-        stopped = true;
+        SDL_PauseAudioDevice(dev_id, 1);
     }
 
     void next()
@@ -87,6 +94,12 @@ struct Player {
         std::lock_guard<std::mutex> lock(emu_mutex);
         cur_track++;
     }
+
+    int get_track_time()
+    {
+        std::lock_guard<std::mutex> lock(emu_mutex);
+        return gme_tell(emu);
+    }
 } music_player;
 
 
@@ -96,8 +109,7 @@ namespace {
 void audio_callback(void *, u8 *stream, int)
 {
     std::lock_guard<std::mutex> lock(music_player.emu_mutex);
-    if (music_player.stopped
-     || !music_player.emu
+    if (!music_player.emu
      || gme_track_ended(music_player.emu))
         return;
     short buf[SAMPLES * CHANNELS];
@@ -126,7 +138,6 @@ void init()
     desired.callback   = audio_callback;
     desired.userdata   = nullptr;
     music_player.dev_id = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
-    SDL_PauseAudioDevice(music_player.dev_id, 0);
 }
 
 void use_file(const QString &filename)
@@ -135,8 +146,19 @@ void use_file(const QString &filename)
 }
 
 void start_or_resume() { music_player.start_or_resume(); }
+void pause()           { music_player.pause(); }
 void stop()            { music_player.stop(); }
 void next()            { music_player.next(); }
 void prev()            { music_player.prev(); }
+
+Metadata get_track_metadata()
+{
+    return {
+        .info   = music_player.info,
+        .length = music_player.length,
+    };
+}
+
+int get_track_time() { return music_player.get_track_time(); }
 
 } // namespace player
