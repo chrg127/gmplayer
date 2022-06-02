@@ -5,7 +5,7 @@
 #include <SDL.h>
 #include <fmt/core.h>
 #include <gme/gme.h>
-#include "mainwindow.hpp"
+#include "gui.hpp"
 #include "player.hpp"
 
 bool sdl_running = true;

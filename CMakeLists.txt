@@ -21,6 +21,6 @@ include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(gme/include)
 link_directories(gme/lib)
 
-add_executable(gmplayer main.cpp mainwindow.cpp player.cpp)
+add_executable(gmplayer main.cpp gui.cpp player.cpp)
 
 target_link_libraries(gmplayer Qt5::Widgets ${SDL2_LIBRARIES} fmt pthread gme)

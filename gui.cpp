@@ -1,4 +1,4 @@
-#include "mainwindow.hpp"
+#include "gui.hpp"
 
 #include <tuple>
 #include <QWidget>
