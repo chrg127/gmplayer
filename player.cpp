@@ -140,6 +140,11 @@ void init()
     music_player.dev_id = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
 }
 
+void quit()
+{
+    SDL_CloseAudioDevice(music_player.dev_id);
+}
+
 void use_file(const QString &filename)
 {
     music_player.use_file(filename.toUtf8().constData());

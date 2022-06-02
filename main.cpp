@@ -47,6 +47,7 @@ int main(int argc, char *argv[])
 
     sdl_running = false;
     th.join();
+    player::quit();
     SDL_Quit();
     return 0;
 }
