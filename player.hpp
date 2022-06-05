@@ -19,6 +19,7 @@ class Player : public QObject {
     // emulator and audio device objects.
     // a mutex is needed because audio plays in another thread.
     Music_Emu *emu           = nullptr;
+    int id                   = 0;
     SDL_AudioDeviceID dev_id = 0;
 
     // file information:
@@ -45,4 +46,8 @@ public:
     void next();
     void prev();
     TrackInfo track_info() const { return track; }
+
+signals:
+    void track_changed(gme_info_t *, int);
+    void position_changed(int);
 };

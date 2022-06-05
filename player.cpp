@@ -1,7 +1,10 @@
 #include <cassert>
 #include <cstdint>
+#include <array>
+#include <optional>
 #include <mutex>
 #include <utility>
+#include <functional>
 #include <QString>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
@@ -16,10 +19,27 @@ const int FREQUENCY = 44100;
 const int SAMPLES   = 2048;
 const int CHANNELS  = 2;
 
+using SampleArray = std::array<short, SAMPLES * CHANNELS>;
 
 
 std::mutex audio_mutex;
-Music_Emu **emulator = nullptr;
+
+struct {
+    std::vector<std::function<std::optional<SampleArray>(void)>> functions;
+    int cur = -1;
+
+    int register_function(auto &&fn)
+    {
+        functions.emplace_back(fn);
+        return functions.size() - 1;
+    }
+
+    void change_cur_to(int id) { cur = id; }
+    auto & operator[](std::size_t i) { return functions[i]; }
+    auto & get() { return functions[cur]; }
+} callback_handler;
+
+
 
 namespace {
     constexpr std::size_t operator"" _s(unsigned long long secs) { return secs * 1000ull; }
@@ -36,12 +56,13 @@ namespace {
     void audio_callback(void *, u8 *stream, int)
     {
         std::lock_guard<std::mutex> lock(audio_mutex);
-        fmt::print("{}\n", (uintptr_t) *emulator);
-        if (!*emulator || gme_track_ended(*emulator))
+        if (callback_handler.cur == -1)
             return;
-        short buf[SAMPLES * CHANNELS];
-        gme_play(*emulator, std::size(buf), buf);
-        std::memcpy(stream, buf, sizeof(buf));
+        auto res = callback_handler.get()();
+        if (!res)
+            return;
+        auto &samples = res.value();
+        std::memcpy(stream, samples.data(), samples.size() * sizeof(short));
         // mix from one buffer into another
         // SDL_MixAudio(stream, (const u8 *) buf, sizeof(buf), SDL_MIX_MAXVOLUME);
     }
@@ -52,6 +73,7 @@ namespace {
 Player::Player(QObject *parent)
     : QObject(parent)
 {
+    std::lock_guard<std::mutex> lock(audio_mutex);
     SDL_AudioSpec desired, obtained;
     std::memset(&desired, 0, sizeof(desired));
     desired.freq       = 44100;
@@ -61,13 +83,22 @@ Player::Player(QObject *parent)
     desired.callback   = audio_callback;
     desired.userdata   = nullptr;
     dev_id = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
-    assert(dev_id != 0);
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    emulator = &emu;
+    id = callback_handler.register_function([&]() -> std::optional<SampleArray> {
+        if (!emu || gme_track_ended(emu))
+            return std::nullopt;
+        SampleArray buf;
+        gme_play(emu, buf.size(), buf.data());
+        emit position_changed(gme_tell(emu));
+        return buf;
+    });
+    callback_handler.change_cur_to(id);
 }
 
 Player::~Player()
 {
+    std::lock_guard<std::mutex> lock(audio_mutex);
+    gme_delete(emu);
+    emu = nullptr;
     SDL_CloseAudioDevice(dev_id);
 }
 
@@ -90,6 +121,7 @@ void Player::load_track(int num)
     gme_track_info(emu, &track.metadata, num);
     track.length = get_track_length(track.metadata);
     gme_start_track(emu, num);
+    emit track_changed(track.metadata, track.length);
 }
 
 void Player::start_or_resume()

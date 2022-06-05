@@ -7,6 +7,7 @@
 #include "player.hpp"
 
 class QLabel;
+class QSlider;
 
 class PlayButton : public QToolButton {
     Q_OBJECT
@@ -23,8 +24,8 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
     Player *player;
-    QLabel *title, *game, *system, *author, *comment;
-    QLabel *duration_label;
+    QLabel *title, *game, *system, *author, *comment, *duration_label;
+    QSlider *duration_slider, *volume;
     QString last_dir = ".";
     PlayButton *play_btn;
 

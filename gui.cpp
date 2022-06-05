@@ -49,8 +49,6 @@ void PlayButton::set_state(State state)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    player = new Player(this);
-
     setWindowTitle("gmplayer");
     auto *center = new QWidget(this);
     setCentralWidget(center);
@@ -63,20 +61,32 @@ MainWindow::MainWindow(QWidget *parent)
         std::tuple { "Settings", &MainWindow::edit_settings }
     );
 
-    title     = new QLabel("title");
-    game      = new QLabel("game");
-    system    = new QLabel("system");
-    author    = new QLabel("author");
-    comment   = new QLabel("comment");
+    player = new Player(this);
+
+    title   = new QLabel("title");
+    game    = new QLabel("game");
+    system  = new QLabel("system");
+    author  = new QLabel("author");
+    comment = new QLabel("comment");
 
     duration_label = new QLabel("00:00 / 00:00");
-    auto *duration_slider = new QSlider(Qt::Horizontal);
-    // change its value with setValue
+    duration_slider = new QSlider(Qt::Horizontal);
     connect(duration_slider, &QSlider::sliderMoved, this, [&](int secs) {
         fmt::print("{}\n", secs);
     });
+    connect(player, &Player::position_changed, this, [&](int ms) {
+        duration_slider->setValue(ms);
+    });
+    connect(player, &Player::track_changed, this, [&](gme_info_t *info, int length) {
+        title   ->setText(info->song);
+        game    ->setText(info->game);
+        author  ->setText(info->author);
+        system  ->setText(info->system);
+        comment ->setText(info->comment);
+        duration_slider->setRange(0, length);
+    });
 
-    auto *volume = new QSlider(Qt::Horizontal);
+    volume = new QSlider(Qt::Horizontal);
     volume->setRange(0, 100);
     connect(volume, &QSlider::valueChanged, this, [&]() {
         fmt::print("changing volume\n");
@@ -136,19 +146,14 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file()
 {
+    // player->use_file(QString("skyfortress.spc"));
     auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir,
         "Game music files (*.spc *.nsf)");
     if (filename.isEmpty())
         return;
     player->use_file(filename);
-    auto info = player->track_info();
-    title->setText(info.metadata->song);
-    game->setText(info.metadata->game);
-    author->setText(info.metadata->author);
-    system->setText(info.metadata->system);
-    comment->setText(info.metadata->comment);
     play_btn->set_state(PlayButton::State::Play); // also calls start_or_resume
-    last_dir = filename;
+    // last_dir = filename;
 }
 
 void MainWindow::edit_settings()
