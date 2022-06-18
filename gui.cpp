@@ -29,21 +29,15 @@ PlayButton::PlayButton(QWidget *parent)
     setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
     connect(this, &QToolButton::clicked, this, [&]() {
         set_state(state == State::Play ? State::Pause : State::Play);
+        emit state == State::Pause ? pause() : play();
     });
 }
 
 void PlayButton::set_state(State state)
 {
-    switch (this->state = state) {
-    case State::Play:
-        setIcon(style()->standardIcon(QStyle::SP_MediaPause));
-        emit play();
-        break;
-    case State::Pause:
-        setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-        emit pause();
-        break;
-    }
+    this->state = state;
+    setIcon(style()->standardIcon(state == State::Pause ? QStyle::SP_MediaPlay
+                                                        : QStyle::SP_MediaPause));
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -53,6 +47,8 @@ MainWindow::MainWindow(QWidget *parent)
     auto *center = new QWidget(this);
     setCentralWidget(center);
 
+    player = new Player(this);
+
     create_menu("&File",
         std::tuple { "Open", &MainWindow::open_file }
     );
@@ -61,22 +57,34 @@ MainWindow::MainWindow(QWidget *parent)
         std::tuple { "Settings", &MainWindow::edit_settings }
     );
 
-    player = new Player(this);
-
-    title   = new QLabel("title");
-    game    = new QLabel("game");
-    system  = new QLabel("system");
-    author  = new QLabel("author");
-    comment = new QLabel("comment");
+    play_btn = new PlayButton;
+    connect(play_btn, &PlayButton::play,  this, [&]() { player->start_or_resume(); });
+    connect(play_btn, &PlayButton::pause, this, [&]() { player->pause(); });
 
     duration_label = new QLabel("00:00 / 00:00");
     duration_slider = new QSlider(Qt::Horizontal);
-    connect(duration_slider, &QSlider::sliderMoved, this, [&](int secs) {
-        fmt::print("{}\n", secs);
+    connect(duration_slider, &QSlider::sliderPressed,  this, [&]() {
+        player->pause();
+        play_btn->set_state(PlayButton::State::Pause);
+    });
+    connect(duration_slider, &QSlider::sliderReleased, this, [&]() {
+        player->start_or_resume();
+        play_btn->set_state(PlayButton::State::Play);
+    });
+    connect(duration_slider, &QSlider::sliderMoved, this, [&](int ms) {
+        player->seek(ms);
+        set_duration_label(ms, duration_slider->maximum());
     });
     connect(player, &Player::position_changed, this, [&](int ms) {
         duration_slider->setValue(ms);
+        set_duration_label(ms, duration_slider->maximum());
     });
+
+    title   = new QLabel;
+    game    = new QLabel;
+    system  = new QLabel;
+    author  = new QLabel;
+    comment = new QLabel;
     connect(player, &Player::track_changed, this, [&](gme_info_t *info, int length) {
         title   ->setText(info->song);
         game    ->setText(info->game);
@@ -85,6 +93,9 @@ MainWindow::MainWindow(QWidget *parent)
         comment ->setText(info->comment);
         duration_slider->setRange(0, length);
     });
+    connect(player, &Player::track_ended, this, [&]() {
+        play_btn->set_state(PlayButton::State::Pause);
+    });
 
     volume = new QSlider(Qt::Horizontal);
     volume->setRange(0, 100);
@@ -92,15 +103,18 @@ MainWindow::MainWindow(QWidget *parent)
         fmt::print("changing volume\n");
     });
 
-    play_btn = new PlayButton;
-    connect(play_btn, &PlayButton::play,  this, [&]() { fmt::print("play\n");  player->start_or_resume(); });
-    connect(play_btn, &PlayButton::pause, this, [&]() { fmt::print("pause\n"); player->pause(); });
-
     auto make_btn = [&](auto icon, auto f) {
         auto *b = new QToolButton(this);
         b->setIcon(style()->standardIcon(icon));
         connect(b, &QAbstractButton::clicked, this, f);
         return b;
+    };
+
+    auto stop_fn = [&]() {
+        play_btn->set_state(PlayButton::State::Pause);
+        player->pause();
+        player->seek(0);
+        duration_slider->setValue(0);
     };
 
     center->setLayout(make_layout<QVBoxLayout>(
@@ -123,7 +137,7 @@ MainWindow::MainWindow(QWidget *parent)
         make_layout<QHBoxLayout>(
             make_btn(QStyle::SP_MediaSkipBackward, [&]() { player->prev(); }),
             play_btn,
-            make_btn(QStyle::SP_MediaStop,         [&]() { player->stop(); }),
+            make_btn(QStyle::SP_MediaStop,         stop_fn),
             make_btn(QStyle::SP_MediaSkipForward,  [&]() { player->next(); }),
             make_btn(QStyle::SP_MediaVolume,       [&]() { /* mute */ }),
             volume
@@ -146,16 +160,27 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file()
 {
-    // player->use_file(QString("skyfortress.spc"));
-    auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir,
-        "Game music files (*.spc *.nsf)");
+    auto filename = QString("skyfortress.spc");
+    // auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir,
+    //     "Game music files (*.spc *.nsf)");
     if (filename.isEmpty())
         return;
     player->use_file(filename);
-    play_btn->set_state(PlayButton::State::Play); // also calls start_or_resume
-    // last_dir = filename;
+    player->start_or_resume();
+    play_btn->set_state(PlayButton::State::Play);
+    last_dir = filename;
 }
 
 void MainWindow::edit_settings()
 {
 }
+
+void MainWindow::set_duration_label(int ms, int max)
+{
+    int mins = ms / 1000 / 60;
+    int secs = ms / 1000 % 60;
+    int max_mins = max / 1000 / 60;
+    int max_secs = max / 1000 % 60;
+    auto str = fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
+    duration_label->setText(QString::fromStdString(str));
+};

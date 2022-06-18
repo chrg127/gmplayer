@@ -64,7 +64,12 @@ namespace {
         auto &samples = res.value();
         std::memcpy(stream, samples.data(), samples.size() * sizeof(short));
         // mix from one buffer into another
-        // SDL_MixAudio(stream, (const u8 *) buf, sizeof(buf), SDL_MIX_MAXVOLUME);
+        // SDL_MixAudioFormat(
+        //     stream,
+        //     (const u8 *) samples.data(),
+        //     samples.size() * sizeof(short),
+        //     SDL_MIX_MAXVOLUMEu
+        // );
     }
 } // namespace
 
@@ -74,7 +79,7 @@ Player::Player(QObject *parent)
     : QObject(parent)
 {
     std::lock_guard<std::mutex> lock(audio_mutex);
-    SDL_AudioSpec desired, obtained;
+    SDL_AudioSpec desired;
     std::memset(&desired, 0, sizeof(desired));
     desired.freq       = 44100;
     desired.format     = AUDIO_S16SYS;
@@ -84,8 +89,10 @@ Player::Player(QObject *parent)
     desired.userdata   = nullptr;
     dev_id = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
     id = callback_handler.register_function([&]() -> std::optional<SampleArray> {
-        if (!emu || gme_track_ended(emu))
+        if (!emu || gme_track_ended(emu)) {
+            emit track_ended();
             return std::nullopt;
+        }
         SampleArray buf;
         gme_play(emu, buf.size(), buf.data());
         emit position_changed(gme_tell(emu));
@@ -139,12 +146,6 @@ void Player::pause()
     SDL_PauseAudioDevice(dev_id, 1);
 }
 
-void Player::stop()
-{
-    std::lock_guard<std::mutex> lock(audio_mutex);
-    SDL_PauseAudioDevice(dev_id, 1);
-}
-
 void Player::next()
 {
     std::lock_guard<std::mutex> lock(audio_mutex);
@@ -155,6 +156,12 @@ void Player::prev()
 {
     std::lock_guard<std::mutex> lock(audio_mutex);
     cur_track++;
+}
+
+void Player::seek(int ms)
+{
+    std::lock_guard<std::mutex> lock(audio_mutex);
+    gme_seek(emu, ms);
 }
 
 // int get_track_time()

@@ -21,6 +21,7 @@ class Player : public QObject {
     Music_Emu *emu           = nullptr;
     int id                   = 0;
     SDL_AudioDeviceID dev_id = 0;
+    SDL_AudioSpec obtained;
 
     // file information:
     int track_count = 0;
@@ -42,12 +43,12 @@ public:
     void use_file(const QString &filename);
     void start_or_resume();
     void pause();
-    void stop();
     void next();
     void prev();
-    TrackInfo track_info() const { return track; }
+    void seek(int ms);
 
 signals:
     void track_changed(gme_info_t *, int);
     void position_changed(int);
+    void track_ended();
 };

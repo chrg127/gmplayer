@@ -32,6 +32,7 @@ class MainWindow : public QMainWindow {
     QMenu *create_menu(const char *name, auto&&... actions);
     void edit_settings();
     void open_file();
+    void set_duration_label(int ms, int max);
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 };
