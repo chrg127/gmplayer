@@ -28,11 +28,13 @@ class MainWindow : public QMainWindow {
     QSlider *duration_slider, *volume;
     QString last_dir = ".";
     PlayButton *play_btn;
+    QToolButton *stop, *volume_btn, *prev_track, *next_track;
 
     QMenu *create_menu(const char *name, auto&&... actions);
     void edit_settings();
     void open_file();
     void set_duration_label(int ms, int max);
+    void set_enabled(bool val);
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 };

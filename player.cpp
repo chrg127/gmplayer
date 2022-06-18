@@ -90,6 +90,7 @@ Player::Player(QObject *parent)
     dev_id = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
     id = callback_handler.register_function([&]() -> std::optional<SampleArray> {
         if (!emu || gme_track_ended(emu)) {
+            SDL_PauseAudioDevice(dev_id, 1);
             emit track_ended();
             return std::nullopt;
         }

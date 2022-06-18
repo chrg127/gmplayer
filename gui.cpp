@@ -95,6 +95,7 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(player, &Player::track_ended, this, [&]() {
         play_btn->set_state(PlayButton::State::Pause);
+        set_enabled(false);
     });
 
     volume = new QSlider(Qt::Horizontal);
@@ -110,13 +111,17 @@ MainWindow::MainWindow(QWidget *parent)
         return b;
     };
 
-    auto stop_fn = [&]() {
+    stop = make_btn(QStyle::SP_MediaSkipBackward,       [&]() { player->prev(); });
+    volume_btn = make_btn(QStyle::SP_MediaVolume,       [&]() { /* mute */ });
+    next_track = make_btn(QStyle::SP_MediaSkipForward,  [&]() { player->next(); });
+    prev_track = make_btn(QStyle::SP_MediaStop,         [&]() {
         play_btn->set_state(PlayButton::State::Pause);
         player->pause();
         player->seek(0);
         duration_slider->setValue(0);
-    };
+    });
 
+    set_enabled(false);
     center->setLayout(make_layout<QVBoxLayout>(
         make_grid_layout(
             std::tuple { new QLabel(tr("Title:")),   0, 0 },
@@ -135,11 +140,11 @@ MainWindow::MainWindow(QWidget *parent)
             duration_label
         ),
         make_layout<QHBoxLayout>(
-            make_btn(QStyle::SP_MediaSkipBackward, [&]() { player->prev(); }),
+            prev_track,
             play_btn,
-            make_btn(QStyle::SP_MediaStop,         stop_fn),
-            make_btn(QStyle::SP_MediaSkipForward,  [&]() { player->next(); }),
-            make_btn(QStyle::SP_MediaVolume,       [&]() { /* mute */ }),
+            next_track,
+            stop,
+            volume_btn,
             volume
         ),
         new QWidget
@@ -160,19 +165,31 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file()
 {
-    auto filename = QString("skyfortress.spc");
-    // auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir,
-    //     "Game music files (*.spc *.nsf)");
+    // auto filename = QString("skyfortress.spc");
+    auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir,
+        "Game music files (*.spc *.nsf)");
     if (filename.isEmpty())
         return;
     player->use_file(filename);
     player->start_or_resume();
     play_btn->set_state(PlayButton::State::Play);
     last_dir = filename;
+    set_enabled(true);
 }
 
 void MainWindow::edit_settings()
 {
+}
+
+void MainWindow::set_enabled(bool val)
+{
+    duration_slider->setEnabled(val);
+    volume->setEnabled(val);
+    stop->setEnabled(val);
+    prev_track->setEnabled(val);
+    next_track->setEnabled(val);
+    volume_btn->setEnabled(val);
+    play_btn->setEnabled(val);
 }
 
 void MainWindow::set_duration_label(int ms, int max)
