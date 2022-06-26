@@ -6,7 +6,7 @@ gmplayer is a music player for game music (nsf, spc, etc.).
 
 1.  Install the GME (Game_Music_Emu) library.
     GME can be downloaded from here: https://bitbucket.org/mpyne/game-music-emu/wiki/Home
-    After downloading it, it should be built and installed under a directory gme/ inside
+    After downloading, it should be built and installed under a directory gme/ inside
     this project's root directory. The following commands (run under the GME root dir)
     should do the trick:
 
@@ -19,6 +19,6 @@ gmplayer is a music player for game music (nsf, spc, etc.).
 2.  Build the project using cmake:
 
         cmake . -B build
-        make -B build
+        make -C build
 
 3.  The executable should be found inside build/.
