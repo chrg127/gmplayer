@@ -16,6 +16,7 @@
 #include <QTextEdit>
 #include <QComboBox>
 #include <QSlider>
+#include <QStyle>
 #include <QToolButton>
 #include <QFileDialog>
 #include <fmt/core.h>
@@ -40,6 +41,27 @@ void PlayButton::set_state(State state)
                                                         : QStyle::SP_MediaPause));
 }
 
+VolumeButton::VolumeButton(QSlider *volume_slider, QWidget *parent)
+    : QToolButton(parent)
+    , last_volume{get_max_volume_value()}
+    , slider{volume_slider}
+{
+    setIcon(style()->standardIcon(QStyle::SP_MediaVolume));
+    connect(this, &QAbstractButton::clicked, this, [&]() {
+        int volume = slider->value();
+        if (volume != 0) {
+            // mute
+            last_volume = volume;
+            slider->setValue(0);
+            setIcon(style()->standardIcon(QStyle::SP_MediaVolumeMuted));
+        } else {
+            // unmute
+            slider->setValue(last_volume);
+            setIcon(style()->standardIcon(QStyle::SP_MediaVolume));
+        }
+    });
+}
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -47,7 +69,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *center = new QWidget(this);
     setCentralWidget(center);
 
-    player = new Player(this);
+    player = new Player;
 
     create_menu("&File",
         std::tuple { "Open", &MainWindow::open_file }
@@ -75,33 +97,12 @@ MainWindow::MainWindow(QWidget *parent)
         player->seek(ms);
         set_duration_label(ms, duration_slider->maximum());
     });
-    connect(player, &Player::position_changed, this, [&](int ms) {
-        duration_slider->setValue(ms);
-        set_duration_label(ms, duration_slider->maximum());
-    });
 
     title   = new QLabel;
     game    = new QLabel;
     system  = new QLabel;
     author  = new QLabel;
     comment = new QLabel;
-    connect(player, &Player::track_changed, this, [&](gme_info_t *info, int length) {
-        title   ->setText(info->song);
-        game    ->setText(info->game);
-        author  ->setText(info->author);
-        system  ->setText(info->system);
-        comment ->setText(info->comment);
-        duration_slider->setRange(0, length);
-    });
-    connect(player, &Player::track_ended, this, [&]() {
-        play_btn->set_state(PlayButton::State::Pause);
-    });
-
-    volume = new QSlider(Qt::Horizontal);
-    volume->setRange(0, 100);
-    connect(volume, &QSlider::valueChanged, this, [&]() {
-        fmt::print("changing volume\n");
-    });
 
     auto make_btn = [&](auto icon, auto f) {
         auto *b = new QToolButton(this);
@@ -110,14 +111,41 @@ MainWindow::MainWindow(QWidget *parent)
         return b;
     };
 
-    stop = make_btn(QStyle::SP_MediaSkipBackward,       [&]() { player->prev(); });
-    volume_btn = make_btn(QStyle::SP_MediaVolume,       [&]() { /* mute */ });
+    prev_track = make_btn(QStyle::SP_MediaSkipBackward, [&]() { player->prev(); });
     next_track = make_btn(QStyle::SP_MediaSkipForward,  [&]() { player->next(); });
-    prev_track = make_btn(QStyle::SP_MediaStop,         [&]() {
+    stop = make_btn(QStyle::SP_MediaStop,               [&]() {
         play_btn->set_state(PlayButton::State::Pause);
         player->pause();
         player->seek(0);
         duration_slider->setValue(0);
+    });
+
+    volume = new QSlider(Qt::Horizontal);
+    volume->setRange(0, get_max_volume_value());
+    volume->setValue(volume->maximum());
+    volume_btn = new VolumeButton(volume, this);
+    connect(volume, &QSlider::valueChanged, this, [&]() {
+        player->set_volume(volume->value());
+        volume_btn->setIcon(style()->standardIcon(
+            volume->value() == 0 ? QStyle::SP_MediaVolumeMuted
+                                 : QStyle::SP_MediaVolume
+        ));
+    });
+
+    player->on_position_changed([&](int ms) {
+        duration_slider->setValue(ms);
+        set_duration_label(ms, duration_slider->maximum());
+    });
+    player->on_track_changed([&](gme_info_t *info, int length) {
+        title   ->setText(info->song);
+        game    ->setText(info->game);
+        author  ->setText(info->author);
+        system  ->setText(info->system);
+        comment ->setText(info->comment);
+        duration_slider->setRange(0, length);
+    });
+    player->on_track_ended([&]() {
+        play_btn->set_state(PlayButton::State::Pause);
     });
 
     set_enabled(false);
@@ -170,7 +198,7 @@ void MainWindow::open_file()
     if (filename.isEmpty())
         return;
     player->pause();
-    player->use_file(filename);
+    player->use_file(filename.toUtf8().constData());
     player->start_or_resume();
     play_btn->set_state(PlayButton::State::Play);
     last_dir = filename;

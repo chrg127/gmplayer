@@ -20,6 +20,14 @@ signals:
     void pause();
 };
 
+class VolumeButton : public QToolButton {
+    Q_OBJECT
+public:
+    int last_volume;
+    QSlider *slider;
+    VolumeButton(QSlider *volume_slider, QWidget *parent);
+};
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -28,7 +36,8 @@ class MainWindow : public QMainWindow {
     QSlider *duration_slider, *volume;
     QString last_dir = ".";
     PlayButton *play_btn;
-    QToolButton *stop, *volume_btn, *prev_track, *next_track;
+    VolumeButton *volume_btn;
+    QToolButton *stop, *prev_track, *next_track;
 
     QMenu *create_menu(const char *name, auto&&... actions);
     void edit_settings();
