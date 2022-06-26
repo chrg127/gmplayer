@@ -95,7 +95,6 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(player, &Player::track_ended, this, [&]() {
         play_btn->set_state(PlayButton::State::Pause);
-        set_enabled(false);
     });
 
     volume = new QSlider(Qt::Horizontal);
@@ -170,6 +169,7 @@ void MainWindow::open_file()
         "Game music files (*.spc *.nsf)");
     if (filename.isEmpty())
         return;
+    player->pause();
     player->use_file(filename);
     player->start_or_resume();
     play_btn->set_state(PlayButton::State::Play);
