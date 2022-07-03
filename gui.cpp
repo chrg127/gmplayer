@@ -19,6 +19,11 @@
 #include <QStyle>
 #include <QToolButton>
 #include <QFileDialog>
+#include <QListWidget>
+#include <QGroupBox>
+#include <QCheckBox>
+#include <QSpinBox>
+#include <QDialogButtonBox>
 #include <fmt/core.h>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
@@ -39,27 +44,6 @@ void PlayButton::set_state(State state)
     this->state = state;
     setIcon(style()->standardIcon(state == State::Pause ? QStyle::SP_MediaPlay
                                                         : QStyle::SP_MediaPause));
-}
-
-VolumeButton::VolumeButton(QSlider *volume_slider, QWidget *parent)
-    : QToolButton(parent)
-    , last_volume{get_max_volume_value()}
-    , slider{volume_slider}
-{
-    setIcon(style()->standardIcon(QStyle::SP_MediaVolume));
-    connect(this, &QAbstractButton::clicked, this, [&]() {
-        int volume = slider->value();
-        if (volume != 0) {
-            // mute
-            last_volume = volume;
-            slider->setValue(0);
-            setIcon(style()->standardIcon(QStyle::SP_MediaVolumeMuted));
-        } else {
-            // unmute
-            slider->setValue(last_volume);
-            setIcon(style()->standardIcon(QStyle::SP_MediaVolume));
-        }
-    });
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -123,7 +107,17 @@ MainWindow::MainWindow(QWidget *parent)
     volume = new QSlider(Qt::Horizontal);
     volume->setRange(0, get_max_volume_value());
     volume->setValue(volume->maximum());
-    volume_btn = new VolumeButton(volume, this);
+    volume_btn = make_btn(QStyle::SP_MediaVolume, [&, last_volume = get_max_volume_value()] () mutable {
+        if (volume->value() != 0) {
+            last_volume = volume->value();
+            volume->setValue(0);
+            volume_btn->setIcon(style()->standardIcon(QStyle::SP_MediaVolumeMuted));
+        } else {
+            volume->setValue(last_volume);
+            volume_btn->setIcon(style()->standardIcon(QStyle::SP_MediaVolume));
+        }
+    });
+
     connect(volume, &QSlider::valueChanged, this, [&]() {
         player->set_volume(volume->value());
         volume_btn->setIcon(style()->standardIcon(
@@ -132,50 +126,68 @@ MainWindow::MainWindow(QWidget *parent)
         ));
     });
 
+    playlist = new QListWidget(this);
+    connect(playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *item) {
+        int index = playlist->currentRow(); //playlist->selectionModel()->selectedIndexes()[0].row();
+        player->load_track(index);
+        player->start_or_resume();
+        play_btn->set_state(PlayButton::State::Play);
+    });
+
     player->on_position_changed([&](int ms) {
         duration_slider->setValue(ms);
         set_duration_label(ms, duration_slider->maximum());
     });
-    player->on_track_changed([&](gme_info_t *info, int length) {
+    player->on_track_changed([&](int num, gme_info_t *info, int length) {
         title   ->setText(info->song);
         game    ->setText(info->game);
         author  ->setText(info->author);
         system  ->setText(info->system);
         comment ->setText(info->comment);
         duration_slider->setRange(0, length);
+        next_track->setEnabled(player->has_next());
+        prev_track->setEnabled(player->has_prev());
+        player->start_or_resume();
+        play_btn->set_state(PlayButton::State::Play);
+        playlist->setCurrentRow(num);
     });
     player->on_track_ended([&]() {
         play_btn->set_state(PlayButton::State::Pause);
     });
 
     set_enabled(false);
-    center->setLayout(make_layout<QVBoxLayout>(
-        make_grid_layout(
-            std::tuple { new QLabel(tr("Title:")),   0, 0 },
-            std::tuple { title,                      0, 1 },
-            std::tuple { new QLabel(tr("Game:")),    1, 0 },
-            std::tuple { game,                       1, 1 },
-            std::tuple { new QLabel(tr("System:")),  0, 2 },
-            std::tuple { system,                     0, 3 },
-            std::tuple { new QLabel(tr("Author:")),  1, 2 },
-            std::tuple { author,                     1, 3 },
-            std::tuple { new QLabel(tr("Comment:")), 2, 0 },
-            std::tuple { comment,                    2, 1 }
-        ),
+    center->setLayout(
         make_layout<QHBoxLayout>(
-            duration_slider,
-            duration_label
-        ),
-        make_layout<QHBoxLayout>(
-            prev_track,
-            play_btn,
-            next_track,
-            stop,
-            volume_btn,
-            volume
-        ),
-        new QWidget
-    ));
+            make_layout<QVBoxLayout>(
+                make_groupbox("Track info", [&]() {
+                    return make_form_layout(
+                        std::tuple { new QLabel(tr("Title:")),   title      },
+                        std::tuple { new QLabel(tr("Game:")),    game       },
+                        std::tuple { new QLabel(tr("System:")),  system     },
+                        std::tuple { new QLabel(tr("Author:")),  author     },
+                        std::tuple { new QLabel(tr("Comment:")), comment    }
+                    );
+                }),
+                make_layout<QHBoxLayout>(
+                    duration_slider,
+                    duration_label
+                ),
+                make_layout<QHBoxLayout>(
+                    prev_track,
+                    play_btn,
+                    next_track,
+                    stop,
+                    volume_btn,
+                    volume
+                ),
+                new QWidget
+            ),
+            make_layout<QVBoxLayout>(
+                new QLabel(tr("Track playlist:")),
+                playlist
+            )
+        )
+    );
 }
 
 QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
@@ -192,21 +204,20 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file()
 {
-    // auto filename = QString("skyfortress.spc");
-    auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir,
-        "Game music files (*.spc *.nsf)");
+    // auto filename = QString("smb3.nsf");
+    auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir, "Game music files (*.spc *.nsf)");
     if (filename.isEmpty())
         return;
+    set_enabled(true);
     player->pause();
     player->use_file(filename.toUtf8().constData());
+    player->load_track(0);
     player->start_or_resume();
     play_btn->set_state(PlayButton::State::Play);
+    playlist->clear();
+    for (auto &track : player->track_names())
+        new QListWidgetItem(QString::fromStdString(track), playlist);
     last_dir = filename;
-    set_enabled(true);
-}
-
-void MainWindow::edit_settings()
-{
 }
 
 void MainWindow::set_enabled(bool val)
