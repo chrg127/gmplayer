@@ -43,3 +43,15 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 };
+
+class SettingsWindow : public QDialog {
+    Q_OBJECT
+
+    QCheckBox *fade, *autoplay;
+    QSpinBox *fade_secs;
+    PlayerOptions selected_options;
+
+public:
+    explicit SettingsWindow(const PlayerOptions &options, QWidget *parent = nullptr);
+    PlayerOptions get() const { return selected_options; }
+};

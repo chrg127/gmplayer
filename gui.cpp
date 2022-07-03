@@ -240,3 +240,59 @@ void MainWindow::set_duration_label(int ms, int max)
     auto str = fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
     duration_label->setText(QString::fromStdString(str));
 };
+
+void MainWindow::edit_settings()
+{
+    auto *wnd = new SettingsWindow(player->get_options(), this);
+    wnd->open();
+    connect(wnd, &QDialog::finished, this, [=](int result) {
+        if (result == QDialog::Accepted) {
+            fmt::print("modifying options\n");
+            auto opts = wnd->get();
+            fmt::print("fade: {}\n", opts.fade_out);
+            fmt::print("fade secs: {}\n", opts.fade_out_secs);
+            fmt::print("autoplay next: {}\n", opts.autoplay_next);
+            player->set_options(wnd->get());
+        }
+    });
+}
+
+
+
+SettingsWindow::SettingsWindow(const PlayerOptions &options, QWidget *parent)
+    : QDialog(parent), selected_options{options}
+{
+    fade = new QCheckBox(tr("&Enable fade-out"));
+    fade->setChecked(options.fade_out);
+
+    fade_secs = new QSpinBox;
+    fade_secs->setValue(options.fade_out_secs);
+
+    autoplay = new QCheckBox(tr("Autoplay next track"));
+    autoplay->setChecked(options.autoplay_next);
+
+    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
+                                          | QDialogButtonBox::Cancel);
+    connect(button_box, &QDialogButtonBox::accepted, this, [&]() {
+        // make an option object that the main window will get with get()
+        selected_options = (PlayerOptions) {
+            .fade_out           = fade->isChecked(),
+            .fade_out_secs      = fade_secs->value() * 1000,
+            .autoplay_next      = autoplay->isChecked(),
+            .default_duration   = 3_min,
+            .silence_detection  = 0,
+            .loops_limit        = 0,
+            .gain               = 0,
+        };
+        accept();
+    });
+    connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    auto *lt = make_layout<QVBoxLayout>(
+        fade,
+        make_form_layout(std::tuple { new QLabel(tr("Fade seconds:")), fade_secs }),
+        autoplay,
+        button_box
+    );
+    setLayout(lt);
+}
