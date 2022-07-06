@@ -250,7 +250,7 @@ void MainWindow::edit_settings()
             fmt::print("modifying options\n");
             auto opts = wnd->get();
             fmt::print("fade: {}\n", opts.fade_out);
-            fmt::print("fade secs: {}\n", opts.fade_out_secs);
+            fmt::print("fade secs: {}\n", opts.fade_out_ms);
             fmt::print("autoplay next: {}\n", opts.autoplay_next);
             player->set_options(wnd->get());
         }
@@ -266,7 +266,7 @@ SettingsWindow::SettingsWindow(const PlayerOptions &options, QWidget *parent)
     fade->setChecked(options.fade_out);
 
     fade_secs = new QSpinBox;
-    fade_secs->setValue(options.fade_out_secs);
+    fade_secs->setValue(options.fade_out_ms);
 
     autoplay = new QCheckBox(tr("Autoplay next track"));
     autoplay->setChecked(options.autoplay_next);
@@ -277,7 +277,7 @@ SettingsWindow::SettingsWindow(const PlayerOptions &options, QWidget *parent)
         // make an option object that the main window will get with get()
         selected_options = (PlayerOptions) {
             .fade_out           = fade->isChecked(),
-            .fade_out_secs      = fade_secs->value() * 1000,
+            .fade_out_ms        = fade_secs->value() * 1000,
             .autoplay_next      = autoplay->isChecked(),
             .default_duration   = 3_min,
             .silence_detection  = 0,

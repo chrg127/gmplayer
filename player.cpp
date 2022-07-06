@@ -21,6 +21,15 @@ const int CHANNELS  = 2;
 
 
 namespace {
+    int get_track_length(gme_info_t *info, int default_duration = 3_min)
+    {
+        if (info->length > 0)
+            return info->length;
+        if (info->loop_length > 0)
+            return info->intro_length + info->loop_length * 2;
+        return default_duration;
+    }
+
     /*
      * problem: we have one single player and we'd like to make it into a class to use
      * actual ctors and dtors (instead of manually calling an init() and free().
@@ -76,18 +85,17 @@ Player::~Player()
 void Player::audio_callback(void *, u8 *stream, int len)
 {
     if (!emu || gme_track_ended(emu)) {
-        fmt::print("ended\n");
         SDL_PauseAudioDevice(dev_id, 1);
         track_ended();
         return;
     }
 
-    // if (gme_tell(emu) + 5 > track.length) {
-    //     fmt::print("ended with check\n");
-    //     SDL_PauseAudioDevice(dev_id, 1);
-    //     track_ended();
-    //     return;
-    // }
+    if (gme_tell(emu) + 5 > track.length) {
+        fmt::print("ended with check\n");
+        SDL_PauseAudioDevice(dev_id, 1);
+        track_ended();
+        return;
+    }
 
     // fill stream with silence. this is needed for MixAudio to work how we want.
     std::memset(stream, 0, len);
@@ -98,17 +106,9 @@ void Player::audio_callback(void *, u8 *stream, int len)
     position_changed(gme_tell(emu));
 }
 
-int Player::get_track_length(gme_info_t *info)
-{
-    if (info->length > 0)
-        return info->length;
-    if (info->loop_length > 0)
-        return info->intro_length + info->loop_length * 2;
-    return options.default_duration;
-}
-
 void Player::set_fade(int length, int ms)
 {
+    fmt::print("{} {}\n", length, ms);
     if (!options.fade_out)
         return;
     if (ms > length)
@@ -129,19 +129,18 @@ void Player::load_track(int num)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     gme_track_info(emu, &track.metadata, num);
-    track.length = get_track_length(track.metadata);
-    gme_set_fade(emu, track.length - 6_sec);
-    // set_fade(track.length, options.fade_out_secs);
+    track.length = get_track_length(track.metadata, options.default_duration);
+    fmt::print("{} {}\n", 6_sec, track.length);
     gme_start_track(emu, num);
+    set_fade(track.length, options.fade_out_ms);
     track_changed(num, track.metadata, track.length);
 }
 
 void Player::start_or_resume()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (gme_track_ended(emu))
-        return;
-    SDL_PauseAudioDevice(dev_id, 0);
+    if (!gme_track_ended(emu))
+        SDL_PauseAudioDevice(dev_id, 0);
     // if (gme_track_ended(emu) && cur_track+1 != track_count) {
     //     load_track(++cur_track);
     // }
@@ -179,6 +178,8 @@ void Player::seek(int ms)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     gme_seek(emu, ms);
+    // fade disappears on seek for some reason
+    set_fade(track.length, options.fade_out_ms);
 }
 
 void Player::set_volume(int value)
@@ -204,10 +205,10 @@ void Player::set_options(PlayerOptions opts)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options = opts;
 
-    // automatically change some of the current song's [...]
+    // automatically change some of the current song's attributes
     // return if no song playing
     if (cur_track == -1)
         return;
 
-    set_fade(track.length, options.fade_out_secs);
+    set_fade(track.length, options.fade_out_ms);
 }

@@ -28,7 +28,7 @@ struct PlayerOptions {
     // bool fade_in            = false;
     bool fade_out           = false;
     // int fade_in_secs        = 0;
-    int fade_out_secs       = 0;
+    int fade_out_ms         = 0;
     bool autoplay_next      = false;
     int default_duration    = 3_min;
     int silence_detection   = 0;
@@ -65,7 +65,6 @@ class Player {
     PlayerOptions options = {};
 
     void audio_callback(void *unused, uint8_t *stream, int stream_length);
-    int get_track_length(gme_info_t *info);
     void set_fade(int length, int ms);
 
     friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
