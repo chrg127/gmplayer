@@ -64,40 +64,50 @@ MainWindow::MainWindow(QWidget *parent)
     );
 
     play_btn = new PlayButton;
-    connect(play_btn, &PlayButton::play,  this, [&]() { player->start_or_resume(); });
-    connect(play_btn, &PlayButton::pause, this, [&]() { player->pause(); });
+    connect(play_btn, &PlayButton::play,  this, [=, this]() { player->start_or_resume(); });
+    connect(play_btn, &PlayButton::pause, this, [=, this]() { player->pause(); });
 
-    duration_label = new QLabel("00:00 / 00:00");
+    auto *duration_label = new QLabel("00:00 / 00:00");
     duration_slider = new QSlider(Qt::Horizontal);
-    connect(duration_slider, &QSlider::sliderPressed,  this, [&]() {
+
+    auto set_duration_label = [=, this](int ms, int max) {
+        int mins = ms / 1000 / 60;
+        int secs = ms / 1000 % 60;
+        int max_mins = max / 1000 / 60;
+        int max_secs = max / 1000 % 60;
+        auto str = fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
+        duration_label->setText(QString::fromStdString(str));
+    };
+
+    connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
         player->pause();
         play_btn->set_state(PlayButton::State::Pause);
     });
-    connect(duration_slider, &QSlider::sliderReleased, this, [&]() {
+    connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
         player->start_or_resume();
         play_btn->set_state(PlayButton::State::Play);
     });
-    connect(duration_slider, &QSlider::sliderMoved, this, [&](int ms) {
+    connect(duration_slider, &QSlider::sliderMoved, this, [=, this](int ms) {
         player->seek(ms);
         set_duration_label(ms, duration_slider->maximum());
     });
 
-    title   = new QLabel;
-    game    = new QLabel;
-    system  = new QLabel;
-    author  = new QLabel;
-    comment = new QLabel;
+    auto *title   = new QLabel;
+    auto *game    = new QLabel;
+    auto *system  = new QLabel;
+    auto *author  = new QLabel;
+    auto *comment = new QLabel;
 
-    auto make_btn = [&](auto icon, auto f) {
+    auto make_btn = [=, this](auto icon, auto f) {
         auto *b = new QToolButton(this);
         b->setIcon(style()->standardIcon(icon));
         connect(b, &QAbstractButton::clicked, this, f);
         return b;
     };
 
-    prev_track = make_btn(QStyle::SP_MediaSkipBackward, [&]() { player->prev(); });
-    next_track = make_btn(QStyle::SP_MediaSkipForward,  [&]() { player->next(); });
-    stop = make_btn(QStyle::SP_MediaStop,               [&]() {
+    prev_track = make_btn(QStyle::SP_MediaSkipBackward, [=, this]() { player->prev(); });
+    next_track = make_btn(QStyle::SP_MediaSkipForward,  [=, this]() { player->next(); });
+    stop = make_btn(QStyle::SP_MediaStop,               [=, this]() {
         play_btn->set_state(PlayButton::State::Pause);
         player->pause();
         player->seek(0);
@@ -107,7 +117,8 @@ MainWindow::MainWindow(QWidget *parent)
     volume = new QSlider(Qt::Horizontal);
     volume->setRange(0, get_max_volume_value());
     volume->setValue(volume->maximum());
-    volume_btn = make_btn(QStyle::SP_MediaVolume, [&, last_volume = get_max_volume_value()] () mutable {
+    volume_btn = make_btn(QStyle::SP_MediaVolume,
+        [=, this, last_volume = get_max_volume_value()] () mutable {
         if (volume->value() != 0) {
             last_volume = volume->value();
             volume->setValue(0);
@@ -118,7 +129,7 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
-    connect(volume, &QSlider::valueChanged, this, [&]() {
+    connect(volume, &QSlider::valueChanged, this, [=, this]() {
         player->set_volume(volume->value());
         volume_btn->setIcon(style()->standardIcon(
             volume->value() == 0 ? QStyle::SP_MediaVolumeMuted
@@ -134,11 +145,11 @@ MainWindow::MainWindow(QWidget *parent)
         play_btn->set_state(PlayButton::State::Play);
     });
 
-    player->on_position_changed([&](int ms) {
+    player->on_position_changed([=, this](int ms) {
         duration_slider->setValue(ms);
         set_duration_label(ms, duration_slider->maximum());
     });
-    player->on_track_changed([&](int num, gme_info_t *info, int length) {
+    player->on_track_changed([=, this](int num, gme_info_t *info, int length) {
         title   ->setText(info->song);
         game    ->setText(info->game);
         author  ->setText(info->author);
@@ -151,7 +162,7 @@ MainWindow::MainWindow(QWidget *parent)
         play_btn->set_state(PlayButton::State::Play);
         playlist->setCurrentRow(num);
     });
-    player->on_track_ended([&]() {
+    player->on_track_ended([=, this]() {
         play_btn->set_state(PlayButton::State::Pause);
     });
 
@@ -193,7 +204,7 @@ MainWindow::MainWindow(QWidget *parent)
 QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 {
     auto *menu = menuBar()->addMenu(tr(name));
-    auto f = [&](auto &a) {
+    auto f = [=, this](auto &a) {
         auto *act = new QAction(tr(std::get<0>(a)), this);
         connect(act, &QAction::triggered, this, std::get<1>(a));
         menu->addAction(act);
@@ -205,7 +216,12 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 void MainWindow::open_file()
 {
     // auto filename = QString("smb3.nsf");
-    auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_dir, "Game music files (*.spc *.nsf)");
+    auto filename = QFileDialog::getOpenFileName(
+        this,
+        tr("Open file"),
+        last_dir,
+        "Game music files (*.spc *.nsf)"
+    );
     if (filename.isEmpty())
         return;
     set_enabled(true);
@@ -217,6 +233,7 @@ void MainWindow::open_file()
     playlist->clear();
     for (auto &track : player->track_names())
         new QListWidgetItem(QString::fromStdString(track), playlist);
+    playlist->setCurrentRow(0);
     last_dir = filename;
 }
 
@@ -231,21 +248,11 @@ void MainWindow::set_enabled(bool val)
     play_btn->setEnabled(val);
 }
 
-void MainWindow::set_duration_label(int ms, int max)
-{
-    int mins = ms / 1000 / 60;
-    int secs = ms / 1000 % 60;
-    int max_mins = max / 1000 / 60;
-    int max_secs = max / 1000 % 60;
-    auto str = fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
-    duration_label->setText(QString::fromStdString(str));
-};
-
 void MainWindow::edit_settings()
 {
     auto *wnd = new SettingsWindow(player->get_options(), this);
     wnd->open();
-    connect(wnd, &QDialog::finished, this, [=](int result) {
+    connect(wnd, &QDialog::finished, this, [=, this](int result) {
         if (result == QDialog::Accepted) {
             fmt::print("modifying options\n");
             auto opts = wnd->get();
