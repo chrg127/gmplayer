@@ -45,8 +45,6 @@ public:
 class SettingsWindow : public QDialog {
     Q_OBJECT
 
-    QCheckBox *fade, *autoplay;
-    QSpinBox *fade_secs;
     PlayerOptions selected_options;
 
 public:

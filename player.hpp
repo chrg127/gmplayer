@@ -29,11 +29,15 @@ struct PlayerOptions {
     bool fade_out           = false;
     // int fade_in_secs        = 0;
     int fade_out_ms         = 0;
+
     bool autoplay_next      = false;
+    bool repeat             = false;
+    bool shuffle            = false;
+
     int default_duration    = 3_min;
     int silence_detection   = 0;
-    int loops_limit         = 0;
-    int gain                = 50;
+    // int loops_limit         = 0;
+    double tempo            = 1.0;
 };
 
 class Player {
@@ -66,6 +70,7 @@ class Player {
 
     void audio_callback(void *unused, uint8_t *stream, int stream_length);
     void set_fade(int length, int ms);
+    int random_track_number() { return 0; }
 
     friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
 

@@ -253,14 +253,9 @@ void MainWindow::edit_settings()
     auto *wnd = new SettingsWindow(player->get_options(), this);
     wnd->open();
     connect(wnd, &QDialog::finished, this, [=, this](int result) {
-        if (result == QDialog::Accepted) {
-            fmt::print("modifying options\n");
-            auto opts = wnd->get();
-            fmt::print("fade: {}\n", opts.fade_out);
-            fmt::print("fade secs: {}\n", opts.fade_out_ms);
-            fmt::print("autoplay next: {}\n", opts.autoplay_next);
+        if (result == QDialog::Accepted)
             player->set_options(wnd->get());
-        }
+        // fmt::print("{}\n", wnd->get().tempo);
     });
 }
 
@@ -269,27 +264,50 @@ void MainWindow::edit_settings()
 SettingsWindow::SettingsWindow(const PlayerOptions &options, QWidget *parent)
     : QDialog(parent), selected_options{options}
 {
-    fade = new QCheckBox(tr("&Enable fade-out"));
+    auto *fade = new QCheckBox(tr("&Enable fade-out"));
     fade->setChecked(options.fade_out);
 
-    fade_secs = new QSpinBox;
+    auto *fade_secs = new QSpinBox;
     fade_secs->setValue(options.fade_out_ms);
 
-    autoplay = new QCheckBox(tr("Autoplay next track"));
+    auto *autoplay = new QCheckBox(tr("Autoplay next track"));
+    auto *repeat   = new QCheckBox(tr("Repeat"));
+    auto *shuffle  = new QCheckBox(tr("Shuffle"));
     autoplay->setChecked(options.autoplay_next);
+    repeat->setChecked(options.repeat);
+    shuffle->setChecked(options.shuffle);
+
+    auto *default_duration = new QSpinBox;
+    default_duration->setValue(options.default_duration / 1000);
+
+    auto *silence_detection = new QCheckBox(tr("Do silence detection"));
+    silence_detection->setChecked(options.silence_detection == 1);
+
+    auto *tempo = new QComboBox;
+    tempo->addItem("2x", 2.0);
+    tempo->addItem("Normal", 1.0);
+    tempo->addItem("0.5x", 0.5);
+
+    auto get_tempo_index = [=, this](double tempo) { return 1; };
+
+    tempo->setCurrentIndex(get_tempo_index(options.tempo));
 
     auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
                                           | QDialogButtonBox::Cancel);
-    connect(button_box, &QDialogButtonBox::accepted, this, [&]() {
+    connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
         // make an option object that the main window will get with get()
         selected_options = (PlayerOptions) {
+            // .fade_in            = false,
             .fade_out           = fade->isChecked(),
+            // .fade_in_secs       = 0,
             .fade_out_ms        = fade_secs->value() * 1000,
             .autoplay_next      = autoplay->isChecked(),
-            .default_duration   = 3_min,
-            .silence_detection  = 0,
-            .loops_limit        = 0,
-            .gain               = 0,
+            .repeat             = repeat->isChecked(),
+            .shuffle            = shuffle->isChecked(),
+            .default_duration   = default_duration->value() * 1000,
+            .silence_detection  = silence_detection->isChecked(),
+            // .loops_limit        = 0,
+            .tempo              = tempo->currentData().toDouble()
         };
         accept();
     });
@@ -299,6 +317,11 @@ SettingsWindow::SettingsWindow(const PlayerOptions &options, QWidget *parent)
         fade,
         make_form_layout(std::tuple { new QLabel(tr("Fade seconds:")), fade_secs }),
         autoplay,
+        repeat,
+        shuffle,
+        make_form_layout(std::tuple { new QLabel(tr("Default duration:")), default_duration }),
+        silence_detection,
+        make_form_layout(std::tuple { new QLabel(tr("Tempo:")), tempo }),
         button_box
     );
     setLayout(lt);

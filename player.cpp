@@ -21,6 +21,26 @@ const int CHANNELS  = 2;
 
 
 namespace {
+    void dump_info(gme_info_t *info)
+    {
+        fmt::print(
+            "length = {}\n"
+            "intro length = {}\n"
+            "loop length = {}\n"
+            "play length = {}\n"
+            "system = {}\n"
+            "game = {}\n"
+            "song = {}\n"
+            "author = {}\n"
+            "copyright = {}\n"
+            "comment = {}\n"
+            "dumper = {}\n",
+            info->length, info->intro_length, info->loop_length, info->play_length,
+            info->system, info->game, info->song, info->author, info->copyright,
+            info->comment, info->dumper
+        );
+    }
+
     int get_track_length(gme_info_t *info, int default_duration = 3_min)
     {
         if (info->length > 0)
@@ -84,16 +104,22 @@ Player::~Player()
 
 void Player::audio_callback(void *, u8 *stream, int len)
 {
-    if (!emu || gme_track_ended(emu)) {
+    // some songs don't have length information, hence the need for the third check.
+    if (!emu
+     || gme_track_ended(emu)
+     || gme_tell(emu) > track.length + 1_sec/2) {
         SDL_PauseAudioDevice(dev_id, 1);
         track_ended();
-        return;
-    }
 
-    if (gme_tell(emu) + 5 > track.length) {
-        fmt::print("ended with check\n");
-        SDL_PauseAudioDevice(dev_id, 1);
-        track_ended();
+        if (options.autoplay_next) {
+            if (options.shuffle)
+                load_track(random_track_number());
+            else if (has_next())
+                load_track(++cur_track);
+            else if (options.repeat)
+                load_track(0);
+        }
+
         return;
     }
 
@@ -108,12 +134,10 @@ void Player::audio_callback(void *, u8 *stream, int len)
 
 void Player::set_fade(int length, int ms)
 {
-    fmt::print("{} {}\n", length, ms);
     if (!options.fade_out)
         return;
     if (ms > length)
         return;
-    fmt::print("setting fade\n");
     gme_set_fade(emu, length - ms);
 }
 
@@ -128,9 +152,10 @@ void Player::use_file(std::string_view filename)
 void Player::load_track(int num)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
+    cur_track = num;
     gme_track_info(emu, &track.metadata, num);
+    // print_info(track.metadata);
     track.length = get_track_length(track.metadata, options.default_duration);
-    fmt::print("{} {}\n", 6_sec, track.length);
     gme_start_track(emu, num);
     set_fade(track.length, options.fade_out_ms);
     track_changed(num, track.metadata, track.length);
@@ -139,11 +164,7 @@ void Player::load_track(int num)
 void Player::start_or_resume()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (!gme_track_ended(emu))
-        SDL_PauseAudioDevice(dev_id, 0);
-    // if (gme_track_ended(emu) && cur_track+1 != track_count) {
-    //     load_track(++cur_track);
-    // }
+    SDL_PauseAudioDevice(dev_id, 0);
 }
 
 void Player::pause()
@@ -210,5 +231,8 @@ void Player::set_options(PlayerOptions opts)
     if (cur_track == -1)
         return;
 
+    if (options.silence_detection > 0)
+        gme_ignore_silence(emu, true);
+    gme_set_tempo(emu, options.tempo);
     set_fade(track.length, options.fade_out_ms);
 }
