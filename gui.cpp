@@ -156,8 +156,8 @@ MainWindow::MainWindow(QWidget *parent)
         system  ->setText(info->system);
         comment ->setText(info->comment);
         duration_slider->setRange(0, length);
-        next_track->setEnabled(player->has_next());
-        prev_track->setEnabled(player->has_prev());
+        next_track->setEnabled(bool(player->get_next()));
+        prev_track->setEnabled(bool(player->get_prev()));
         player->start_or_resume();
         play_btn->set_state(PlayButton::State::Play);
         playlist->setCurrentRow(num);
@@ -253,9 +253,11 @@ void MainWindow::edit_settings()
     auto *wnd = new SettingsWindow(player->get_options(), this);
     wnd->open();
     connect(wnd, &QDialog::finished, this, [=, this](int result) {
-        if (result == QDialog::Accepted)
+        if (result == QDialog::Accepted) {
             player->set_options(wnd->get());
-        // fmt::print("{}\n", wnd->get().tempo);
+            next_track->setEnabled(player->playing() && bool(player->get_next()));
+            prev_track->setEnabled(player->playing() && bool(player->get_prev()));
+        }
     });
 }
 

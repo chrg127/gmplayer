@@ -5,11 +5,13 @@
 #include <mutex>
 #include <utility>
 #include <functional>
+#include <algorithm>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 #include <fmt/core.h>
 #include <gme/gme.h>
 #include "player.hpp"
+#include "random.hpp"
 
 using u8  = uint8_t;
 using u32 = uint32_t;
@@ -48,6 +50,14 @@ namespace {
         if (info->loop_length > 0)
             return info->intro_length + info->loop_length * 2;
         return default_duration;
+    }
+
+    void generate_order(std::span<int> buf, bool shuffle)
+    {
+        std::iota(buf.begin(), buf.end(), 0);
+        if (shuffle) {
+            rng::shuffle_in_place(buf);
+        }
     }
 
     /*
@@ -112,12 +122,9 @@ void Player::audio_callback(void *, u8 *stream, int len)
         track_ended();
 
         if (options.autoplay_next) {
-            if (options.shuffle)
-                load_track(random_track_number());
-            else if (has_next())
-                load_track(++cur_track);
-            else if (options.repeat)
-                load_track(0);
+            auto next = get_next();
+            if (next)
+                load_track_without_mutex(next.value());
         }
 
         return;
@@ -147,18 +154,31 @@ void Player::use_file(std::string_view filename)
     gme_open_file(filename.data(), &emu, 44100);
     track_count = gme_track_count(emu);
     cur_track = 0;
+    order.resize(track_count);
+    generate_order(order, options.shuffle);
 }
 
-void Player::load_track(int num)
+void Player::load_track_without_mutex(int index)
 {
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    cur_track = num;
+    cur_track = index;
+    int num = order[index];
     gme_track_info(emu, &track.metadata, num);
-    // print_info(track.metadata);
     track.length = get_track_length(track.metadata, options.default_duration);
     gme_start_track(emu, num);
     set_fade(track.length, options.fade_out_ms);
     track_changed(num, track.metadata, track.length);
+}
+
+void Player::load_track(int index)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    load_track_without_mutex(index);
+}
+
+bool Player::playing() const
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    return cur_track != -1;
 }
 
 void Player::start_or_resume()
@@ -173,26 +193,38 @@ void Player::pause()
     SDL_PauseAudioDevice(dev_id, 1);
 }
 
-bool Player::has_next()
+std::optional<int> Player::get_next() const
 {
-    return cur_track+1 < track_count;
+    if (cur_track + 1 < track_count)
+        return cur_track + 1;
+    if (options.repeat)
+        return cur_track;
+    return std::nullopt;
+}
+
+std::optional<int> Player::get_prev() const
+{
+    if (cur_track - 1 >= 0)
+        return cur_track - 1;
+    if (options.repeat)
+        return cur_track;
+    return std::nullopt;
 }
 
 void Player::next()
 {
-    if (has_next())
-        load_track(++cur_track);
-}
-
-bool Player::has_prev()
-{
-    return cur_track-1 >= 0;
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    auto next = get_next();
+    if (next)
+        load_track_without_mutex(next.value());
 }
 
 void Player::prev()
 {
-    if (has_prev())
-        load_track(--cur_track);
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    auto prev = get_prev();
+    if (prev)
+        load_track_without_mutex(prev.value());
 }
 
 void Player::seek(int ms)
@@ -235,4 +267,5 @@ void Player::set_options(PlayerOptions opts)
         gme_ignore_silence(emu, true);
     gme_set_tempo(emu, options.tempo);
     set_fade(track.length, options.fade_out_ms);
+    generate_order(order, options.shuffle);
 }

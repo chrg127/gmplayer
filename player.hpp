@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <mutex>
 #include <string_view>
-#include <cstdint>
+#include <vector>
+#include <optional>
 #include <SDL_audio.h> // SDL_AudioDeviceID
 
 class Music_Emu;
@@ -46,19 +48,20 @@ class Player {
     Music_Emu *emu           = nullptr;
     int id                   = 0;
     SDL_AudioDeviceID dev_id = 0;
-    SDLMutex audio_mutex;
+    mutable SDLMutex audio_mutex;
     SDL_AudioSpec obtained;
-
-    // file information:
-    int track_count = 0;
 
     // current track information:
     TrackInfo track = {
         .metadata = nullptr,
         .length = 0
     };
-    int cur_track = -1;
     int volume = SDL_MIX_MAXVOLUME;
+
+    // playlist related stuff
+    int cur_track = -1;
+    int track_count = 0;
+    std::vector<int> order;
 
     // callbacks
     std::function<void(int, gme_info_t *, int)> track_changed;
@@ -70,7 +73,7 @@ class Player {
 
     void audio_callback(void *unused, uint8_t *stream, int stream_length);
     void set_fade(int length, int ms);
-    int random_track_number() { return 0; }
+    void load_track_without_mutex(int num);
 
     friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
 
@@ -83,11 +86,12 @@ public:
 
     void use_file(std::string_view filename);
     void load_track(int num);
+    bool playing() const;
     void start_or_resume();
     void pause();
-    bool has_next();
+    std::optional<int> get_next() const;
+    std::optional<int> get_prev() const;
     void next();
-    bool has_prev();
     void prev();
     void seek(int ms);
     void set_volume(int value);
