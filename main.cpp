@@ -37,13 +37,6 @@ int main(int argc, char *argv[])
     mw.show();
     a.exec();
 
-    // player::init();
-    // player::use_file(QString("skyfortress.spc"));
-    // player::start_or_resume();
-
-    // while (sdl_running) {
-    // }
-
     sdl_running = false;
     th.join();
     SDL_Quit();
