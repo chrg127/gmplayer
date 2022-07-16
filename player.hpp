@@ -96,9 +96,10 @@ public:
     void seek(int ms);
     void set_volume(int value);
     std::vector<std::string> track_names();
-    void set_options(PlayerOptions options);
 
+    void set_options(PlayerOptions options);
     PlayerOptions get_options() const   { return options; }
+
     void on_track_changed(auto &&fn)    { track_changed    = fn; }
     void on_position_changed(auto &&fn) { position_changed = fn; }
     void on_track_ended(auto &&fn)      { track_ended      = fn; }

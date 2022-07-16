@@ -24,6 +24,8 @@
 #include <QCheckBox>
 #include <QSpinBox>
 #include <QDialogButtonBox>
+#include <QSettings>
+#include <QCloseEvent>
 #include <fmt/core.h>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
@@ -46,6 +48,39 @@ void PlayButton::set_state(State state)
                                                         : QStyle::SP_MediaPause));
 }
 
+PlayerOptions load_player_settings()
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("player");
+    PlayerOptions options = {
+        .fade_out           = settings.value("fade_out",          false).toBool(),
+        .fade_out_ms        = settings.value("fade_out_ms",           0).toInt(),
+        .autoplay_next      = settings.value("autoplay_next",     false).toBool(),
+        .repeat             = settings.value("repeat",            false).toBool(),
+        .shuffle            = settings.value("shuffle",           false).toBool(),
+        .default_duration   = settings.value("default_duration",  int(3_min)).toInt(),
+        .silence_detection  = settings.value("silence_detection",     0).toInt(),
+        .tempo              = settings.value("tempo",               1.0).toDouble(),
+    };
+    settings.endGroup();
+    return options;
+}
+
+void set_player_settings(PlayerOptions options)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("player");
+    settings.setValue("fade_out",          options.fade_out);
+    settings.setValue("fade_out_ms",       options.fade_out_ms);
+    settings.setValue("autoplay_next",     options.autoplay_next);
+    settings.setValue("repeat",            options.repeat);
+    settings.setValue("shuffle",           options.shuffle);
+    settings.setValue("default_duration",  options.default_duration);
+    settings.setValue("silence_detection", options.silence_detection);
+    settings.setValue("tempo",             options.tempo);
+    settings.endGroup();
+}
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -54,6 +89,7 @@ MainWindow::MainWindow(QWidget *parent)
     setCentralWidget(center);
 
     player = new Player;
+    player->set_options(load_player_settings());
 
     create_menu("&File",
         std::tuple { "Open", &MainWindow::open_file }
@@ -327,4 +363,10 @@ SettingsWindow::SettingsWindow(const PlayerOptions &options, QWidget *parent)
         button_box
     );
     setLayout(lt);
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    set_player_settings(player->get_options());
+    event->accept();
 }

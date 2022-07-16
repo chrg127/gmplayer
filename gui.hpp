@@ -38,6 +38,7 @@ class MainWindow : public QMainWindow {
     void edit_settings();
     void open_file();
     void set_enabled(bool val);
+    void closeEvent(QCloseEvent *event);
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 };
