@@ -286,7 +286,7 @@ void MainWindow::set_enabled(bool val)
 
 void MainWindow::edit_settings()
 {
-    auto *wnd = new SettingsWindow(player->get_options(), this);
+    auto *wnd = new SettingsWindow(player->get_options(), player->length(), this);
     wnd->open();
     connect(wnd, &QDialog::finished, this, [=, this](int result) {
         if (result == QDialog::Accepted) {
@@ -299,14 +299,15 @@ void MainWindow::edit_settings()
 
 
 
-SettingsWindow::SettingsWindow(const PlayerOptions &options, QWidget *parent)
+SettingsWindow::SettingsWindow(const PlayerOptions &options, int track_length, QWidget *parent)
     : QDialog(parent), selected_options{options}
 {
     auto *fade = new QCheckBox(tr("&Enable fade-out"));
     fade->setChecked(options.fade_out);
 
     auto *fade_secs = new QSpinBox;
-    fade_secs->setValue(options.fade_out_ms);
+    fade_secs->setMaximum(track_length / 1000);
+    fade_secs->setValue(options.fade_out_ms / 1000);
 
     auto *autoplay = new QCheckBox(tr("Autoplay next track"));
     auto *repeat   = new QCheckBox(tr("Repeat"));

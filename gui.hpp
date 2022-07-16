@@ -49,6 +49,6 @@ class SettingsWindow : public QDialog {
     PlayerOptions selected_options;
 
 public:
-    explicit SettingsWindow(const PlayerOptions &options, QWidget *parent = nullptr);
+    explicit SettingsWindow(const PlayerOptions &options, int track_length, QWidget *parent = nullptr);
     PlayerOptions get() const { return selected_options; }
 };

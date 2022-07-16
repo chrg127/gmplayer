@@ -241,7 +241,7 @@ void Player::set_volume(int value)
     volume = value;
 }
 
-std::vector<std::string> Player::track_names()
+std::vector<std::string> Player::track_names() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     std::vector<std::string> names;

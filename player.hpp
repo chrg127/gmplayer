@@ -95,7 +95,8 @@ public:
     void prev();
     void seek(int ms);
     void set_volume(int value);
-    std::vector<std::string> track_names();
+    int length() const { return track.length; }
+    std::vector<std::string> track_names() const;
 
     void set_options(PlayerOptions options);
     PlayerOptions get_options() const   { return options; }
