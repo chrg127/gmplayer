@@ -40,6 +40,8 @@ struct PlayerOptions {
     int silence_detection   = 0;
     // int loops_limit         = 0;
     double tempo            = 1.0;
+
+    int volume              = SDL_MIX_MAXVOLUME;
 };
 
 class Player {
@@ -56,7 +58,6 @@ class Player {
         .metadata = nullptr,
         .length = 0
     };
-    int volume = SDL_MIX_MAXVOLUME;
 
     // playlist related stuff
     int cur_track = -1;

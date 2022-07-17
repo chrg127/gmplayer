@@ -53,14 +53,15 @@ PlayerOptions load_player_settings()
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("player");
     PlayerOptions options = {
-        .fade_out           = settings.value("fade_out",          false).toBool(),
-        .fade_out_ms        = settings.value("fade_out_ms",           0).toInt(),
-        .autoplay_next      = settings.value("autoplay_next",     false).toBool(),
-        .repeat             = settings.value("repeat",            false).toBool(),
-        .shuffle            = settings.value("shuffle",           false).toBool(),
-        .default_duration   = settings.value("default_duration",  int(3_min)).toInt(),
-        .silence_detection  = settings.value("silence_detection",     0).toInt(),
-        .tempo              = settings.value("tempo",               1.0).toDouble(),
+        .fade_out           = settings.value("fade_out",                           false).toBool(),
+        .fade_out_ms        = settings.value("fade_out_ms",                            0).toInt(),
+        .autoplay_next      = settings.value("autoplay_next",                      false).toBool(),
+        .repeat             = settings.value("repeat",                             false).toBool(),
+        .shuffle            = settings.value("shuffle",                            false).toBool(),
+        .default_duration   = settings.value("default_duration",              int(3_min)).toInt(),
+        .silence_detection  = settings.value("silence_detection",                      0).toInt(),
+        .tempo              = settings.value("tempo",                                1.0).toDouble(),
+        .volume             = settings.value("volume",            get_max_volume_value()).toInt()
     };
     settings.endGroup();
     return options;
@@ -78,6 +79,7 @@ void set_player_settings(PlayerOptions options)
     settings.setValue("default_duration",  options.default_duration);
     settings.setValue("silence_detection", options.silence_detection);
     settings.setValue("tempo",             options.tempo);
+    settings.setValue("volume",            options.volume);
     settings.endGroup();
 }
 
@@ -157,9 +159,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     volume = new QSlider(Qt::Horizontal);
     volume->setRange(0, get_max_volume_value());
-    volume->setValue(volume->maximum());
+    volume->setValue(options.volume);
     volume_btn = make_btn(QStyle::SP_MediaVolume,
-        [=, this, last_volume = get_max_volume_value()] () mutable {
+        [=, this, last_volume = options.volume] () mutable {
         if (volume->value() != 0) {
             last_volume = volume->value();
             volume->setValue(0);
@@ -220,7 +222,7 @@ MainWindow::MainWindow(QWidget *parent)
     shuffle->setChecked(options.shuffle);
 
     auto change_options = [=, this]() {
-        player->set_options((PlayerOptions) {
+        player->set_options({
             .fade_out           = fade->isChecked(),
             .fade_out_ms        = fade_secs->value() * 1000,
             .autoplay_next      = autoplay->isChecked(),
@@ -228,7 +230,8 @@ MainWindow::MainWindow(QWidget *parent)
             .shuffle            = shuffle->isChecked(),
             .default_duration   = default_duration->value() * 1000,
             .silence_detection  = silence_detection->isChecked(),
-            .tempo              = tempo->currentData().toDouble()
+            .tempo              = tempo->currentData().toDouble(),
+            .volume             = volume->value()
         });
     };
 
@@ -263,6 +266,7 @@ MainWindow::MainWindow(QWidget *parent)
         duration_slider->setValue(ms);
         set_duration_label(ms, duration_slider->maximum());
     });
+
     player->on_track_changed([=, this](int num, gme_info_t *info, int length) {
         title   ->setText(info->song);
         game    ->setText(info->game);
@@ -276,6 +280,7 @@ MainWindow::MainWindow(QWidget *parent)
         play_btn->set_state(PlayButton::State::Play);
         playlist->setCurrentRow(num);
     });
+
     player->on_track_ended([=, this]() {
         play_btn->set_state(PlayButton::State::Pause);
     });

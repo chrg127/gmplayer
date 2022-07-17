@@ -135,7 +135,7 @@ void Player::audio_callback(void *, u8 *stream, int len)
     short buf[SAMPLES * CHANNELS];
     gme_play(emu, SAMPLES * CHANNELS, buf);
     // we could also use memcpy here, but then we wouldn't have volume control
-    SDL_MixAudioFormat(stream, (const u8 *) buf, obtained.format, sizeof(buf), volume);
+    SDL_MixAudioFormat(stream, (const u8 *) buf, obtained.format, sizeof(buf), options.volume);
     position_changed(gme_tell(emu));
 }
 
@@ -238,7 +238,7 @@ void Player::seek(int ms)
 void Player::set_volume(int value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    volume = value;
+    options.volume = value;
 }
 
 std::vector<std::string> Player::track_names() const
