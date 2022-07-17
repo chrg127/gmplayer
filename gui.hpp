@@ -12,6 +12,7 @@ class QSlider;
 class QListWidget;
 class QCheckBox;
 class QSpinBox;
+class QGroupBox;
 
 class PlayButton : public QToolButton {
     Q_OBJECT
@@ -34,21 +35,13 @@ class MainWindow : public QMainWindow {
     QToolButton *stop, *prev_track, *next_track, *volume_btn;
     QListWidget *playlist;
 
+    QGroupBox *settings_box;
+    QGroupBox *playlist_settings_box;
+
     QMenu *create_menu(const char *name, auto&&... actions);
-    void edit_settings();
     void open_file();
     void set_enabled(bool val);
     void closeEvent(QCloseEvent *event);
 public:
     explicit MainWindow(QWidget *parent = nullptr);
-};
-
-class SettingsWindow : public QDialog {
-    Q_OBJECT
-
-    PlayerOptions selected_options;
-
-public:
-    explicit SettingsWindow(const PlayerOptions &options, int track_length, QWidget *parent = nullptr);
-    PlayerOptions get() const { return selected_options; }
 };
