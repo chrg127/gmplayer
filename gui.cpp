@@ -89,7 +89,8 @@ MainWindow::MainWindow(QWidget *parent)
     setCentralWidget(center);
 
     player = new Player;
-    player->set_options(load_player_settings());
+    PlayerOptions options = load_player_settings();
+    player->set_options(options);
 
     create_menu("&File",
         std::tuple { "Open", &MainWindow::open_file }
@@ -181,6 +182,41 @@ MainWindow::MainWindow(QWidget *parent)
         play_btn->set_state(PlayButton::State::Play);
     });
 
+
+
+    auto *fade = new QCheckBox(tr("&Enable fade-out"));
+    fade->setChecked(options.fade_out);
+
+    auto *fade_secs = new QSpinBox;
+    fade_secs->setMaximum(10_min / 1000);
+    fade_secs->setValue(options.fade_out_ms / 1000);
+
+    auto *default_duration = new QSpinBox;
+    default_duration->setMaximum(10_min / 1000);
+    default_duration->setValue(options.default_duration / 1000);
+
+    auto *silence_detection = new QCheckBox(tr("Do silence detection"));
+    silence_detection->setChecked(options.silence_detection == 1);
+
+    auto *tempo = new QComboBox;
+    tempo->addItem("2x",     2.0);
+    tempo->addItem("Normal", 1.0);
+    tempo->addItem("0.5x",   0.5);
+    tempo->setCurrentIndex(options.tempo == 0.5 ? 0
+                         : options.tempo == 1.0 ? 1
+                         : options.tempo == 2.0 ? 2
+                         : 1);
+
+    auto *autoplay = new QCheckBox(tr("Autoplay next track"));
+    auto *repeat   = new QCheckBox(tr("Repeat"));
+    auto *shuffle  = new QCheckBox(tr("Shuffle"));
+    autoplay->setChecked(options.autoplay_next);
+    repeat->setChecked(options.repeat);
+    shuffle->setChecked(options.shuffle);
+
+
+
+
     player->on_position_changed([=, this](int ms) {
         duration_slider->setValue(ms);
         set_duration_label(ms, duration_slider->maximum());
@@ -206,15 +242,20 @@ MainWindow::MainWindow(QWidget *parent)
     center->setLayout(
         make_layout<QHBoxLayout>(
             make_layout<QVBoxLayout>(
-                make_groupbox("Track info", [&]() {
-                    return make_form_layout(
-                        std::tuple { new QLabel(tr("Title:")),   title      },
-                        std::tuple { new QLabel(tr("Game:")),    game       },
-                        std::tuple { new QLabel(tr("System:")),  system     },
-                        std::tuple { new QLabel(tr("Author:")),  author     },
-                        std::tuple { new QLabel(tr("Comment:")), comment    }
-                    );
-                }),
+                make_groupbox<QFormLayout>("Track info",
+                    std::tuple { new QLabel(tr("Title:")),   title      },
+                    std::tuple { new QLabel(tr("Game:")),    game       },
+                    std::tuple { new QLabel(tr("System:")),  system     },
+                    std::tuple { new QLabel(tr("Author:")),  author     },
+                    std::tuple { new QLabel(tr("Comment:")), comment    }
+                ),
+                make_groupbox<QVBoxLayout>("Settings",
+                    fade,
+                    label_pair("Fade seconds:", fade_secs),
+                    label_pair("Default duration:", default_duration),
+                    silence_detection,
+                    label_pair("Tempo:", tempo)
+                ),
                 make_layout<QHBoxLayout>(
                     duration_slider,
                     duration_label
@@ -231,7 +272,12 @@ MainWindow::MainWindow(QWidget *parent)
             ),
             make_layout<QVBoxLayout>(
                 new QLabel(tr("Track playlist:")),
-                playlist
+                playlist,
+                make_groupbox<QVBoxLayout>("Playlist settings",
+                    autoplay,
+                    repeat,
+                    shuffle
+                )
             )
         )
     );
@@ -309,27 +355,28 @@ SettingsWindow::SettingsWindow(const PlayerOptions &options, int track_length, Q
     fade_secs->setMaximum(track_length / 1000);
     fade_secs->setValue(options.fade_out_ms / 1000);
 
-    auto *autoplay = new QCheckBox(tr("Autoplay next track"));
-    auto *repeat   = new QCheckBox(tr("Repeat"));
-    auto *shuffle  = new QCheckBox(tr("Shuffle"));
-    autoplay->setChecked(options.autoplay_next);
-    repeat->setChecked(options.repeat);
-    shuffle->setChecked(options.shuffle);
-
     auto *default_duration = new QSpinBox;
+    default_duration->setMaximum(10_min / 1000);
     default_duration->setValue(options.default_duration / 1000);
 
     auto *silence_detection = new QCheckBox(tr("Do silence detection"));
     silence_detection->setChecked(options.silence_detection == 1);
 
     auto *tempo = new QComboBox;
-    tempo->addItem("2x", 2.0);
+    tempo->addItem("2x",     2.0);
     tempo->addItem("Normal", 1.0);
-    tempo->addItem("0.5x", 0.5);
+    tempo->addItem("0.5x",   0.5);
+    tempo->setCurrentIndex(options.tempo == 0.5 ? 0
+                         : options.tempo == 1.0 ? 1
+                         : options.tempo == 2.0 ? 2
+                         : 1);
 
-    auto get_tempo_index = [=, this](double tempo) { return 1; };
-
-    tempo->setCurrentIndex(get_tempo_index(options.tempo));
+    auto *autoplay = new QCheckBox(tr("Autoplay next track"));
+    auto *repeat   = new QCheckBox(tr("Repeat"));
+    auto *shuffle  = new QCheckBox(tr("Shuffle"));
+    autoplay->setChecked(options.autoplay_next);
+    repeat->setChecked(options.repeat);
+    shuffle->setChecked(options.shuffle);
 
     auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
                                           | QDialogButtonBox::Cancel);
@@ -354,13 +401,13 @@ SettingsWindow::SettingsWindow(const PlayerOptions &options, int track_length, Q
 
     auto *lt = make_layout<QVBoxLayout>(
         fade,
-        make_form_layout(std::tuple { new QLabel(tr("Fade seconds:")), fade_secs }),
+        label_pair("Fade seconds:", fade_secs),
         autoplay,
         repeat,
         shuffle,
-        make_form_layout(std::tuple { new QLabel(tr("Default duration:")), default_duration }),
+        label_pair("Default duration:", default_duration),
         silence_detection,
-        make_form_layout(std::tuple { new QLabel(tr("Tempo:")), tempo }),
+        label_pair("Tempo:", tempo),
         button_box
     );
     setLayout(lt);

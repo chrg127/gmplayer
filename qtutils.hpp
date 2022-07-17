@@ -12,30 +12,31 @@ template <typename T>
 inline T *make_layout(auto... widgets)
 {
     auto *lt = new T;
-    (add_to_layout(lt, widgets), ...);
+    if constexpr(std::is_same_v<T, QGridLayout>)
+        (lt->addWidget(std::get<0>(widgets),
+                       std::get<1>(widgets),
+                       std::get<2>(widgets)), ...);
+    else if constexpr(std::is_same_v<T, QFormLayout>)
+        (lt->addRow(std::get<0>(widgets),
+                    std::get<1>(widgets)), ...);
+    else
+        (add_to_layout(lt, widgets), ...);
     return lt;
 }
 
-inline QGridLayout *make_grid_layout(auto... widget_tuples)
-{
-    auto *lt = new QGridLayout;
-    (lt->addWidget(std::get<0>(widget_tuples),
-                   std::get<1>(widget_tuples),
-                   std::get<2>(widget_tuples)), ...);
-    return lt;
-}
-
-inline QFormLayout *make_form_layout(auto... widget_tuples)
-{
-    auto *lt = new QFormLayout;
-    (lt->addRow(std::get<0>(widget_tuples),
-                std::get<1>(widget_tuples)), ...);
-    return lt;
-}
-
-inline QGroupBox *make_groupbox(const QString &title, auto &&get_layout)
+template <typename T>
+inline QGroupBox *make_groupbox(const QString &title, auto... widgets)
 {
     auto *box = new QGroupBox(title);
-    box->setLayout(get_layout());
+    box->setLayout(make_layout<T>(widgets...));
     return box;
+}
+
+template <typename T>
+QFormLayout *label_pair(const char *text, T *widget)
+{
+    return make_layout<QFormLayout>(std::tuple {
+        new QLabel(text),
+        widget
+    });
 }
