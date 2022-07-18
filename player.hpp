@@ -27,8 +27,6 @@ struct SDLMutex {
 };
 
 struct PlayerOptions {
-    // bool fade_in            = false;
-    bool fade_out           = false;
     // int fade_in_secs        = 0;
     int fade_out_ms         = 0;
 
@@ -73,7 +71,6 @@ class Player {
     PlayerOptions options = {};
 
     void audio_callback(void *unused, uint8_t *stream, int stream_length);
-    void set_fade(int length, int ms);
     void load_track_without_mutex(int num);
 
     friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
@@ -95,12 +92,20 @@ public:
     void next();
     void prev();
     void seek(int ms);
-    void set_volume(int value);
     int length() const { return track.length; }
+    int effective_length() const;
+    int get_index(int trackno) const { return order[trackno]; }
     std::vector<std::string> track_names() const;
 
-    void set_options(PlayerOptions options);
-    PlayerOptions get_options() const   { return options; }
+    PlayerOptions & get_options() { return options; }
+    void set_fade(int secs);
+    void set_tempo(double tempo);
+    void set_silence_detection(bool ignore);
+    void set_default_duration(int secs);
+    void set_autoplay(bool autoplay);
+    void set_repeat(bool repeat);
+    void set_shuffle(bool shuffle);
+    void set_volume(int value);
 
     void on_track_changed(auto &&fn)    { track_changed    = fn; }
     void on_position_changed(auto &&fn) { position_changed = fn; }

@@ -53,7 +53,6 @@ PlayerOptions load_player_settings()
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("player");
     PlayerOptions options = {
-        .fade_out           = settings.value("fade_out",                           false).toBool(),
         .fade_out_ms        = settings.value("fade_out_ms",                            0).toInt(),
         .autoplay_next      = settings.value("autoplay_next",                      false).toBool(),
         .repeat             = settings.value("repeat",                             false).toBool(),
@@ -71,7 +70,6 @@ void set_player_settings(PlayerOptions options)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("player");
-    settings.setValue("fade_out",          options.fade_out);
     settings.setValue("fade_out_ms",       options.fade_out_ms);
     settings.setValue("autoplay_next",     options.autoplay_next);
     settings.setValue("repeat",            options.repeat);
@@ -92,7 +90,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     player = new Player;
     PlayerOptions options = load_player_settings();
-    player->set_options(options);
+    player->get_options() = options;
 
     create_menu("&File",
         std::tuple { "Open file", &MainWindow::open_file },
@@ -106,10 +104,7 @@ MainWindow::MainWindow(QWidget *parent)
     create_menu("&About"
     );
 
-    play_btn = new PlayButton;
-    connect(play_btn, &PlayButton::play,  this, [=, this]() { player->start_or_resume(); });
-    connect(play_btn, &PlayButton::pause, this, [=, this]() { player->pause(); });
-
+    // duration slider
     auto *duration_label = new QLabel("00:00 / 00:00");
     duration_slider = new QSlider(Qt::Horizontal);
 
@@ -135,12 +130,14 @@ MainWindow::MainWindow(QWidget *parent)
         set_duration_label(ms, duration_slider->maximum());
     });
 
+    // track information
     auto *title   = new QLabel;
     auto *game    = new QLabel;
     auto *system  = new QLabel;
     auto *author  = new QLabel;
     auto *comment = new QLabel;
 
+    // buttons under duration slider
     auto make_btn = [=, this](auto icon, auto f) {
         auto *b = new QToolButton(this);
         b->setIcon(style()->standardIcon(icon));
@@ -148,12 +145,16 @@ MainWindow::MainWindow(QWidget *parent)
         return b;
     };
 
+    play_btn = new PlayButton;
+    connect(play_btn, &PlayButton::play,  this, [=, this]() { player->start_or_resume(); });
+    connect(play_btn, &PlayButton::pause, this, [=, this]() { player->pause(); });
+
     prev_track = make_btn(QStyle::SP_MediaSkipBackward, [=, this]() { player->prev(); });
     next_track = make_btn(QStyle::SP_MediaSkipForward,  [=, this]() { player->next(); });
-    stop = make_btn(QStyle::SP_MediaStop,               [=, this]() {
-        play_btn->set_state(PlayButton::State::Pause);
+    stop       = make_btn(QStyle::SP_MediaStop,         [=, this]() {
+        player->load_track(0);
         player->pause();
-        player->seek(0);
+        play_btn->set_state(PlayButton::State::Pause);
         duration_slider->setValue(0);
     });
 
@@ -180,18 +181,9 @@ MainWindow::MainWindow(QWidget *parent)
         ));
     });
 
-    playlist = new QListWidget(this);
-    connect(playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *item) {
-        int index = playlist->currentRow();
-        player->load_track(index);
-        player->start_or_resume();
-        play_btn->set_state(PlayButton::State::Play);
-    });
-
-
-
+    // track settings
     auto *fade = new QCheckBox(tr("&Enable fade-out"));
-    fade->setChecked(options.fade_out);
+    fade->setChecked(options.fade_out_ms != 0);
 
     auto *fade_secs = new QSpinBox;
     fade_secs->setMaximum(10_min / 1000);
@@ -209,43 +201,10 @@ MainWindow::MainWindow(QWidget *parent)
     tempo->addItem("2x",     2.0);
     tempo->addItem("Normal", 1.0);
     tempo->addItem("0.5x",   0.5);
-    tempo->setCurrentIndex(options.tempo == 0.5 ? 0
+    tempo->setCurrentIndex(options.tempo == 0.5 ? 2
                          : options.tempo == 1.0 ? 1
-                         : options.tempo == 2.0 ? 2
+                         : options.tempo == 2.0 ? 0
                          : 1);
-
-    auto *autoplay = new QCheckBox(tr("Autoplay next track"));
-    auto *repeat   = new QCheckBox(tr("Repeat"));
-    auto *shuffle  = new QCheckBox(tr("Shuffle"));
-    autoplay->setChecked(options.autoplay_next);
-    repeat->setChecked(options.repeat);
-    shuffle->setChecked(options.shuffle);
-
-    auto change_options = [=, this]() {
-        player->set_options({
-            .fade_out           = fade->isChecked(),
-            .fade_out_ms        = fade_secs->value() * 1000,
-            .autoplay_next      = autoplay->isChecked(),
-            .repeat             = repeat->isChecked(),
-            .shuffle            = shuffle->isChecked(),
-            .default_duration   = default_duration->value() * 1000,
-            .silence_detection  = silence_detection->isChecked(),
-            .tempo              = tempo->currentData().toDouble(),
-            .volume             = volume->value()
-        });
-    };
-
-    connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
-        fade_secs->setEnabled(state);
-        change_options();
-    });
-    connect(fade_secs,         QOverload<int>::of(&QSpinBox::valueChanged),         this, [=, this](int i)     { change_options(); });
-    connect(default_duration,  QOverload<int>::of(&QSpinBox::valueChanged),         this, [=, this](int i)     { change_options(); });
-    connect(tempo,             QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=, this](int index) { change_options(); });
-    connect(silence_detection, &QCheckBox::stateChanged,                            this, [=, this](int state) { change_options(); });
-    connect(autoplay,          &QCheckBox::stateChanged,                            this, [=, this](int state) { change_options(); });
-    connect(repeat,            &QCheckBox::stateChanged,                            this, [=, this](int state) { change_options(); });
-    connect(shuffle,           &QCheckBox::stateChanged,                            this, [=, this](int state) { change_options(); });
 
     settings_box = make_groupbox<QVBoxLayout>("Settings",
         fade,
@@ -254,14 +213,66 @@ MainWindow::MainWindow(QWidget *parent)
         silence_detection,
         label_pair("Tempo:", tempo)
     );
+
+    // track playlist
+    playlist = new QListWidget;
+    connect(playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *item) {
+        int index = playlist->currentRow();
+        player->load_track(index);
+        player->start_or_resume();
+        play_btn->set_state(PlayButton::State::Play);
+    });
+
+    // track playlist settings
+    auto *autoplay = new QCheckBox(tr("Autoplay next track"));
+    auto *repeat   = new QCheckBox(tr("Repeat"));
+    auto *shuffle  = new QCheckBox(tr("Shuffle"));
+    autoplay->setChecked(options.autoplay_next);
+    repeat->setChecked(options.repeat);
+    shuffle->setChecked(options.shuffle);
+
     playlist_settings_box = make_groupbox<QVBoxLayout>("Playlist settings",
         autoplay,
         repeat,
         shuffle
     );
 
+    // and connections for all settings
+    connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
+        fade_secs->setEnabled(state);
+        if (!state) {
+            player->set_fade(0);
+            fade_secs->setValue(0);
+            duration_slider->setRange(0, player->effective_length());
+        }
+    });
 
+    connect(fade_secs, QOverload<int>::of(&QSpinBox::valueChanged), this, [=, this](int i) {
+        player->set_fade(i);
+        duration_slider->setRange(0, player->effective_length());
+    });
 
+    connect(default_duration, QOverload<int>::of(&QSpinBox::valueChanged), this, [=, this](int i) {
+        player->set_default_duration(i);
+    });
+
+    connect(tempo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=, this](int index) {
+        player->set_tempo(tempo->currentData().toDouble());
+    });
+
+    connect(silence_detection, &QCheckBox::stateChanged, this, [=, this](int state) {
+        player->set_silence_detection(state);
+    });
+
+    connect(autoplay, &QCheckBox::stateChanged, this, [=, this](int state) { player->set_autoplay(state); });
+    connect(repeat,   &QCheckBox::stateChanged, this, [=, this](int state) {
+        player->set_repeat(state);
+        next_track->setEnabled(bool(player->get_next()));
+        prev_track->setEnabled(bool(player->get_prev()));
+    });
+    connect(shuffle,  &QCheckBox::stateChanged, this, [=, this](int state) { player->set_shuffle(state);  });
+
+    // player stuff
     player->on_position_changed([=, this](int ms) {
         duration_slider->setValue(ms);
         set_duration_label(ms, duration_slider->maximum());
@@ -273,19 +284,20 @@ MainWindow::MainWindow(QWidget *parent)
         author  ->setText(info->author);
         system  ->setText(info->system);
         comment ->setText(info->comment);
-        duration_slider->setRange(0, length);
+        duration_slider->setRange(0, player->effective_length());
         next_track->setEnabled(bool(player->get_next()));
         prev_track->setEnabled(bool(player->get_prev()));
         player->start_or_resume();
         play_btn->set_state(PlayButton::State::Play);
         playlist->setCurrentRow(num);
+        fade_secs->setMaximum(length / 1000);
     });
 
     player->on_track_ended([=, this]() {
         play_btn->set_state(PlayButton::State::Pause);
     });
 
-
+    // and now create the gui
     set_enabled(false);
     center->setLayout(
         make_layout<QHBoxLayout>(
@@ -335,7 +347,7 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file()
 {
-    // auto filename = QString("smb3.nsf");
+    // auto filename = QString("test_files/ynbarracks.spc");
     auto filename = QFileDialog::getOpenFileName(
         this,
         tr("Open file"),
@@ -353,7 +365,7 @@ void MainWindow::open_file()
     playlist->clear();
     for (auto &track : player->track_names())
         new QListWidgetItem(QString::fromStdString(track), playlist);
-    playlist->setCurrentRow(0);
+    playlist->setCurrentRow(player->get_index(0));
     last_dir = filename;
 }
 

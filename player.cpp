@@ -139,15 +139,6 @@ void Player::audio_callback(void *, u8 *stream, int len)
     position_changed(gme_tell(emu));
 }
 
-void Player::set_fade(int length, int ms)
-{
-    if (!options.fade_out)
-        return;
-    if (ms > length)
-        return;
-    gme_set_fade(emu, length - ms);
-}
-
 void Player::use_file(std::string_view filename)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
@@ -165,7 +156,11 @@ void Player::load_track_without_mutex(int index)
     gme_track_info(emu, &track.metadata, num);
     track.length = get_track_length(track.metadata, options.default_duration);
     gme_start_track(emu, num);
-    set_fade(track.length, options.fade_out_ms);
+    if (track.length < options.fade_out_ms)
+        options.fade_out_ms = track.length;
+    if (options.fade_out_ms != 0)
+        gme_set_fade(emu, track.length - options.fade_out_ms);
+    gme_set_tempo(emu, options.tempo);
     track_changed(num, track.metadata, track.length);
 }
 
@@ -232,13 +227,17 @@ void Player::seek(int ms)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     gme_seek(emu, ms);
     // fade disappears on seek for some reason
-    set_fade(track.length, options.fade_out_ms);
+    if (options.fade_out_ms != 0)
+        gme_set_fade(emu, track.length - options.fade_out_ms);
 }
 
-void Player::set_volume(int value)
+int Player::effective_length() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    options.volume = value;
+    // the fade seems like it lasts for 8 seconds
+    return options.fade_out_ms == 0
+        ? track.length
+        : std::min<int>(track.length, track.length - options.fade_out_ms + 8_sec);
 }
 
 std::vector<std::string> Player::track_names() const
@@ -253,19 +252,58 @@ std::vector<std::string> Player::track_names() const
     return names;
 }
 
-void Player::set_options(PlayerOptions opts)
+void Player::set_fade(int secs)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    options = opts;
+    int ms = secs * 1000;
+    options.fade_out_ms = ms;
+    if (cur_track != -1 && options.fade_out_ms != 0)
+        gme_set_fade(emu, track.length - options.fade_out_ms);
+}
 
-    // automatically change some of the current song's attributes
-    // return if no song playing
-    if (cur_track == -1)
-        return;
+void Player::set_tempo(double tempo)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.tempo = tempo;
+    if (cur_track != -1)
+        gme_set_tempo(emu, tempo);
+}
 
-    if (options.silence_detection > 0)
-        gme_ignore_silence(emu, true);
-    gme_set_tempo(emu, options.tempo);
-    set_fade(track.length, options.fade_out_ms);
+void Player::set_silence_detection(bool ignore)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.silence_detection = ignore ? 0 : 1;
+    if (cur_track != -1)
+        gme_ignore_silence(emu, options.silence_detection);
+}
+
+void Player::set_default_duration(int secs)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.default_duration = secs * 1000;
+}
+
+void Player::set_autoplay(bool autoplay)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.autoplay_next = autoplay;
+}
+
+void Player::set_repeat(bool repeat)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.repeat = repeat;
+}
+
+void Player::set_shuffle(bool shuffle)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.shuffle = shuffle;
     generate_order(order, options.shuffle);
+}
+
+void Player::set_volume(int value)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.volume = value;
 }
