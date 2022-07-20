@@ -50,6 +50,7 @@ class Player {
     SDL_AudioDeviceID dev_id = 0;
     mutable SDLMutex audio_mutex;
     SDL_AudioSpec obtained;
+    bool paused = true;
 
     // current track information:
     TrackInfo track = {
@@ -84,7 +85,8 @@ public:
 
     void use_file(std::string_view filename);
     void load_track(int num);
-    bool playing() const;
+    bool loaded() const;
+    bool is_paused() const;
     void start_or_resume();
     void pause();
     std::optional<int> get_next() const;
@@ -92,12 +94,12 @@ public:
     void next();
     void prev();
     void seek(int ms);
-    int length() const { return track.length; }
+    int length() const;
     int effective_length() const;
-    int get_index(int trackno) const { return order[trackno]; }
+    int get_index(int trackno) const;
     std::vector<std::string> track_names() const;
 
-    PlayerOptions & get_options() { return options; }
+    PlayerOptions & get_options();
     void set_fade(int secs);
     void set_tempo(double tempo);
     void set_silence_detection(bool ignore);

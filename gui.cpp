@@ -98,32 +98,27 @@ MainWindow::MainWindow(QWidget *parent)
         std::tuple { "Open recent", [](){} }
     );
 
-    create_menu("&Edit"
+    create_menu("&Edit",
+        std::tuple { "Settings", &MainWindow::edit_settings }
     );
 
     create_menu("&About"
     );
 
     // duration slider
-    auto *duration_label = new QLabel("00:00 / 00:00");
+    duration_label = new QLabel("00:00 / 00:00");
     duration_slider = new QSlider(Qt::Horizontal);
 
-    auto set_duration_label = [=, this](int ms, int max) {
-        int mins = ms / 1000 / 60;
-        int secs = ms / 1000 % 60;
-        int max_mins = max / 1000 / 60;
-        int max_secs = max / 1000 % 60;
-        auto str = fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
-        duration_label->setText(QString::fromStdString(str));
-    };
-
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
+        was_paused = player->is_paused();
         player->pause();
         play_btn->set_state(PlayButton::State::Pause);
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
-        player->start_or_resume();
-        play_btn->set_state(PlayButton::State::Play);
+        if (!was_paused) {
+            player->start_or_resume();
+            play_btn->set_state(PlayButton::State::Play);
+        }
     });
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this](int ms) {
         player->seek(ms);
@@ -181,39 +176,6 @@ MainWindow::MainWindow(QWidget *parent)
         ));
     });
 
-    // track settings
-    auto *fade = new QCheckBox(tr("&Enable fade-out"));
-    fade->setChecked(options.fade_out_ms != 0);
-
-    auto *fade_secs = new QSpinBox;
-    fade_secs->setMaximum(10_min / 1000);
-    fade_secs->setValue(options.fade_out_ms / 1000);
-    fade_secs->setEnabled(fade->isChecked());
-
-    auto *default_duration = new QSpinBox;
-    default_duration->setMaximum(10_min / 1000);
-    default_duration->setValue(options.default_duration / 1000);
-
-    auto *silence_detection = new QCheckBox(tr("Do silence detection"));
-    silence_detection->setChecked(options.silence_detection == 1);
-
-    auto *tempo = new QComboBox;
-    tempo->addItem("2x",     2.0);
-    tempo->addItem("Normal", 1.0);
-    tempo->addItem("0.5x",   0.5);
-    tempo->setCurrentIndex(options.tempo == 0.5 ? 2
-                         : options.tempo == 1.0 ? 1
-                         : options.tempo == 2.0 ? 0
-                         : 1);
-
-    settings_box = make_groupbox<QVBoxLayout>("Settings",
-        fade,
-        label_pair("Fade seconds:", fade_secs),
-        label_pair("Default duration:", default_duration),
-        silence_detection,
-        label_pair("Tempo:", tempo)
-    );
-
     // track playlist
     playlist = new QListWidget;
     connect(playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *item) {
@@ -224,45 +186,12 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     // track playlist settings
-    auto *autoplay = new QCheckBox(tr("Autoplay next track"));
-    auto *repeat   = new QCheckBox(tr("Repeat"));
-    auto *shuffle  = new QCheckBox(tr("Shuffle"));
+    autoplay = new QCheckBox(tr("Autoplay next track"));
+    repeat   = new QCheckBox(tr("Repeat"));
+    shuffle  = new QCheckBox(tr("Shuffle"));
     autoplay->setChecked(options.autoplay_next);
     repeat->setChecked(options.repeat);
     shuffle->setChecked(options.shuffle);
-
-    playlist_settings_box = make_groupbox<QVBoxLayout>("Playlist settings",
-        autoplay,
-        repeat,
-        shuffle
-    );
-
-    // and connections for all settings
-    connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
-        fade_secs->setEnabled(state);
-        if (!state) {
-            player->set_fade(0);
-            fade_secs->setValue(0);
-            duration_slider->setRange(0, player->effective_length());
-        }
-    });
-
-    connect(fade_secs, QOverload<int>::of(&QSpinBox::valueChanged), this, [=, this](int i) {
-        player->set_fade(i);
-        duration_slider->setRange(0, player->effective_length());
-    });
-
-    connect(default_duration, QOverload<int>::of(&QSpinBox::valueChanged), this, [=, this](int i) {
-        player->set_default_duration(i);
-    });
-
-    connect(tempo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=, this](int index) {
-        player->set_tempo(tempo->currentData().toDouble());
-    });
-
-    connect(silence_detection, &QCheckBox::stateChanged, this, [=, this](int state) {
-        player->set_silence_detection(state);
-    });
 
     connect(autoplay, &QCheckBox::stateChanged, this, [=, this](int state) { player->set_autoplay(state); });
     connect(repeat,   &QCheckBox::stateChanged, this, [=, this](int state) {
@@ -290,7 +219,6 @@ MainWindow::MainWindow(QWidget *parent)
         player->start_or_resume();
         play_btn->set_state(PlayButton::State::Play);
         playlist->setCurrentRow(num);
-        fade_secs->setMaximum(length / 1000);
     });
 
     player->on_track_ended([=, this]() {
@@ -300,8 +228,8 @@ MainWindow::MainWindow(QWidget *parent)
     // and now create the gui
     set_enabled(false);
     center->setLayout(
-        make_layout<QHBoxLayout>(
-            make_layout<QVBoxLayout>(
+        make_layout<QVBoxLayout>(
+            make_layout<QHBoxLayout>(
                 make_groupbox<QFormLayout>("Track info",
                     std::tuple { new QLabel(tr("Title:")),   title      },
                     std::tuple { new QLabel(tr("Game:")),    game       },
@@ -309,26 +237,29 @@ MainWindow::MainWindow(QWidget *parent)
                     std::tuple { new QLabel(tr("Author:")),  author     },
                     std::tuple { new QLabel(tr("Comment:")), comment    }
                 ),
-                settings_box,
-                make_layout<QHBoxLayout>(
-                    duration_slider,
-                    duration_label
-                ),
-                make_layout<QHBoxLayout>(
-                    prev_track,
-                    play_btn,
-                    next_track,
-                    stop,
-                    volume_btn,
-                    volume
-                ),
-                new QWidget
+                make_layout<QVBoxLayout>(
+                    new QLabel(tr("Track playlist:")),
+                    playlist,
+                    make_groupbox<QVBoxLayout>("Playlist settings",
+                        autoplay,
+                        repeat,
+                        shuffle
+                    )
+                )
             ),
-            make_layout<QVBoxLayout>(
-                new QLabel(tr("Track playlist:")),
-                playlist,
-                playlist_settings_box
-            )
+            make_layout<QHBoxLayout>(
+                duration_slider,
+                duration_label
+            ),
+            make_layout<QHBoxLayout>(
+                prev_track,
+                play_btn,
+                next_track,
+                stop,
+                volume_btn,
+                volume
+            ),
+            new QWidget
         )
     );
 }
@@ -347,13 +278,13 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file()
 {
-    // auto filename = QString("test_files/ynbarracks.spc");
-    auto filename = QFileDialog::getOpenFileName(
-        this,
-        tr("Open file"),
-        last_dir,
-        "Game music files (*.spc *.nsf)"
-    );
+    auto filename = QString("test_files/rudra.spc");
+    // auto filename = QFileDialog::getOpenFileName(
+    //     this,
+    //     tr("Open file"),
+    //     last_dir,
+    //     "Game music files (*.spc *.nsf)"
+    // );
     if (filename.isEmpty())
         return;
     set_enabled(true);
@@ -378,12 +309,96 @@ void MainWindow::set_enabled(bool val)
     next_track->setEnabled(val);
     volume_btn->setEnabled(val);
     play_btn->setEnabled(val);
-    settings_box->setEnabled(val);
-    playlist_settings_box->setEnabled(val);
+    autoplay->setEnabled(val);
+    repeat->setEnabled(val);
+    shuffle->setEnabled(val);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     set_player_settings(player->get_options());
     event->accept();
+}
+
+void MainWindow::set_duration_label(int ms, int max)
+{
+    int mins = ms / 1000 / 60;
+    int secs = ms / 1000 % 60;
+    int max_mins = max / 1000 / 60;
+    int max_secs = max / 1000 % 60;
+    auto str = fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
+    duration_label->setText(QString::fromStdString(str));
+};
+
+void MainWindow::edit_settings()
+{
+    auto *wnd = new SettingsWindow(player, this);
+    wnd->open();
+    connect(wnd, &QDialog::finished, this, [=, this](int result) {
+        if (result == QDialog::Accepted && player->loaded()) {
+            duration_slider->setRange(0, player->effective_length());
+            player->pause();
+            player->seek(0);
+            player->start_or_resume();
+        }
+    });
+}
+
+
+SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
+{
+    auto options = player->get_options();
+    int length_ms = player->length();
+    length_ms = length_ms == 0 ? 10_min : length_ms;
+
+    auto *fade = new QCheckBox(tr("&Enable fade-out"));
+    fade->setChecked(options.fade_out_ms != 0);
+
+    auto *fade_secs = new QSpinBox;
+    fade_secs->setMaximum(length_ms / 1000);
+    fade_secs->setValue(options.fade_out_ms / 1000);
+    fade_secs->setEnabled(fade->isChecked());
+
+    connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
+        fade_secs->setEnabled(state);
+        if (!state)
+            fade_secs->setValue(0);
+    });
+
+    auto *default_duration = new QSpinBox;
+    default_duration->setMaximum(10_min / 1000);
+    default_duration->setValue(options.default_duration / 1000);
+
+    auto *silence_detection = new QCheckBox(tr("Do silence detection"));
+    silence_detection->setChecked(options.silence_detection == 1);
+
+    auto *tempo = new QComboBox;
+    tempo->addItem("2x",     2.0);
+    tempo->addItem("Normal", 1.0);
+    tempo->addItem("0.5x",   0.5);
+    tempo->setCurrentIndex(options.tempo == 2.0 ? 2
+                         : options.tempo == 1.0 ? 1
+                         : options.tempo == 0.5 ? 0
+                         : 1);
+
+    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
+                                          | QDialogButtonBox::Cancel);
+    connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
+        player->set_fade(fade_secs->value());
+        player->set_default_duration(default_duration->value());
+        player->set_silence_detection(silence_detection->isChecked());
+        player->set_tempo(tempo->currentData().toDouble());
+        accept();
+    });
+
+    connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    setLayout(make_layout<QVBoxLayout>(
+        fade,
+        label_pair("Fade seconds:", fade_secs),
+        label_pair("Default duration:", default_duration),
+        silence_detection,
+        label_pair("Tempo:", tempo),
+        button_box
+    ));
 }

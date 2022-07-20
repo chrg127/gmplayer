@@ -87,6 +87,53 @@ void audio_callback(void *unused, u8 *stream, int stream_length)
 
 
 
+// private functions
+
+void Player::audio_callback(void *, u8 *stream, int len)
+{
+    // some songs don't have length information, hence the need for the third check.
+    if (!emu
+     || gme_track_ended(emu)
+     || gme_tell(emu) > track.length + 1_sec/2) {
+        SDL_PauseAudioDevice(dev_id, 1);
+        paused = true;
+        track_ended();
+        if (options.autoplay_next) {
+            auto next = get_next();
+            if (next)
+                load_track_without_mutex(next.value());
+        }
+        return;
+    }
+
+    // fill stream with silence. this is needed for MixAudio to work how we want.
+    std::memset(stream, 0, len);
+    short buf[SAMPLES * CHANNELS];
+    gme_play(emu, SAMPLES * CHANNELS, buf);
+    // we could also use memcpy here, but then we wouldn't have volume control
+    SDL_MixAudioFormat(stream, (const u8 *) buf, obtained.format, sizeof(buf), options.volume);
+    position_changed(gme_tell(emu));
+}
+
+void Player::load_track_without_mutex(int index)
+{
+    cur_track = index;
+    int num = order[index];
+    gme_track_info(emu, &track.metadata, num);
+    track.length = get_track_length(track.metadata, options.default_duration);
+    gme_start_track(emu, num);
+    if (track.length < options.fade_out_ms)
+        options.fade_out_ms = track.length;
+    if (options.fade_out_ms != 0)
+        gme_set_fade(emu, track.length - options.fade_out_ms);
+    gme_set_tempo(emu, options.tempo);
+    track_changed(num, track.metadata, track.length);
+}
+
+
+
+// public functions
+
 Player::Player()
     : options{{}}
 {
@@ -112,33 +159,6 @@ Player::~Player()
     SDL_CloseAudioDevice(dev_id);
 }
 
-void Player::audio_callback(void *, u8 *stream, int len)
-{
-    // some songs don't have length information, hence the need for the third check.
-    if (!emu
-     || gme_track_ended(emu)
-     || gme_tell(emu) > track.length + 1_sec/2) {
-        SDL_PauseAudioDevice(dev_id, 1);
-        track_ended();
-
-        if (options.autoplay_next) {
-            auto next = get_next();
-            if (next)
-                load_track_without_mutex(next.value());
-        }
-
-        return;
-    }
-
-    // fill stream with silence. this is needed for MixAudio to work how we want.
-    std::memset(stream, 0, len);
-    short buf[SAMPLES * CHANNELS];
-    gme_play(emu, SAMPLES * CHANNELS, buf);
-    // we could also use memcpy here, but then we wouldn't have volume control
-    SDL_MixAudioFormat(stream, (const u8 *) buf, obtained.format, sizeof(buf), options.volume);
-    position_changed(gme_tell(emu));
-}
-
 void Player::use_file(std::string_view filename)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
@@ -149,47 +169,41 @@ void Player::use_file(std::string_view filename)
     generate_order(order, options.shuffle);
 }
 
-void Player::load_track_without_mutex(int index)
-{
-    cur_track = index;
-    int num = order[index];
-    gme_track_info(emu, &track.metadata, num);
-    track.length = get_track_length(track.metadata, options.default_duration);
-    gme_start_track(emu, num);
-    if (track.length < options.fade_out_ms)
-        options.fade_out_ms = track.length;
-    if (options.fade_out_ms != 0)
-        gme_set_fade(emu, track.length - options.fade_out_ms);
-    gme_set_tempo(emu, options.tempo);
-    track_changed(num, track.metadata, track.length);
-}
-
 void Player::load_track(int index)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     load_track_without_mutex(index);
 }
 
-bool Player::playing() const
+bool Player::loaded() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     return cur_track != -1;
+}
+
+bool Player::is_paused() const
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    return paused;
 }
 
 void Player::start_or_resume()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     SDL_PauseAudioDevice(dev_id, 0);
+    paused = false;
 }
 
 void Player::pause()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     SDL_PauseAudioDevice(dev_id, 1);
+    paused = true;
 }
 
 std::optional<int> Player::get_next() const
 {
+    std::lock_guard<SDLMutex> lock(audio_mutex);
     if (cur_track + 1 < track_count)
         return cur_track + 1;
     if (options.repeat)
@@ -199,6 +213,7 @@ std::optional<int> Player::get_next() const
 
 std::optional<int> Player::get_prev() const
 {
+    std::lock_guard<SDLMutex> lock(audio_mutex);
     if (cur_track - 1 >= 0)
         return cur_track - 1;
     if (options.repeat)
@@ -227,8 +242,15 @@ void Player::seek(int ms)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     gme_seek(emu, ms);
     // fade disappears on seek for some reason
-    if (options.fade_out_ms != 0)
+    if (options.fade_out_ms != 0) {
         gme_set_fade(emu, track.length - options.fade_out_ms);
+    }
+}
+
+int Player::length() const
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    return track.length;
 }
 
 int Player::effective_length() const
@@ -238,6 +260,12 @@ int Player::effective_length() const
     return options.fade_out_ms == 0
         ? track.length
         : std::min<int>(track.length, track.length - options.fade_out_ms + 8_sec);
+}
+
+int Player::get_index(int trackno) const
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    return order[trackno];
 }
 
 std::vector<std::string> Player::track_names() const
@@ -252,13 +280,20 @@ std::vector<std::string> Player::track_names() const
     return names;
 }
 
+PlayerOptions & Player::get_options()
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    return options;
+}
+
 void Player::set_fade(int secs)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     int ms = secs * 1000;
     options.fade_out_ms = ms;
-    if (cur_track != -1 && options.fade_out_ms != 0)
+    if (cur_track != -1 && options.fade_out_ms != 0) {
         gme_set_fade(emu, track.length - options.fade_out_ms);
+    }
 }
 
 void Player::set_tempo(double tempo)

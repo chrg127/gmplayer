@@ -28,20 +28,29 @@ signals:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
+    bool was_paused = false;
     Player *player;
     QSlider *duration_slider, *volume;
+    QLabel *duration_label;
     QString last_dir = ".";
     PlayButton *play_btn;
     QToolButton *stop, *prev_track, *next_track, *volume_btn;
     QListWidget *playlist;
-
-    QGroupBox *settings_box;
-    QGroupBox *playlist_settings_box;
+    QCheckBox *autoplay, *repeat, *shuffle;
 
     QMenu *create_menu(const char *name, auto&&... actions);
     void open_file();
+    void set_duration_label(int ms, int max);
+    void edit_settings();
     void set_enabled(bool val);
     void closeEvent(QCloseEvent *event);
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+};
+
+class SettingsWindow : public QDialog {
+    Q_OBJECT
+    Player *player;
+public:
+    explicit SettingsWindow(Player *player, QWidget *parent = nullptr);
 };
