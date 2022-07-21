@@ -39,11 +39,13 @@ class MainWindow : public QMainWindow {
     QCheckBox *autoplay, *repeat, *shuffle;
 
     QMenu *create_menu(const char *name, auto&&... actions);
-    void open_file();
+    void open_file(QString filename);
     void set_duration_label(int ms, int max);
     void edit_settings();
     void set_enabled(bool val);
     void closeEvent(QCloseEvent *event);
+    void dragEnterEvent(QDragEnterEvent *event);
+    void dropEvent(QDropEvent *event);
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 };

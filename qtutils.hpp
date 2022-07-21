@@ -4,6 +4,7 @@
 #include <QGridLayout>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QMessageBox>
 
 template <typename T> void add_to_layout(T *lt, QWidget *w) { lt->addWidget(w); }
 template <typename T> void add_to_layout(T *lt, QLayout *l) { lt->addLayout(l); }
@@ -39,4 +40,11 @@ QFormLayout *label_pair(const char *text, T *widget)
         new QLabel(text),
         widget
     });
+}
+
+inline void msgbox(const QString &msg)
+{
+    QMessageBox box;
+    box.setText(msg);
+    box.exec();
 }

@@ -26,6 +26,11 @@
 #include <QDialogButtonBox>
 #include <QSettings>
 #include <QCloseEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QDebug>
+#include <QMessageBox>
 #include <fmt/core.h>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
@@ -87,13 +92,23 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowTitle("gmplayer");
     auto *center = new QWidget(this);
     setCentralWidget(center);
+    setAcceptDrops(true);
 
     player = new Player;
     PlayerOptions options = load_player_settings();
     player->get_options() = options;
 
     create_menu("&File",
-        std::tuple { "Open file", &MainWindow::open_file },
+        std::tuple { "Open file", [=, this] () {
+            auto filename = QFileDialog::getOpenFileName(
+                this,
+                tr("Open file"),
+                last_dir,
+                "Game music files (*.spc *.nsf)"
+            );
+            if (!filename.isEmpty())
+                open_file(filename);
+        } },
         std::tuple { "Open playlist", [](){} },
         std::tuple { "Open recent", [](){} }
     );
@@ -276,22 +291,21 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
     return menu;
 }
 
-void MainWindow::open_file()
+void MainWindow::open_file(QString filename)
 {
-    auto filename = QString("test_files/rudra.spc");
-    // auto filename = QFileDialog::getOpenFileName(
-    //     this,
-    //     tr("Open file"),
-    //     last_dir,
-    //     "Game music files (*.spc *.nsf)"
-    // );
-    if (filename.isEmpty())
-        return;
-    set_enabled(true);
+    // filename = QString("test_files/rudra.spc");
     player->pause();
-    player->use_file(filename.toUtf8().constData());
+    auto err = player->use_file(filename.toUtf8().constData());
+    if (err) {
+        msgbox(QString("The file %1 couldn't be opened. Error: %2")
+                       .arg(filename)
+                       .arg(err));
+        player->start_or_resume();
+        return;
+    }
     player->load_track(0);
     player->start_or_resume();
+    set_enabled(true);
     play_btn->set_state(PlayButton::State::Play);
     playlist->clear();
     for (auto &track : player->track_names())
@@ -343,6 +357,30 @@ void MainWindow::edit_settings()
         }
     });
 }
+
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasFormat("text/plain")) {
+        event->acceptProposedAction();
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    auto mime = event->mimeData();
+    if (!mime->hasUrls()) {
+        msgbox("Invalid file: The dropped file may not be a music file");
+        return;
+    }
+    auto url = mime->urls()[0];
+    if (!url.isLocalFile()) {
+        msgbox("Invalid file: The dropped file may not be a music file");
+        return;
+    }
+    open_file(url.toLocalFile());
+    event->acceptProposedAction();
+}
+
 
 
 SettingsWindow::SettingsWindow(Player *player, QWidget *parent)

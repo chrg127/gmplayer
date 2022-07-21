@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <array>
 #include <optional>
 #include <mutex>
@@ -159,14 +160,17 @@ Player::~Player()
     SDL_CloseAudioDevice(dev_id);
 }
 
-void Player::use_file(std::string_view filename)
+gme_err_t Player::use_file(std::string_view filename)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    gme_open_file(filename.data(), &emu, 44100);
+    auto err = gme_open_file(filename.data(), &emu, 44100);
+    if (err)
+        return err;
     track_count = gme_track_count(emu);
     cur_track = 0;
     order.resize(track_count);
     generate_order(order, options.shuffle);
+    return nullptr;
 }
 
 void Player::load_track(int index)

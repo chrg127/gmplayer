@@ -10,6 +10,8 @@
 class Music_Emu;
 class gme_info_t;
 
+typedef const char* gme_err_t;
+
 inline constexpr std::size_t operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
 inline constexpr std::size_t operator"" _min(unsigned long long mins) { return mins * 60_sec; }
 
@@ -83,7 +85,7 @@ public:
     Player(const Player &) = delete;
     Player & operator=(const Player &) = delete;
 
-    void use_file(std::string_view filename);
+    gme_err_t use_file(std::string_view filename);
     void load_track(int num);
     bool loaded() const;
     bool is_paused() const;
