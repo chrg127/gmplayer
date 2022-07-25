@@ -129,14 +129,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
         was_paused = player->is_paused();
-        player->pause();
-        play_btn->set_state(PlayButton::State::Pause);
+        pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
-        if (!was_paused) {
-            player->start_or_resume();
-            play_btn->set_state(PlayButton::State::Play);
-        }
+        if (!was_paused)
+            start_or_resume();
     });
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this](int ms) {
         player->seek(ms);
@@ -154,24 +151,22 @@ MainWindow::MainWindow(QWidget *parent)
     auto make_btn = [=, this](auto icon, auto f) {
         auto *b = new QToolButton(this);
         b->setIcon(style()->standardIcon(icon));
+        b->setEnabled(false);
         connect(b, &QAbstractButton::clicked, this, f);
         return b;
     };
 
     play_btn = new PlayButton;
+    play_btn->setEnabled(false);
     connect(play_btn, &PlayButton::play,  this, [=, this]() { player->start_or_resume(); });
     connect(play_btn, &PlayButton::pause, this, [=, this]() { player->pause(); });
 
     prev_track = make_btn(QStyle::SP_MediaSkipBackward, [=, this]() { player->prev(); });
     next_track = make_btn(QStyle::SP_MediaSkipForward,  [=, this]() { player->next(); });
-    stop       = make_btn(QStyle::SP_MediaStop,         [=, this]() {
-        player->load_track(0);
-        player->pause();
-        play_btn->set_state(PlayButton::State::Pause);
-        duration_slider->setValue(0);
-    });
+    stop_btn       = make_btn(QStyle::SP_MediaStop,         &MainWindow::stop);
 
     volume = new QSlider(Qt::Horizontal);
+    volume->setEnabled(false);
     volume->setRange(0, get_max_volume_value());
     volume->setValue(options.volume);
     volume_btn = make_btn(QStyle::SP_MediaVolume,
@@ -199,8 +194,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *item) {
         int index = playlist->currentRow();
         player->load_track(index);
-        player->start_or_resume();
-        play_btn->set_state(PlayButton::State::Play);
+        start_or_resume();
     });
 
     // track playlist settings
@@ -208,8 +202,11 @@ MainWindow::MainWindow(QWidget *parent)
     repeat   = new QCheckBox(tr("Repeat"));
     shuffle  = new QCheckBox(tr("Shuffle"));
     autoplay->setChecked(options.autoplay_next);
+    autoplay->setEnabled(false);
     repeat->setChecked(options.repeat);
+    repeat->setEnabled(false);
     shuffle->setChecked(options.shuffle);
+    shuffle->setEnabled(false);
 
     connect(autoplay, &QCheckBox::stateChanged, this, [=, this](int state) { player->set_autoplay(state); });
     connect(repeat,   &QCheckBox::stateChanged, this, [=, this](int state) {
@@ -234,9 +231,8 @@ MainWindow::MainWindow(QWidget *parent)
         duration_slider->setRange(0, player->effective_length());
         next_track->setEnabled(bool(player->get_next()));
         prev_track->setEnabled(bool(player->get_prev()));
-        player->start_or_resume();
-        play_btn->set_state(PlayButton::State::Play);
         playlist->setCurrentRow(num);
+        start_or_resume();
     });
 
     player->on_track_ended([=, this]() {
@@ -245,8 +241,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     load_shortcuts();
 
+
     // and now create the gui
-    set_enabled(false);
     center->setLayout(
         make_layout<QVBoxLayout>(
             make_layout<QHBoxLayout>(
@@ -275,7 +271,7 @@ MainWindow::MainWindow(QWidget *parent)
                 prev_track,
                 play_btn,
                 next_track,
-                stop,
+                stop_btn,
                 volume_btn,
                 volume
             ),
@@ -289,25 +285,42 @@ void MainWindow::load_shortcuts()
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("shortcuts");
 
-    auto add_shortcut = [&](const QString &name, const QString &key, auto &&fn) {
+    auto add_shortcut = [&](const QString &name,
+                            const QString &display_name,
+                            const QString &key,
+                            auto &&fn) {
         auto value = settings.value(name, key).toString();
         auto *shortcut = new QShortcut(QKeySequence(value), this);
         connect(shortcut, &QShortcut::activated, this, fn);
-        shortcuts[name] = shortcut;
+        shortcuts[name] = {
+            .shortcut = shortcut,
+            .name = name,
+            .display_name = display_name
+        };
     };
 
-    add_shortcut("pause", "Ctrl+Space", []() { fmt::print("play/pause\n"); });
-    add_shortcut("next",  "Ctrl+Right", []() { fmt::print("next\n"); });
-    add_shortcut("prev",  "Ctrl+Left" , []() { fmt::print("prev\n"); });
+    add_shortcut("play", "Play/Pause", "Ctrl+Space", [=, this]() {
+        if (player->is_paused())
+            start_or_resume();
+        else
+            pause();
+    });
+    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();    });
+    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();    });
+    add_shortcut("stop",  "Stop",           "Ctrl+S",       &MainWindow::stop);
+    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { fmt::print("seek forward\n"); });
+    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { fmt::print("seek backwards\n"); });
+    add_shortcut("volup", "Volume up",      "0",            [=, this] { fmt::print("volume up\n");    });
+    add_shortcut("voldw", "Volume down",    "9",            [=, this] { fmt::print("volume down\n");  });
     settings.endGroup();
 }
 
-void save_shortcuts(const std::unordered_map<QString, QShortcut *> &shortcuts)
+void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("shortcuts");
-    for (auto [name, shortcut] : shortcuts)
-        settings.setValue(name, shortcut->key().toString());
+    for (auto [name, obj] : shortcuts)
+        settings.setValue(name, obj.shortcut->key().toString());
     settings.endGroup();
 }
 
@@ -326,19 +339,25 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 void MainWindow::open_file(QString filename)
 {
     // filename = QString("test_files/rudra.spc");
-    player->pause();
     auto err = player->use_file(filename.toUtf8().constData());
     if (err) {
         msgbox(QString("The file %1 couldn't be opened. Error: %2")
                        .arg(filename)
                        .arg(err));
-        player->start_or_resume();
         return;
     }
     player->load_track(0);
-    player->start_or_resume();
-    set_enabled(true);
     play_btn->set_state(PlayButton::State::Play);
+    duration_slider->setEnabled(true);
+    stop_btn->setEnabled(true);
+    prev_track->setEnabled(bool(player->get_next()));
+    next_track->setEnabled(bool(player->get_next()));
+    volume_btn->setEnabled(true);
+    play_btn->setEnabled(true);
+    autoplay->setEnabled(true);
+    repeat->setEnabled(true);
+    shuffle->setEnabled(true);
+    volume->setEnabled(true);
     playlist->clear();
     for (auto &track : player->track_names())
         new QListWidgetItem(QString::fromStdString(track), playlist);
@@ -346,18 +365,29 @@ void MainWindow::open_file(QString filename)
     last_dir = filename;
 }
 
-void MainWindow::set_enabled(bool val)
+void MainWindow::start_or_resume()
 {
-    duration_slider->setEnabled(val);
-    volume->setEnabled(val);
-    stop->setEnabled(val);
-    prev_track->setEnabled(val);
-    next_track->setEnabled(val);
-    volume_btn->setEnabled(val);
-    play_btn->setEnabled(val);
-    autoplay->setEnabled(val);
-    repeat->setEnabled(val);
-    shuffle->setEnabled(val);
+    if (player->loaded()) {
+        player->start_or_resume();
+        play_btn->set_state(PlayButton::State::Play);
+    }
+}
+
+void MainWindow::pause()
+{
+    if (player->loaded()) {
+        player->pause();
+        play_btn->set_state(PlayButton::State::Pause);
+    }
+}
+
+void MainWindow::stop()
+{
+    if (player->loaded()) {
+        pause();
+        player->load_track(0);
+        duration_slider->setValue(0);
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -384,9 +414,7 @@ void MainWindow::edit_settings()
     connect(wnd, &QDialog::finished, this, [=, this](int result) {
         if (result == QDialog::Accepted && player->loaded()) {
             duration_slider->setRange(0, player->effective_length());
-            player->pause();
             player->seek(0);
-            player->start_or_resume();
         }
     });
 }
@@ -395,9 +423,6 @@ void MainWindow::edit_shortcuts()
 {
     auto *wnd = new ShortcutsWindow(shortcuts);
     wnd->open();
-    // connect(wnd, &QDialog::finished, this, [=, this](int result) {
-    //     fmt::print("edited\n");
-    // });
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
@@ -483,18 +508,18 @@ SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
     ));
 }
 
-ShortcutsWindow::ShortcutsWindow(const std::unordered_map<QString, QShortcut *> &shortcuts)
+ShortcutsWindow::ShortcutsWindow(const std::map<QString, Shortcut> &shortcuts)
 {
     auto *layout = new QFormLayout;
-    for (auto [name, shortcut] : shortcuts) {
-        auto *edit = new RecorderButton(shortcut->key().toString());
-        layout->addRow(new QLabel(name), edit);
+    for (auto [_, obj] : shortcuts) {
+        auto *edit = new RecorderButton(obj.shortcut->key().toString());
+        layout->addRow(new QLabel(obj.display_name), edit);
         connect(edit, &RecorderButton::released, this, [=, this] {
             edit->setText("...");
         });
         connect(edit, &RecorderButton::got_key_sequence, this, [=, this](const auto &seq) {
             edit->setText(seq.toString());
-            shortcut->setKey(seq);
+            obj.shortcut->setKey(seq);
         });
     }
 

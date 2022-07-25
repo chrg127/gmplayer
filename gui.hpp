@@ -1,6 +1,6 @@
 #pragma once
 
-#include <unordered_map>
+#include <map>
 #include <QObject>
 #include <QWidget>
 #include <QMainWindow>
@@ -29,6 +29,12 @@ signals:
     void pause();
 };
 
+struct Shortcut {
+    QShortcut *shortcut;
+    QString name;
+    QString display_name;
+};
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -38,18 +44,20 @@ class MainWindow : public QMainWindow {
     QLabel *duration_label;
     QString last_dir = ".";
     PlayButton *play_btn;
-    QToolButton *stop, *prev_track, *next_track, *volume_btn;
+    QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
     QListWidget *playlist;
     QCheckBox *autoplay, *repeat, *shuffle;
-    std::unordered_map<QString, QShortcut *> shortcuts;
+    std::map<QString, Shortcut> shortcuts;
 
     QMenu *create_menu(const char *name, auto&&... actions);
     void load_shortcuts();
     void open_file(QString filename);
+    void start_or_resume();
+    void pause();
+    void stop();
     void set_duration_label(int ms, int max);
     void edit_settings();
     void edit_shortcuts();
-    void set_enabled(bool val);
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);
@@ -67,7 +75,7 @@ public:
 class ShortcutsWindow : public QDialog {
     Q_OBJECT
 public:
-    explicit ShortcutsWindow(const std::unordered_map<QString, QShortcut *> &shortcuts);
+    explicit ShortcutsWindow(const std::map<QString, Shortcut> &shortcuts);
 };
 
 // a button that when clicked records a key sequence.
