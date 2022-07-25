@@ -241,14 +241,24 @@ void Player::prev()
         load_track_without_mutex(prev.value());
 }
 
+int Player::tell()
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    return gme_tell(emu);
+}
+
 void Player::seek(int ms)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
+    int len = effective_length();
+    if (ms < 0)
+        ms = 0;
+    if (ms > len)
+        ms = len;
     gme_seek(emu, ms);
     // fade disappears on seek for some reason
-    if (options.fade_out_ms != 0) {
+    if (options.fade_out_ms != 0)
         gme_set_fade(emu, track.length - options.fade_out_ms);
-    }
 }
 
 int Player::length() const

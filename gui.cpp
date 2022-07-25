@@ -132,8 +132,9 @@ MainWindow::MainWindow(QWidget *parent)
         pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
-        if (!was_paused)
+        if (!was_paused) {
             start_or_resume();
+        }
     });
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this](int ms) {
         player->seek(ms);
@@ -163,7 +164,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     prev_track = make_btn(QStyle::SP_MediaSkipBackward, [=, this]() { player->prev(); });
     next_track = make_btn(QStyle::SP_MediaSkipForward,  [=, this]() { player->next(); });
-    stop_btn       = make_btn(QStyle::SP_MediaStop,         &MainWindow::stop);
+    stop_btn   = make_btn(QStyle::SP_MediaStop,         &MainWindow::stop);
 
     volume = new QSlider(Qt::Horizontal);
     volume->setEnabled(false);
@@ -300,18 +301,18 @@ void MainWindow::load_shortcuts()
     };
 
     add_shortcut("play", "Play/Pause", "Ctrl+Space", [=, this]() {
-        if (player->is_paused())
+        if (player->is_paused()) {
             start_or_resume();
-        else
+        } else
             pause();
     });
     add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();    });
     add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();    });
     add_shortcut("stop",  "Stop",           "Ctrl+S",       &MainWindow::stop);
-    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { fmt::print("seek forward\n"); });
-    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { fmt::print("seek backwards\n"); });
-    add_shortcut("volup", "Volume up",      "0",            [=, this] { fmt::print("volume up\n");    });
-    add_shortcut("voldw", "Volume down",    "9",            [=, this] { fmt::print("volume down\n");  });
+    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { player->seek(player->tell() + 1_sec); });
+    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { player->seek(player->tell() - 1_sec); });
+    add_shortcut("volup", "Volume up",      "0",            [=, this] { volume->setValue(volume->value() + 2); });
+    add_shortcut("voldw", "Volume down",    "9",            [=, this] { volume->setValue(volume->value() - 2); });
     settings.endGroup();
 }
 
@@ -384,8 +385,10 @@ void MainWindow::pause()
 void MainWindow::stop()
 {
     if (player->loaded()) {
-        pause();
+        // load track also calls on_track_changed() callback, which causes a
+        // call to start_or_resume, so put pause after load.
         player->load_track(0);
+        pause();
         duration_slider->setValue(0);
     }
 }

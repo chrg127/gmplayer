@@ -96,6 +96,7 @@ public:
     void next();
     void prev();
     void seek(int ms);
+    int tell();
     int length() const;
     int effective_length() const;
     int get_index(int trackno) const;
