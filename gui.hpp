@@ -17,6 +17,7 @@ class QCheckBox;
 class QSpinBox;
 class QGroupBox;
 class QShortcut;
+class QComboBox;
 
 class PlayButton : public QToolButton {
     Q_OBJECT
@@ -45,6 +46,7 @@ class MainWindow : public QMainWindow {
     QString last_dir = ".";
     PlayButton *play_btn;
     QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
+    QComboBox *tempo;
     QListWidget *playlist;
     QCheckBox *autoplay, *repeat, *shuffle;
     std::map<QString, Shortcut> shortcuts;

@@ -166,6 +166,19 @@ MainWindow::MainWindow(QWidget *parent)
     next_track = make_btn(QStyle::SP_MediaSkipForward,  [=, this]() { player->next(); });
     stop_btn   = make_btn(QStyle::SP_MediaStop,         &MainWindow::stop);
 
+    tempo = new QComboBox;
+    tempo->addItem("2x",     2.0);
+    tempo->addItem("Normal", 1.0);
+    tempo->addItem("0.5x",   0.5);
+    tempo->setCurrentIndex(options.tempo == 2.0 ? 2
+                         : options.tempo == 1.0 ? 1
+                         : options.tempo == 0.5 ? 0
+                         : 1);
+    tempo->setEnabled(false);
+    connect(tempo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=, this] (int i) {
+        player->set_tempo(tempo->currentData().toDouble());
+    });
+
     volume = new QSlider(Qt::Horizontal);
     volume->setEnabled(false);
     volume->setRange(0, get_max_volume_value());
@@ -273,6 +286,8 @@ MainWindow::MainWindow(QWidget *parent)
                 play_btn,
                 next_track,
                 stop_btn,
+                new QLabel(tr("Tempo:")),
+                tempo,
                 volume_btn,
                 volume
             ),
@@ -359,6 +374,7 @@ void MainWindow::open_file(QString filename)
     repeat->setEnabled(true);
     shuffle->setEnabled(true);
     volume->setEnabled(true);
+    tempo->setEnabled(true);
     playlist->clear();
     for (auto &track : player->track_names())
         new QListWidgetItem(QString::fromStdString(track), playlist);
@@ -480,22 +496,12 @@ SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
     auto *silence_detection = new QCheckBox(tr("Do silence detection"));
     silence_detection->setChecked(options.silence_detection == 1);
 
-    auto *tempo = new QComboBox;
-    tempo->addItem("2x",     2.0);
-    tempo->addItem("Normal", 1.0);
-    tempo->addItem("0.5x",   0.5);
-    tempo->setCurrentIndex(options.tempo == 2.0 ? 2
-                         : options.tempo == 1.0 ? 1
-                         : options.tempo == 0.5 ? 0
-                         : 1);
-
     auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
                                           | QDialogButtonBox::Cancel);
     connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
         player->set_fade(fade_secs->value());
         player->set_default_duration(default_duration->value());
         player->set_silence_detection(silence_detection->isChecked());
-        player->set_tempo(tempo->currentData().toDouble());
         accept();
     });
 
@@ -506,7 +512,6 @@ SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
         label_pair("Fade seconds:", fade_secs),
         label_pair("Default duration:", default_duration),
         silence_detection,
-        label_pair("Tempo:", tempo),
         button_box
     ));
 }
