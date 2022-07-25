@@ -1,10 +1,12 @@
 #pragma once
 
+#include <unordered_map>
 #include <QObject>
 #include <QWidget>
 #include <QMainWindow>
 #include <QToolButton>
 #include <QDialog>
+#include <QPushButton>
 #include "player.hpp"
 
 class QLabel;
@@ -13,6 +15,7 @@ class QListWidget;
 class QCheckBox;
 class QSpinBox;
 class QGroupBox;
+class QShortcut;
 
 class PlayButton : public QToolButton {
     Q_OBJECT
@@ -37,11 +40,14 @@ class MainWindow : public QMainWindow {
     QToolButton *stop, *prev_track, *next_track, *volume_btn;
     QListWidget *playlist;
     QCheckBox *autoplay, *repeat, *shuffle;
+    std::unordered_map<QString, QShortcut *> shortcuts;
 
     QMenu *create_menu(const char *name, auto&&... actions);
+    void load_shortcuts();
     void open_file(QString filename);
     void set_duration_label(int ms, int max);
     void edit_settings();
+    void edit_shortcuts();
     void set_enabled(bool val);
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);

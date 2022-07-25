@@ -31,6 +31,8 @@
 #include <QMimeData>
 #include <QDebug>
 #include <QMessageBox>
+#include <QShortcut>
+#include <QKeySequence>
 #include <fmt/core.h>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
@@ -71,7 +73,7 @@ PlayerOptions load_player_settings()
     return options;
 }
 
-void set_player_settings(PlayerOptions options)
+void save_player_settings(PlayerOptions options)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("player");
@@ -240,6 +242,8 @@ MainWindow::MainWindow(QWidget *parent)
         play_btn->set_state(PlayButton::State::Pause);
     });
 
+    load_shortcuts();
+
     // and now create the gui
     set_enabled(false);
     center->setLayout(
@@ -277,6 +281,33 @@ MainWindow::MainWindow(QWidget *parent)
             new QWidget
         )
     );
+}
+
+void MainWindow::load_shortcuts()
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("shortcuts");
+
+    auto add_shortcut = [&](const QString &name, const QString &key, auto &&fn) {
+        auto value = settings.value(name, key).toString();
+        auto *shortcut = new QShortcut(QKeySequence(value), this);
+        connect(shortcut, &QShortcut::activated, this, fn);
+        shortcuts[name] = shortcut;
+    };
+
+    add_shortcut("pause", "Ctrl+Space", []() { fmt::print("play/pause\n"); });
+    add_shortcut("next",  "Ctrl+Right", []() { fmt::print("next\n"); });
+    add_shortcut("prev",  "Ctrl+Left" , []() { fmt::print("prev\n"); });
+    settings.endGroup();
+}
+
+void save_shortcuts(const std::unordered_map<QString, QShortcut *> &shortcuts)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("shortcuts");
+    for (auto [name, shortcut] : shortcuts)
+        settings.setValue(name, shortcut->key().toString());
+    settings.endGroup();
 }
 
 QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
@@ -330,7 +361,8 @@ void MainWindow::set_enabled(bool val)
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    set_player_settings(player->get_options());
+    save_player_settings(player->get_options());
+    save_shortcuts(shortcuts);
     event->accept();
 }
 
