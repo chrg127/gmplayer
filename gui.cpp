@@ -112,11 +112,12 @@ MainWindow::MainWindow(QWidget *parent)
                 open_file(filename);
         } },
         std::tuple { "Open playlist", [](){} },
-        std::tuple { "Open recent", [](){} }
+        std::tuple { "Open recent",   [](){} }
     );
 
     create_menu("&Edit",
-        std::tuple { "Settings", &MainWindow::edit_settings }
+        std::tuple { "Settings",  &MainWindow::edit_settings  },
+        std::tuple { "Shortcuts", &MainWindow::edit_shortcuts }
     );
 
     create_menu("&About"
@@ -390,6 +391,15 @@ void MainWindow::edit_settings()
     });
 }
 
+void MainWindow::edit_shortcuts()
+{
+    auto *wnd = new ShortcutsWindow(shortcuts);
+    wnd->open();
+    // connect(wnd, &QDialog::finished, this, [=, this](int result) {
+    //     fmt::print("edited\n");
+    // });
+}
+
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
 {
     if (event->mimeData()->hasFormat("text/plain")) {
@@ -471,4 +481,45 @@ SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
         label_pair("Tempo:", tempo),
         button_box
     ));
+}
+
+ShortcutsWindow::ShortcutsWindow(const std::unordered_map<QString, QShortcut *> &shortcuts)
+{
+    auto *layout = new QFormLayout;
+    for (auto [name, shortcut] : shortcuts) {
+        auto *edit = new RecorderButton(shortcut->key().toString());
+        layout->addRow(new QLabel(name), edit);
+        connect(edit, &RecorderButton::released, this, [=, this] {
+            edit->setText("...");
+        });
+        connect(edit, &RecorderButton::got_key_sequence, this, [=, this](const auto &seq) {
+            edit->setText(seq.toString());
+            shortcut->setKey(seq);
+        });
+    }
+
+    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
+                                          | QDialogButtonBox::Cancel);
+    connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
+        accept();
+    });
+    connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    setLayout(make_layout<QVBoxLayout>(layout, button_box));
+}
+
+RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *parent)
+    : QPushButton(text, parent)
+    , recorder(new KeyRecorder(this, key_count, this))
+{
+    connect(this, &QPushButton::released, this, [=, this] {
+        grabKeyboard();
+        grabMouse();
+        recorder->start();
+    });
+    connect(recorder, &KeyRecorder::got_key_sequence, this, [=, this] (const auto &keys) {
+        releaseMouse();
+        releaseKeyboard();
+        emit got_key_sequence(keys);
+    });
 }

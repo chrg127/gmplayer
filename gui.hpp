@@ -8,6 +8,7 @@
 #include <QDialog>
 #include <QPushButton>
 #include "player.hpp"
+#include "keyrecorder.hpp"
 
 class QLabel;
 class QSlider;
@@ -61,4 +62,21 @@ class SettingsWindow : public QDialog {
     Player *player;
 public:
     explicit SettingsWindow(Player *player, QWidget *parent = nullptr);
+};
+
+class ShortcutsWindow : public QDialog {
+    Q_OBJECT
+public:
+    explicit ShortcutsWindow(const std::unordered_map<QString, QShortcut *> &shortcuts);
+};
+
+// a button that when clicked records a key sequence.
+struct RecorderButton : public QPushButton {
+    Q_OBJECT
+    KeyRecorder *recorder;
+public:
+    RecorderButton(const QString &text, int key_count = 1, QWidget *parent = nullptr);
+signals:
+    void started();
+    void got_key_sequence(const QKeySequence &keySequence);
 };
