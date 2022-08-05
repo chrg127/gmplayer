@@ -47,7 +47,7 @@ KeyRecorder::KeyRecorder(QObject *obj, int kc, QObject *parent)
 {
     assert(event_object && "object is nullptr");
     event_object->installEventFilter(this);
-    qDebug() << "listening for events in" << event_object;
+    // qDebug() << "listening for events in" << event_object;
 }
 
 KeyRecorder::~KeyRecorder() noexcept
