@@ -38,6 +38,23 @@
 #include "qtutils.hpp"
 #include "player.hpp"
 
+
+
+namespace {
+
+std::string format_duration(int ms, int max)
+{
+    int mins = ms / 1000 / 60;
+    int secs = ms / 1000 % 60;
+    int max_mins = max / 1000 / 60;
+    int max_secs = max / 1000 % 60;
+    return fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
+};
+
+} // namespace
+
+
+
 PlayButton::PlayButton(QWidget *parent)
     : QToolButton(parent)
 {
@@ -126,6 +143,7 @@ MainWindow::MainWindow(QWidget *parent)
     // duration slider
     duration_label = new QLabel("00:00 / 00:00");
     duration_slider = new QSlider(Qt::Horizontal);
+    duration_slider->setEnabled(false);
 
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
         was_paused = player->is_paused();
@@ -138,7 +156,8 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this](int ms) {
         player->seek(ms);
-        set_duration_label(ms, duration_slider->maximum());
+        auto str = format_duration(ms, duration_slider->maximum());
+        duration_label->setText(QString::fromStdString(str));
     });
 
     // track information
@@ -233,7 +252,8 @@ MainWindow::MainWindow(QWidget *parent)
     // player stuff
     player->on_position_changed([=, this](int ms) {
         duration_slider->setValue(ms);
-        set_duration_label(ms, duration_slider->maximum());
+        auto str = format_duration(ms, duration_slider->maximum());
+        duration_label->setText(QString::fromStdString(str));
     });
 
     player->on_track_changed([=, this](int num, gme_info_t *info, int length) {
@@ -415,16 +435,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
     save_shortcuts(shortcuts);
     event->accept();
 }
-
-void MainWindow::set_duration_label(int ms, int max)
-{
-    int mins = ms / 1000 / 60;
-    int secs = ms / 1000 % 60;
-    int max_mins = max / 1000 / 60;
-    int max_secs = max / 1000 % 60;
-    auto str = fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
-    duration_label->setText(QString::fromStdString(str));
-};
 
 void MainWindow::edit_settings()
 {

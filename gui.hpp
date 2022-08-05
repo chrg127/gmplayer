@@ -57,7 +57,6 @@ class MainWindow : public QMainWindow {
     void start_or_resume();
     void pause();
     void stop();
-    void set_duration_label(int ms, int max);
     void edit_settings();
     void edit_shortcuts();
     void closeEvent(QCloseEvent *event);
