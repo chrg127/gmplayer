@@ -51,27 +51,6 @@ std::string format_duration(int ms, int max)
     return fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
 };
 
-} // namespace
-
-
-
-PlayButton::PlayButton(QWidget *parent)
-    : QToolButton(parent)
-{
-    setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-    connect(this, &QToolButton::clicked, this, [&]() {
-        set_state(state == State::Play ? State::Pause : State::Play);
-        emit state == State::Pause ? pause() : play();
-    });
-}
-
-void PlayButton::set_state(State state)
-{
-    this->state = state;
-    setIcon(style()->standardIcon(state == State::Pause ? QStyle::SP_MediaPlay
-                                                        : QStyle::SP_MediaPause));
-}
-
 PlayerOptions load_player_settings()
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
@@ -104,6 +83,29 @@ void save_player_settings(PlayerOptions options)
     settings.setValue("volume",            options.volume);
     settings.endGroup();
 }
+
+} // namespace
+
+
+
+PlayButton::PlayButton(QWidget *parent)
+    : QToolButton(parent)
+{
+    setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    connect(this, &QToolButton::clicked, this, [&]() {
+        set_state(state == State::Play ? State::Pause : State::Play);
+        emit state == State::Pause ? pause() : play();
+    });
+}
+
+void PlayButton::set_state(State state)
+{
+    this->state = state;
+    setIcon(style()->standardIcon(state == State::Pause ? QStyle::SP_MediaPlay
+                                                        : QStyle::SP_MediaPause));
+}
+
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -341,11 +343,11 @@ void MainWindow::load_shortcuts()
         } else
             pause();
     });
-    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();    });
-    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();    });
+    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { if (player->loaded()) player->next();    });
+    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { if (player->loaded()) player->prev();    });
     add_shortcut("stop",  "Stop",           "Ctrl+S",       &MainWindow::stop);
-    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { player->seek(player->tell() + 1_sec); });
-    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { player->seek(player->tell() - 1_sec); });
+    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { if (player->loaded()) player->seek(player->tell() + 1_sec); });
+    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { if (player->loaded()) player->seek(player->tell() - 1_sec); });
     add_shortcut("volup", "Volume up",      "0",            [=, this] { volume->setValue(volume->value() + 2); });
     add_shortcut("voldw", "Volume down",    "9",            [=, this] { volume->setValue(volume->value() - 2); });
     settings.endGroup();
