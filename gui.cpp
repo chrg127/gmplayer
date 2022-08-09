@@ -107,6 +107,59 @@ void PlayButton::set_state(State state)
 
 
 
+Playlist::Playlist(const char *name, QWidget *parent)
+{
+    playlist = new QListWidget;
+    autoplay = new QCheckBox(tr("Autoplay"));
+    repeat   = new QCheckBox(tr("Repeat"));
+    shuffle  = new QCheckBox(tr("Shuffle"));
+    connect(autoplay, &QCheckBox::stateChanged, this, [=, this](int state) { emit autoplay_clicked(state); });
+    connect(repeat,   &QCheckBox::stateChanged, this, [=, this](int state) { emit repeat_clicked(state); });
+    connect(shuffle,  &QCheckBox::stateChanged, this, [=, this](int state) { emit shuffle_clicked(state); });
+    connect(playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *item) {
+        int index = playlist->currentRow();
+        emit item_activated(index);
+    });
+    setLayout(
+        make_layout<QVBoxLayout>(
+            new QLabel(tr(name)),
+            playlist,
+            make_groupbox<QVBoxLayout>("Playlist settings",
+                autoplay,
+                repeat,
+                shuffle
+            )
+        )
+    );
+}
+
+void Playlist::set_enabled(bool enabled)
+{
+    autoplay->setEnabled(enabled);
+    repeat->setEnabled(enabled);
+    shuffle->setEnabled(enabled);
+}
+
+void Playlist::set_checked(bool autoplay, bool repeat, bool shuffle)
+{
+    this->autoplay->setChecked(autoplay);
+    this->repeat->setChecked(repeat);
+    this->shuffle->setChecked(shuffle);
+}
+
+void Playlist::set_current(int index)   { playlist->setCurrentRow(index); }
+// void Playlist::add(const QString &name) { new QListWidgetItem(name, playlist); }
+// void Playlist::clear()                  { playlist->clear(); }
+
+void Playlist::update(std::span<std::string> names, int start_track)
+{
+    playlist->clear();
+    for (auto &name : names)
+        new QListWidgetItem(QString::fromStdString(name), playlist);
+    playlist->setCurrentRow(start_track);
+}
+
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -225,31 +278,33 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     // track playlist
-    playlist = new QListWidget;
-    connect(playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *item) {
-        int index = playlist->currentRow();
+    playlist = new Playlist("Track playlist");
+    playlist->set_enabled(false);
+    playlist->set_checked(
+        options.autoplay_next,
+        options.repeat,
+        options.shuffle
+    );
+    connect(playlist, &Playlist::item_activated,   this, [&](int index) {
         player->load_track(index);
         start_or_resume();
     });
-
-    // track playlist settings
-    autoplay = new QCheckBox(tr("Autoplay next track"));
-    repeat   = new QCheckBox(tr("Repeat"));
-    shuffle  = new QCheckBox(tr("Shuffle"));
-    autoplay->setChecked(options.autoplay_next);
-    autoplay->setEnabled(false);
-    repeat->setChecked(options.repeat);
-    repeat->setEnabled(false);
-    shuffle->setChecked(options.shuffle);
-    shuffle->setEnabled(false);
-
-    connect(autoplay, &QCheckBox::stateChanged, this, [=, this](int state) { player->set_autoplay(state); });
-    connect(repeat,   &QCheckBox::stateChanged, this, [=, this](int state) {
+    connect(playlist, &Playlist::autoplay_clicked, this, [&](bool state) { player->set_autoplay(state); });
+    connect(playlist, &Playlist::shuffle_clicked,  this, [&](bool state) { player->set_shuffle(state); });
+    connect(playlist, &Playlist::repeat_clicked,   this, [&](bool state) {
         player->set_repeat(state);
         next_track->setEnabled(bool(player->get_next()));
         prev_track->setEnabled(bool(player->get_prev()));
     });
-    connect(shuffle,  &QCheckBox::stateChanged, this, [=, this](int state) { player->set_shuffle(state);  });
+
+    // file playlist
+    file_playlist = new Playlist("File playlist");
+    file_playlist->set_enabled(false);
+    file_playlist->set_checked(false, false, false);
+    connect(file_playlist, &Playlist::item_activated,   this, [&](int  index) { });
+    connect(file_playlist, &Playlist::autoplay_clicked, this, [&](bool state) { });
+    connect(file_playlist, &Playlist::shuffle_clicked,  this, [&](bool state) { });
+    connect(file_playlist, &Playlist::repeat_clicked,   this, [&](bool state) { });
 
     // player stuff
     player->on_position_changed([=, this](int ms) {
@@ -267,7 +322,7 @@ MainWindow::MainWindow(QWidget *parent)
         duration_slider->setRange(0, player->effective_length());
         next_track->setEnabled(bool(player->get_next()));
         prev_track->setEnabled(bool(player->get_prev()));
-        playlist->setCurrentRow(num);
+        playlist->set_current(num);
         start_or_resume();
     });
 
@@ -289,15 +344,8 @@ MainWindow::MainWindow(QWidget *parent)
                     std::tuple { new QLabel(tr("Author:")),  author     },
                     std::tuple { new QLabel(tr("Comment:")), comment    }
                 ),
-                make_layout<QVBoxLayout>(
-                    new QLabel(tr("Track playlist:")),
-                    playlist,
-                    make_groupbox<QVBoxLayout>("Playlist settings",
-                        autoplay,
-                        repeat,
-                        shuffle
-                    )
-                )
+                playlist,
+                file_playlist
             ),
             make_layout<QHBoxLayout>(
                 duration_slider,
@@ -376,7 +424,6 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file(QString filename)
 {
-    // filename = QString("test_files/rudra.spc");
     auto err = player->use_file(filename.toUtf8().constData());
     if (err) {
         msgbox(QString("The file %1 couldn't be opened. Error: %2")
@@ -392,15 +439,12 @@ void MainWindow::open_file(QString filename)
     next_track->setEnabled(bool(player->get_next()));
     volume_btn->setEnabled(true);
     play_btn->setEnabled(true);
-    autoplay->setEnabled(true);
-    repeat->setEnabled(true);
-    shuffle->setEnabled(true);
     volume->setEnabled(true);
     tempo->setEnabled(true);
-    playlist->clear();
-    for (auto &track : player->track_names())
-        new QListWidgetItem(QString::fromStdString(track), playlist);
-    playlist->setCurrentRow(player->get_index(0));
+    playlist->set_enabled(true);
+    auto names = player->track_names();
+    playlist->update(names, player->get_index(0));
+    file_playlist->set_enabled(true);
     last_dir = filename;
 }
 

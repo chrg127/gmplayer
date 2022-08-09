@@ -1,6 +1,8 @@
 #pragma once
 
 #include <map>
+#include <span>
+#include <string>
 #include <QObject>
 #include <QWidget>
 #include <QMainWindow>
@@ -36,6 +38,25 @@ struct Shortcut {
     QString display_name;
 };
 
+class Playlist : public QWidget {
+    Q_OBJECT
+    QListWidget *playlist;
+    QCheckBox *autoplay, *repeat, *shuffle;
+public:
+    Playlist(const char *name, QWidget *parent = nullptr);
+    void update(std::span<std::string> names, int start_track);
+    void set_enabled(bool enabled);
+    void set_checked(bool autoplay, bool repeat, bool shuffle);
+    void set_current(int index);
+    // void add(const QString &name);
+    // void clear();
+signals:
+    void item_activated(int index);
+    void autoplay_clicked(bool state);
+    void repeat_clicked(bool state);
+    void shuffle_clicked(bool state);
+};
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -47,8 +68,8 @@ class MainWindow : public QMainWindow {
     PlayButton *play_btn;
     QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
     QComboBox *tempo;
-    QListWidget *playlist;
-    QCheckBox *autoplay, *repeat, *shuffle;
+    Playlist *playlist;
+    Playlist *file_playlist;
     std::map<QString, Shortcut> shortcuts;
 
     QMenu *create_menu(const char *name, auto&&... actions);
