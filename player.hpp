@@ -29,7 +29,6 @@ struct SDLMutex {
 };
 
 struct PlayerOptions {
-    // int fade_in_secs        = 0;
     int fade_out_ms         = 0;
 
     bool autoplay_next      = false;
@@ -38,7 +37,6 @@ struct PlayerOptions {
 
     int default_duration    = 3_min;
     int silence_detection   = 0;
-    // int loops_limit         = 0;
     double tempo            = 1.0;
 
     int volume              = SDL_MIX_MAXVOLUME;
@@ -85,21 +83,22 @@ public:
     Player(const Player &) = delete;
     Player & operator=(const Player &) = delete;
 
-    gme_err_t use_file(std::string_view filename);
+    gme_err_t load_file(std::string_view filename);
     void load_track(int num);
-    bool loaded() const;
-    bool is_paused() const;
+    bool can_play() const;
+    bool is_playing() const;
+
     void start_or_resume();
     void pause();
     std::optional<int> get_next() const;
     std::optional<int> get_prev() const;
     void next();
     void prev();
+    int position();
     void seek(int ms);
-    int tell();
     int length() const;
     int effective_length() const;
-    int get_index(int trackno) const;
+    int get_track_order_pos(int trackno) const;
     std::vector<std::string> track_names() const;
 
     PlayerOptions & get_options();

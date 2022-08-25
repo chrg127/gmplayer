@@ -201,7 +201,7 @@ MainWindow::MainWindow(QWidget *parent)
     duration_slider->setEnabled(false);
 
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
-        was_paused = player->is_paused();
+        was_paused = !player->is_playing();
         pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
@@ -332,7 +332,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     load_shortcuts();
 
-
     // and now create the gui
     center->setLayout(
         make_layout<QVBoxLayout>(
@@ -386,16 +385,13 @@ void MainWindow::load_shortcuts()
     };
 
     add_shortcut("play", "Play/Pause", "Ctrl+Space", [=, this]() {
-        if (player->is_paused()) {
-            start_or_resume();
-        } else
-            pause();
+        player->is_playing() ? pause() : start_or_resume();
     });
-    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { if (player->loaded()) player->next();    });
-    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { if (player->loaded()) player->prev();    });
+    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { if (player->can_play()) player->next();    });
+    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { if (player->can_play()) player->prev();    });
     add_shortcut("stop",  "Stop",           "Ctrl+S",       &MainWindow::stop);
-    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { if (player->loaded()) player->seek(player->tell() + 1_sec); });
-    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { if (player->loaded()) player->seek(player->tell() - 1_sec); });
+    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { if (player->can_play()) player->seek(player->position() + 1_sec); });
+    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { if (player->can_play()) player->seek(player->position() - 1_sec); });
     add_shortcut("volup", "Volume up",      "0",            [=, this] { volume->setValue(volume->value() + 2); });
     add_shortcut("voldw", "Volume down",    "9",            [=, this] { volume->setValue(volume->value() - 2); });
     settings.endGroup();
@@ -424,7 +420,7 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file(QString filename)
 {
-    auto err = player->use_file(filename.toUtf8().constData());
+    auto err = player->load_file(filename.toUtf8().constData());
     if (err) {
         msgbox(QString("The file %1 couldn't be opened. Error: %2")
                        .arg(filename)
@@ -443,14 +439,14 @@ void MainWindow::open_file(QString filename)
     tempo->setEnabled(true);
     playlist->set_enabled(true);
     auto names = player->track_names();
-    playlist->update(names, player->get_index(0));
+    playlist->update(names, player->get_track_order_pos(0));
     file_playlist->set_enabled(true);
     last_dir = filename;
 }
 
 void MainWindow::start_or_resume()
 {
-    if (player->loaded()) {
+    if (player->can_play()) {
         player->start_or_resume();
         play_btn->set_state(PlayButton::State::Play);
     }
@@ -458,7 +454,7 @@ void MainWindow::start_or_resume()
 
 void MainWindow::pause()
 {
-    if (player->loaded()) {
+    if (player->can_play()) {
         player->pause();
         play_btn->set_state(PlayButton::State::Pause);
     }
@@ -466,7 +462,7 @@ void MainWindow::pause()
 
 void MainWindow::stop()
 {
-    if (player->loaded()) {
+    if (player->can_play()) {
         // load track also calls on_track_changed() callback, which causes a
         // call to start_or_resume, so put pause after load.
         player->load_track(0);
@@ -487,7 +483,7 @@ void MainWindow::edit_settings()
     auto *wnd = new SettingsWindow(player, this);
     wnd->open();
     connect(wnd, &QDialog::finished, this, [=, this](int result) {
-        if (result == QDialog::Accepted && player->loaded()) {
+        if (result == QDialog::Accepted && player->can_play()) {
             duration_slider->setRange(0, player->effective_length());
             player->seek(0);
         }
