@@ -99,7 +99,7 @@ public:
     int length() const;
     int effective_length() const;
     int get_track_order_pos(int trackno) const;
-    std::vector<std::string> track_names() const;
+    void track_names(std::function<void(const std::string &)> f) const;
 
     PlayerOptions & get_options();
     void set_fade(int secs);

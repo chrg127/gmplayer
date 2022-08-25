@@ -44,12 +44,11 @@ class Playlist : public QWidget {
     QCheckBox *autoplay, *repeat, *shuffle;
 public:
     Playlist(const char *name, QWidget *parent = nullptr);
-    void update(std::span<std::string> names, int start_track);
     void set_enabled(bool enabled);
     void set_checked(bool autoplay, bool repeat, bool shuffle);
     void set_current(int index);
-    // void add(const QString &name);
-    // void clear();
+    void add(const QString &name);
+    void clear();
 signals:
     void item_activated(int index);
     void autoplay_clicked(bool state);

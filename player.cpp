@@ -7,6 +7,7 @@
 #include <utility>
 #include <functional>
 #include <algorithm>
+#include <filesystem>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 #include <fmt/core.h>
@@ -17,6 +18,8 @@
 using u8  = uint8_t;
 using u32 = uint32_t;
 
+namespace fs = std::filesystem;
+
 const int FREQUENCY = 44100;
 const int SAMPLES   = 2048;
 const int CHANNELS  = 2;
@@ -26,7 +29,7 @@ const int CHANNELS  = 2;
 namespace {
     void dump_info(gme_info_t *info)
     {
-        fmt::print(
+        fmt::print(stderr,
             "length = {}\n"
             "intro length = {}\n"
             "loop length = {}\n"
@@ -166,6 +169,14 @@ gme_err_t Player::load_file(std::string_view filename)
     auto err = gme_open_file(filename.data(), &emu, 44100);
     if (err)
         return err;
+    // when loading a file, try to see if there's a m3u file too
+    // m3u files must have the same name as the file, but with extension m3u
+    // if there are any errors, ignore them (m3u loading is not important)
+    auto path = fs::path(filename);
+    path = path.replace_extension("m3u");
+    err = gme_load_m3u(emu, path.c_str());
+    if (err)
+        fmt::print(stderr, "warning: m3u: {}\n", err);
     track_count = gme_track_count(emu);
     cur_track = 0;
     order.resize(track_count);
@@ -284,16 +295,14 @@ int Player::get_track_order_pos(int trackno) const
     return order[trackno];
 }
 
-std::vector<std::string> Player::track_names() const
+void Player::track_names(std::function<void(const std::string &)> f) const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    std::vector<std::string> names;
     for (int i = 0; i < track_count; i++) {
         gme_info_t *info;
         gme_track_info(emu, &info, i);
-        names.push_back(info->song[0] == '\0' ? fmt::format("Track {}", i) : info->song);
+        f(info->song[0] == '\0' ? fmt::format("Track {}", i) : info->song);
     }
-    return names;
 }
 
 

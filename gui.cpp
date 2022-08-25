@@ -148,17 +148,8 @@ void Playlist::set_checked(bool autoplay, bool repeat, bool shuffle)
 }
 
 void Playlist::set_current(int index)   { playlist->setCurrentRow(index); }
-// void Playlist::add(const QString &name) { new QListWidgetItem(name, playlist); }
-// void Playlist::clear()                  { playlist->clear(); }
-
-void Playlist::update(std::span<std::string> names, int start_track)
-{
-    playlist->clear();
-    for (auto &name : names)
-        new QListWidgetItem(QString::fromStdString(name), playlist);
-    playlist->setCurrentRow(start_track);
-}
-
+void Playlist::add(const QString &name) { new QListWidgetItem(name, playlist); }
+void Playlist::clear()                  { playlist->clear(); }
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -438,8 +429,11 @@ void MainWindow::open_file(QString filename)
     volume->setEnabled(true);
     tempo->setEnabled(true);
     playlist->set_enabled(true);
-    auto names = player->track_names();
-    playlist->update(names, player->get_track_order_pos(0));
+    playlist->clear();
+    player->track_names([&](const std::string &name) {
+        playlist->add(QString::fromStdString(name));
+    });
+    playlist->set_current(player->get_track_order_pos(0));
     file_playlist->set_enabled(true);
     last_dir = filename;
 }
