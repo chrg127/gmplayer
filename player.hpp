@@ -5,6 +5,8 @@
 #include <string_view>
 #include <vector>
 #include <optional>
+#include <functional>
+#include <filesystem>
 #include <SDL_audio.h> // SDL_AudioDeviceID
 
 class Music_Emu;
@@ -84,6 +86,7 @@ public:
     Player & operator=(const Player &) = delete;
 
     gme_err_t load_file(std::string_view filename);
+    void load_playlist(std::filesystem::path path);
     void load_track(int num);
     bool can_play() const;
     bool is_playing() const;

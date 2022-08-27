@@ -174,7 +174,18 @@ MainWindow::MainWindow(QWidget *parent)
             if (!filename.isEmpty())
                 open_file(filename);
         } },
-        std::tuple { "Open playlist", [](){} },
+        std::tuple { "Open playlist", [=, this](){
+            player->load_playlist("test_files/a.playlist");
+            // auto filename = QFileDialog::getOpenFileName(
+            //     this,
+            //     tr("Open playlist file"),
+            //     last_dir,
+            //     "Playlist files (*.playlist)"
+            // );
+            // if (!filename.isEmpty()) {
+            //     player->load_playlist(filename.toUtf8().constData());
+            // }
+        } },
         std::tuple { "Open recent",   [](){} }
     );
 
@@ -413,7 +424,7 @@ void MainWindow::open_file(QString filename)
 {
     auto err = player->load_file(filename.toUtf8().constData());
     if (err) {
-        msgbox(QString("The file %1 couldn't be opened. Error: %2")
+        msgbox(QString("Couldn't open file %1. Error: %2")
                        .arg(filename)
                        .arg(err));
         return;

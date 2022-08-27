@@ -1,3 +1,5 @@
+#include "player.hpp"
+
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -12,8 +14,8 @@
 #include <SDL2/SDL_mixer.h>
 #include <fmt/core.h>
 #include <gme/gme.h>
-#include "player.hpp"
 #include "random.hpp"
+#include "io.hpp"
 
 using u8  = uint8_t;
 using u32 = uint32_t;
@@ -81,6 +83,20 @@ namespace {
         Player & get()              { return *players[cur]; }
         void change_cur_to(int id)  { cur = id; }
     } object_handler;
+
+
+    /*
+     * playlist cache. this keeps around the data inside opened files, this way we can
+     * play a file playlist's entry much quicker.
+     */
+    struct {
+        std::vector<std::unique_ptr<char[]>> data;
+
+              void *operator[](int i)       { return data[i].get(); }
+        const void *operator[](int i) const { return data[i].get(); }
+        void add(std::unique_ptr<char[]> p) { data.push_back(std::move(p)); }
+        void clear()                        { data.clear(); }
+    } cache;
 }
 
 // this must be in the global scope for the friend declaration inside Player to work.
@@ -182,6 +198,34 @@ gme_err_t Player::load_file(std::string_view filename)
     order.resize(track_count);
     generate_order(order, options.shuffle);
     return nullptr;
+}
+
+std::optional<std::unique_ptr<char[]>> try_open_file(fs::path playlist_filename, std::string_view filename)
+{
+    for (auto p : { fs::path(filename),
+                    playlist_filename.parent_path().append(filename) }) {
+        auto contents = io::read_binary_file(p.c_str());
+        if (contents)
+            return contents;
+    }
+    return std::nullopt;
+}
+
+void Player::load_playlist(fs::path filename)
+{
+    auto file = io::File::open(filename.c_str(), io::Access::Read);
+    if (!file) {
+        fmt::print(stderr, "can't open file {}\n", filename.c_str());
+        return;
+    }
+    for (std::string line; file.value().get_line(line); ) {
+        auto contents = try_open_file(filename, line);
+        if (!contents) {
+            fmt::print(stderr, "can't open file {}\n", line);
+            continue;
+        }
+        cache.add(std::move(contents.value()));
+    }
 }
 
 void Player::load_track(int index)
