@@ -48,7 +48,6 @@ class Player {
     SDL_AudioDeviceID dev_id = 0;
     mutable SDLMutex audio_mutex;
     SDL_AudioSpec obtained;
-    bool paused = true;
 
     // current track information:
     struct {
@@ -56,13 +55,17 @@ class Player {
         int length = 0;
     } track;
 
-    // playlist related stuff
-    std::vector<io::MappedFile> cache;
-    int cur_file  = -1;
-    int cur_track = -1;
-    int track_count = 0;
-    std::vector<int> file_order;
-    std::vector<int> track_order;
+    struct {
+        std::vector<io::MappedFile> cache;
+        std::vector<int> order;
+        int current;
+    } files;
+
+    struct {
+        std::vector<int> order;
+        int current;
+        int count;
+    } tracks;
 
     // callbacks
     std::function<void(int, gme_info_t *, int)> track_changed;

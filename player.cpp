@@ -107,7 +107,6 @@ void Player::audio_callback(void *, u8 *stream, int len)
      || gme_track_ended(emu)
      || gme_tell(emu) > track.length + 1_sec/2) {
         SDL_PauseAudioDevice(dev_id, 1);
-        paused = true;
         track_ended();
         if (options.autoplay_next) {
             auto next = get_next();
@@ -128,8 +127,8 @@ void Player::audio_callback(void *, u8 *stream, int len)
 
 void Player::load_track_without_mutex(int index)
 {
-    cur_track = index;
-    int num = track_order[index];
+    tracks.current = index;
+    int num = tracks.order[index];
     gme_track_info(emu, &track.metadata, num);
     track.length = get_track_length(track.metadata, options.default_duration);
     gme_start_track(emu, num);
@@ -175,7 +174,7 @@ Player::~Player()
 void Player::load_playlist(fs::path filename)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    cache.clear();
+    files.cache.clear();
     auto file = io::File::open(filename, io::Access::Read);
     if (!file) {
         fmt::print(stderr, "can't open file {}\n", filename.c_str());
@@ -183,7 +182,7 @@ void Player::load_playlist(fs::path filename)
     }
     for (std::string line; file.value().get_line(line); ) {
         if (auto contents = try_open_file(filename, line); contents)
-            cache.push_back(std::move(contents.value()));
+            files.cache.push_back(std::move(contents.value()));
         else
             fmt::print(stderr, "can't open file {}\n", line);
     }
@@ -193,7 +192,7 @@ bool Player::add_file(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     if (auto file = io::MappedFile::open(path); file) {
-        cache.push_back(std::move(file.value()));
+        files.cache.push_back(std::move(file.value()));
         return true;
     }
     return false;
@@ -202,13 +201,14 @@ bool Player::add_file(fs::path path)
 gme_err_t Player::load_file(int fileno)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    auto err = gme_open_data(cache[fileno].data(), cache[fileno].size(), &emu, 44100);
+    auto &file = files.cache[fileno];
+    auto err = gme_open_data(file.data(), file.size(), &emu, 44100);
     if (err)
         return err;
     // when loading a file, try to see if there's a m3u file too
     // m3u files must have the same name as the file, but with extension m3u
     // if there are any errors, ignore them (m3u loading is not important)
-    auto m3u_path = fs::path(cache[fileno].filename()).replace_extension("m3u");
+    auto m3u_path = file.file_path().replace_extension("m3u");
 #ifdef DEBUG
     err = gme_load_m3u(emu, m3u_path.c_str());
     if (err)
@@ -216,10 +216,10 @@ gme_err_t Player::load_file(int fileno)
 #else
     gme_load_m3u(emu, m3u_path.c_str());
 #endif
-    track_count = gme_track_count(emu);
-    cur_track = 0;
-    track_order.resize(track_count);
-    generate_order(track_order, options.shuffle);
+    tracks.count = gme_track_count(emu);
+    tracks.current = 0;
+    tracks.order.resize(tracks.count);
+    generate_order(tracks.order, options.shuffle);
     return nullptr;
 }
 
@@ -232,13 +232,14 @@ void Player::load_track(int index)
 bool Player::can_play() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return cur_track != -1;
+    return tracks.current != -1;
 }
 
 bool Player::is_playing() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return !paused;
+    auto status = SDL_GetAudioDeviceStatus(dev_id);
+    return status == SDL_AUDIO_PLAYING;
 }
 
 
@@ -247,33 +248,31 @@ void Player::start_or_resume()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     SDL_PauseAudioDevice(dev_id, 0);
-    paused = false;
 }
 
 void Player::pause()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     SDL_PauseAudioDevice(dev_id, 1);
-    paused = true;
 }
 
 std::optional<int> Player::get_next() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (cur_track + 1 < track_count)
-        return cur_track + 1;
+    if (tracks.current + 1 < tracks.count)
+        return tracks.current + 1;
     if (options.repeat)
-        return cur_track;
+        return tracks.current;
     return std::nullopt;
 }
 
 std::optional<int> Player::get_prev() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (cur_track - 1 >= 0)
-        return cur_track - 1;
+    if (tracks.current - 1 >= 0)
+        return tracks.current - 1;
     if (options.repeat)
-        return cur_track;
+        return tracks.current;
     return std::nullopt;
 }
 
@@ -331,13 +330,13 @@ int Player::effective_length() const
 int Player::get_track_order_pos(int trackno) const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return track_order[trackno];
+    return tracks.order[trackno];
 }
 
 void Player::track_names(std::function<void(const std::string &)> f) const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    for (int i = 0; i < track_count; i++) {
+    for (int i = 0; i < tracks.count; i++) {
         gme_info_t *info;
         gme_track_info(emu, &info, i);
         f(info->song[0] == '\0' ? fmt::format("Track {}", i) : info->song);
@@ -357,7 +356,7 @@ void Player::set_fade(int secs)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     int ms = secs * 1000;
     options.fade_out_ms = ms;
-    if (cur_track != -1 && options.fade_out_ms != 0)
+    if (tracks.current != -1 && options.fade_out_ms != 0)
         gme_set_fade(emu, track.length - options.fade_out_ms);
 }
 
@@ -365,7 +364,7 @@ void Player::set_tempo(double tempo)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.tempo = tempo;
-    if (cur_track != -1)
+    if (tracks.current != -1)
         gme_set_tempo(emu, tempo);
 }
 
@@ -373,7 +372,7 @@ void Player::set_silence_detection(bool ignore)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.silence_detection = ignore ? 0 : 1;
-    if (cur_track != -1)
+    if (tracks.current != -1)
         gme_ignore_silence(emu, options.silence_detection);
 }
 
@@ -399,7 +398,7 @@ void Player::set_shuffle(bool shuffle)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.shuffle = shuffle;
-    generate_order(track_order, options.shuffle);
+    generate_order(tracks.order, options.shuffle);
 }
 
 void Player::set_volume(int value)
