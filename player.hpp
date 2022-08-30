@@ -11,16 +11,12 @@
 
 class Music_Emu;
 class gme_info_t;
+namespace io { class MappedFile; }
 
-typedef const char* gme_err_t;
+using gme_err_t = const char *;
 
 inline constexpr std::size_t operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
 inline constexpr std::size_t operator"" _min(unsigned long long mins) { return mins * 60_sec; }
-
-struct TrackInfo {
-    gme_info_t *metadata;
-    int length;
-};
 
 struct SDLMutex {
     SDL_AudioDeviceID id;
@@ -55,15 +51,18 @@ class Player {
     bool paused = true;
 
     // current track information:
-    TrackInfo track = {
-        .metadata = nullptr,
-        .length = 0
-    };
+    struct {
+        gme_info_t *metadata = nullptr;
+        int length = 0;
+    } track;
 
     // playlist related stuff
+    std::vector<io::MappedFile> cache;
+    int cur_file  = -1;
     int cur_track = -1;
     int track_count = 0;
-    std::vector<int> order;
+    std::vector<int> file_order;
+    std::vector<int> track_order;
 
     // callbacks
     std::function<void(int, gme_info_t *, int)> track_changed;
@@ -85,8 +84,9 @@ public:
     Player(const Player &) = delete;
     Player & operator=(const Player &) = delete;
 
-    gme_err_t load_file(std::string_view filename);
     void load_playlist(std::filesystem::path path);
+    bool add_file(std::filesystem::path path);
+    gme_err_t load_file(int fileno);
     void load_track(int num);
     bool can_play() const;
     bool is_playing() const;

@@ -422,7 +422,11 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
 
 void MainWindow::open_file(QString filename)
 {
-    auto err = player->load_file(filename.toUtf8().constData());
+    if (!player->add_file(filename.toStdString())) {
+        msgbox(QString("Couldn't open file %1. Error: %2").arg(filename));
+        return;
+    }
+    auto err = player->load_file(0);
     if (err) {
         msgbox(QString("Couldn't open file %1. Error: %2")
                        .arg(filename)

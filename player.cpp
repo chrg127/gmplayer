@@ -17,9 +17,6 @@
 #include "random.hpp"
 #include "io.hpp"
 
-using u8  = uint8_t;
-using u32 = uint32_t;
-
 namespace fs = std::filesystem;
 
 const int FREQUENCY = 44100;
@@ -84,19 +81,13 @@ namespace {
         void change_cur_to(int id)  { cur = id; }
     } object_handler;
 
-
-    /*
-     * playlist cache. this keeps around the data inside opened files, this way we can
-     * play a file playlist's entry much quicker.
-     */
-    struct {
-        std::vector<std::unique_ptr<char[]>> data;
-
-              void *operator[](int i)       { return data[i].get(); }
-        const void *operator[](int i) const { return data[i].get(); }
-        void add(std::unique_ptr<char[]> p) { data.push_back(std::move(p)); }
-        void clear()                        { data.clear(); }
-    } cache;
+    std::optional<io::MappedFile> try_open_file(fs::path playlist_path, std::string_view filename)
+    {
+        for (auto p : { fs::path(filename), playlist_path.parent_path() / filename })
+            if (auto contents = io::MappedFile::open(p); contents)
+                return contents;
+        return std::nullopt;
+    }
 }
 
 // this must be in the global scope for the friend declaration inside Player to work.
@@ -138,7 +129,7 @@ void Player::audio_callback(void *, u8 *stream, int len)
 void Player::load_track_without_mutex(int index)
 {
     cur_track = index;
-    int num = order[index];
+    int num = track_order[index];
     gme_track_info(emu, &track.metadata, num);
     track.length = get_track_length(track.metadata, options.default_duration);
     gme_start_track(emu, num);
@@ -179,53 +170,57 @@ Player::~Player()
     SDL_CloseAudioDevice(dev_id);
 }
 
-gme_err_t Player::load_file(std::string_view filename)
-{
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    auto err = gme_open_file(filename.data(), &emu, 44100);
-    if (err)
-        return err;
-    // when loading a file, try to see if there's a m3u file too
-    // m3u files must have the same name as the file, but with extension m3u
-    // if there are any errors, ignore them (m3u loading is not important)
-    auto path = fs::path(filename);
-    path = path.replace_extension("m3u");
-    err = gme_load_m3u(emu, path.c_str());
-    if (err)
-        fmt::print(stderr, "warning: m3u: {}\n", err);
-    track_count = gme_track_count(emu);
-    cur_track = 0;
-    order.resize(track_count);
-    generate_order(order, options.shuffle);
-    return nullptr;
-}
 
-std::optional<std::unique_ptr<char[]>> try_open_file(fs::path playlist_filename, std::string_view filename)
-{
-    for (auto p : { fs::path(filename),
-                    playlist_filename.parent_path().append(filename) }) {
-        auto contents = io::read_binary_file(p.c_str());
-        if (contents)
-            return contents;
-    }
-    return std::nullopt;
-}
 
 void Player::load_playlist(fs::path filename)
 {
-    auto file = io::File::open(filename.c_str(), io::Access::Read);
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    cache.clear();
+    auto file = io::File::open(filename, io::Access::Read);
     if (!file) {
         fmt::print(stderr, "can't open file {}\n", filename.c_str());
         return;
     }
     for (std::string line; file.value().get_line(line); ) {
-        auto contents = try_open_file(filename, line);
-        if (!contents) {
+        if (auto contents = try_open_file(filename, line); contents)
+            cache.push_back(std::move(contents.value()));
+        else
             fmt::print(stderr, "can't open file {}\n", line);
-            continue;
-        }
-        cache.add(std::move(contents.value()));
     }
+}
+
+bool Player::add_file(fs::path path)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    if (auto file = io::MappedFile::open(path); file) {
+        cache.push_back(std::move(file.value()));
+        return true;
+    }
+    return false;
+}
+
+gme_err_t Player::load_file(int fileno)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    auto err = gme_open_data(cache[fileno].data(), cache[fileno].size(), &emu, 44100);
+    if (err)
+        return err;
+    // when loading a file, try to see if there's a m3u file too
+    // m3u files must have the same name as the file, but with extension m3u
+    // if there are any errors, ignore them (m3u loading is not important)
+    auto m3u_path = fs::path(cache[fileno].filename()).replace_extension("m3u");
+#ifdef DEBUG
+    err = gme_load_m3u(emu, m3u_path.c_str());
+    if (err)
+        fmt::print(stderr, "warning: m3u: {}\n", err);
+#else
+    gme_load_m3u(emu, m3u_path.c_str());
+#endif
+    track_count = gme_track_count(emu);
+    cur_track = 0;
+    track_order.resize(track_count);
+    generate_order(track_order, options.shuffle);
+    return nullptr;
 }
 
 void Player::load_track(int index)
@@ -336,7 +331,7 @@ int Player::effective_length() const
 int Player::get_track_order_pos(int trackno) const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return order[trackno];
+    return track_order[trackno];
 }
 
 void Player::track_names(std::function<void(const std::string &)> f) const
@@ -404,7 +399,7 @@ void Player::set_shuffle(bool shuffle)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.shuffle = shuffle;
-    generate_order(order, options.shuffle);
+    generate_order(track_order, options.shuffle);
 }
 
 void Player::set_volume(int value)
