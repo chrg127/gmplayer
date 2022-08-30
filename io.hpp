@@ -2,11 +2,11 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
+#include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <optional>
 #include "common.hpp"
 
 #if defined(PLATFORM_LINUX)
@@ -20,47 +20,69 @@
 
 namespace io {
 
+namespace detail {
+
+inline void file_deleter(FILE *fp)
+{
+    if (fp && fp != stdin && fp != stdout && fp != stderr)
+        std::fclose(fp);
+}
+
+#ifdef PLATFORM_LINUX
+
+inline std::pair<u8 *, std::size_t> open_mapped_file(std::filesystem::path path)
+{
+    int fd = ::open(path.c_str(), O_RDWR);
+    if (fd < 0)
+        return {nullptr, 0};
+    struct stat statbuf;
+    int err = fstat(fd, &statbuf);
+    if (err < 0)
+        return {nullptr, 0};
+    auto *ptr = (u8 *) mmap(nullptr, statbuf.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ptr == MAP_FAILED)
+        return {nullptr, 0};
+    close(fd);
+    return {ptr, static_cast<std::size_t>(statbuf.st_size)};
+}
+
+inline void close_mapped_file(u8 *ptr, std::size_t len)
+{
+    if (ptr) ::munmap(ptr, len);
+}
+
+#endif
+
+} // namespace detail
+
 enum class Access { Read, Write, Modify, Append, };
 
 class File {
-    FILE *fp = nullptr;
-    std::string name;
+    std::unique_ptr<FILE, void (*)(FILE *)> file_ptr = { nullptr, detail::file_deleter };
+    std::filesystem::path path;
 
-    File(FILE *f, std::string &&s) : fp{f}, name{std::move(s)} {}
+    File(FILE *f, std::filesystem::path p)
+        : file_ptr{f, detail::file_deleter}, path{std::move(p)}
+    { }
 
 public:
-    ~File()
+    static std::optional<File> open(std::filesystem::path pathname, Access access)
     {
-        if (!fp || fp == stdin || fp == stdout || fp == stderr)
-            return;
-        std::fclose(fp);
-        fp = nullptr;
-        name.erase();
-    }
-
-    File(File &&f) noexcept { operator=(std::move(f)); }
-    File & operator=(File &&f) noexcept
-    {
-        std::swap(fp, f.fp);
-        std::swap(name, f.name);
-        return *this;
-    }
-
-    static std::optional<File> open(std::string_view pathname, Access access)
-    {
-        FILE *fp = nullptr;
-        switch (access) {
-        case Access::Read:   fp = fopen(pathname.data(), "rb"); break;
-        case Access::Write:  fp = fopen(pathname.data(), "wb"); break;
-        case Access::Modify: fp = fopen(pathname.data(), "rb+"); break;
-        case Access::Append: fp = fopen(pathname.data(), "ab"); break;
-        }
+        FILE *fp = [&](const char *name) -> FILE * {
+            switch (access) {
+            case Access::Read:   return fopen(name, "rb"); break;
+            case Access::Write:  return fopen(name, "wb"); break;
+            case Access::Modify: return fopen(name, "rb+"); break;
+            case Access::Append: return fopen(name, "ab"); break;
+            default:             return nullptr;
+            }
+        }(pathname.c_str());
         if (!fp)
             return std::nullopt;
-        return File{ fp, std::string(pathname) };
+        return File{ fp, pathname };
     }
 
-    static File assoc(FILE *fp) { return { fp, "" }; }
+    static File assoc(FILE *fp) { return { fp, std::filesystem::path("/") }; }
 
     bool get_word(std::string &str)
     {
@@ -86,23 +108,24 @@ public:
         return !(c == EOF);
     }
 
-    std::string filename() const noexcept { return name; }
-    FILE *data() const noexcept           { return fp; }
-    int getc()                            { return std::fgetc(fp); }
-    int ungetc(int c)                     { return std::ungetc(c, fp); }
+    std::string filename() const noexcept            { return path.filename().c_str(); }
+    std::filesystem::path file_path() const noexcept { return path; }
+    FILE *data() const noexcept                      { return file_ptr.get(); }
+    int getc()                                       { return std::fgetc(file_ptr.get()); }
+    int ungetc(int c)                                { return std::ungetc(c, file_ptr.get()); }
 };
 
 class MappedFile {
     u8 *ptr = nullptr;
     std::size_t len = 0;
-    std::string name;
+    std::filesystem::path path;
 
-    MappedFile(u8 *p, std::size_t s, std::string_view n)
-        : ptr(p), len(s), name(n)
+    MappedFile(u8 *p, std::size_t s, std::filesystem::path pa)
+        : ptr{p}, len{s}, path{pa}
     { }
 
 public:
-    ~MappedFile();
+    ~MappedFile() { detail::close_mapped_file(ptr, len); }
 
     MappedFile(const MappedFile &) = delete;
     MappedFile & operator=(const MappedFile &) = delete;
@@ -111,73 +134,33 @@ public:
     {
         std::swap(ptr, m.ptr);
         std::swap(len, m.len);
-        std::swap(name, m.name);
+        std::swap(path, m.path);
         return *this;
     }
 
-    static std::optional<MappedFile> open(std::string_view pathname);
+    static std::optional<MappedFile> open(std::filesystem::path path)
+    {
+        auto [p, s] = detail::open_mapped_file(path);
+        if (!p)
+            return std::nullopt;
+        return MappedFile(p, s, path);
+    }
 
-    u8 operator[](std::size_t index) { return ptr[index]; }
-    u8 *begin() const                { return ptr; }
-    u8 *end() const                  { return ptr + len; }
-    u8 *data() const                 { return ptr; }
-    std::size_t size() const            { return len; }
-    std::string filename() const        { return name; }
+    u8 operator[](std::size_t index)                           { return ptr[index]; }
+    u8 *begin() const                                          { return ptr; }
+    u8 *end() const                                            { return ptr + len; }
+    u8 *data()                                                 { return ptr; }
+    const u8 *data() const                                     { return ptr; }
+    std::size_t size() const                                   { return len; }
+    std::string filename() const                               { return path.filename().c_str(); }
+    std::filesystem::path file_path() const noexcept           { return path; }
     std::span<u8> slice(std::size_t start, std::size_t length) { return { ptr + start, length}; }
 };
 
-} // namespace io
-
-
-
-namespace io {
-
-#ifdef PLATFORM_LINUX
-
-inline std::optional<MappedFile> MappedFile::open(std::string_view pathname)
+// reads an entire file into a string, skipping any file object construction.
+inline std::optional<std::string> read_file(std::filesystem::path path)
 {
-    int fd = ::open(pathname.data(), O_RDWR);
-    if (fd < 0)
-        return std::nullopt;
-    struct stat statbuf;
-    int err = fstat(fd, &statbuf);
-    if (err < 0)
-        return std::nullopt;
-    auto *ptr = (u8 *) mmap(nullptr, statbuf.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (ptr == MAP_FAILED)
-        return std::nullopt;
-    close(fd);
-    return MappedFile{ptr, static_cast<std::size_t>(statbuf.st_size), pathname};
-}
-
-inline MappedFile::~MappedFile()
-{
-    if (ptr) ::munmap(ptr, len);
-}
-
-#endif
-
-// reads an entire file into a buffer, skipping any file object construction.
-inline std::optional<std::unique_ptr<char[]>> read_binary_file(std::string_view path)
-{
-    FILE *file = fopen(path.data(), "rb");
-    if (!file)
-        return std::nullopt;
-    fseek(file, 0l, SEEK_END);
-    long size = ftell(file);
-    rewind(file);
-    auto buf = std::make_unique<char[]>(size);
-    size_t bytes_read = fread(buf.get(), sizeof(char), size, file);
-    if (bytes_read < std::size_t(size))
-        return std::nullopt;
-    fclose(file);
-    return buf;
-}
-
-// same as above, but returns it as a string
-inline std::optional<std::string> read_file(std::string_view path)
-{
-    FILE *file = fopen(path.data(), "rb");
+    FILE *file = fopen(path.c_str(), "rb");
     if (!file)
         return std::nullopt;
     fseek(file, 0l, SEEK_END);
@@ -191,7 +174,7 @@ inline std::optional<std::string> read_file(std::string_view path)
     return buf;
 }
 
-inline std::string user_home()
+inline std::filesystem::path user_home()
 {
 #ifdef PLATFORM_LINUX
     return getenv("HOME");
