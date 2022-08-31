@@ -7,6 +7,7 @@
 #include <optional>
 #include <functional>
 #include <filesystem>
+#include <span>
 #include <SDL_audio.h> // SDL_AudioDeviceID
 
 class Music_Emu;
@@ -58,13 +59,13 @@ class Player {
     struct {
         std::vector<io::MappedFile> cache;
         std::vector<int> order;
-        int current;
+        int current = -1;
     } files;
 
     struct {
         std::vector<int> order;
-        int current;
-        int count;
+        int current = -1;
+        int count = 0;
     } tracks;
 
     // callbacks
@@ -76,7 +77,7 @@ class Player {
     PlayerOptions options = {};
 
     void audio_callback(void *unused, uint8_t *stream, int stream_length);
-    void load_track_without_mutex(int num);
+    int load_track_without_mutex(int num);
 
     friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
 
@@ -87,24 +88,27 @@ public:
     Player(const Player &) = delete;
     Player & operator=(const Player &) = delete;
 
-    void load_playlist(std::filesystem::path path);
+    void open_file_playlist(std::filesystem::path path);
     bool add_file(std::filesystem::path path);
-    gme_err_t load_file(int fileno);
-    void load_track(int num);
+    void clear_file_playlist();
+
+    int load_file(int fileno);
+    int load_track(int num);
     bool can_play() const;
     bool is_playing() const;
 
     void start_or_resume();
     void pause();
-    std::optional<int> get_next() const;
-    std::optional<int> get_prev() const;
     void next();
     void prev();
-    int position();
     void seek(int ms);
+
+    std::optional<int> get_next() const;
+    std::optional<int> get_prev() const;
+    int position();
     int length() const;
     int effective_length() const;
-    int get_track_order_pos(int trackno) const;
+    void file_names(std::function<void(const std::string &)> f) const;
     void track_names(std::function<void(const std::string &)> f) const;
 
     PlayerOptions & get_options();

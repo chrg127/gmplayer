@@ -125,7 +125,7 @@ void Player::audio_callback(void *, u8 *stream, int len)
     position_changed(gme_tell(emu));
 }
 
-void Player::load_track_without_mutex(int index)
+int Player::load_track_without_mutex(int index)
 {
     tracks.current = index;
     int num = tracks.order[index];
@@ -138,11 +138,10 @@ void Player::load_track_without_mutex(int index)
         gme_set_fade(emu, track.length - options.fade_out_ms);
     gme_set_tempo(emu, options.tempo);
     track_changed(num, track.metadata, track.length);
+    return num;
 }
 
 
-
-// public functions
 
 Player::Player()
     : options{{}}
@@ -171,10 +170,10 @@ Player::~Player()
 
 
 
-void Player::load_playlist(fs::path filename)
+void Player::open_file_playlist(fs::path filename)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    files.cache.clear();
+    clear_file_playlist();
     auto file = io::File::open(filename, io::Access::Read);
     if (!file) {
         fmt::print(stderr, "can't open file {}\n", filename.c_str());
@@ -198,13 +197,22 @@ bool Player::add_file(fs::path path)
     return false;
 }
 
-gme_err_t Player::load_file(int fileno)
+void Player::clear_file_playlist()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
+    files.cache.clear();
+    files.order.clear();
+    files.current = -1;
+}
+
+int Player::load_file(int fileno)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    if (files.current == fileno)
+        return 0;
+    files.current = fileno;
     auto &file = files.cache[fileno];
-    auto err = gme_open_data(file.data(), file.size(), &emu, 44100);
-    if (err)
-        return err;
+    gme_open_data(file.data(), file.size(), &emu, 44100);
     // when loading a file, try to see if there's a m3u file too
     // m3u files must have the same name as the file, but with extension m3u
     // if there are any errors, ignore them (m3u loading is not important)
@@ -217,22 +225,21 @@ gme_err_t Player::load_file(int fileno)
     gme_load_m3u(emu, m3u_path.c_str());
 #endif
     tracks.count = gme_track_count(emu);
-    tracks.current = 0;
     tracks.order.resize(tracks.count);
     generate_order(tracks.order, options.shuffle);
-    return nullptr;
+    return 0;
 }
 
-void Player::load_track(int index)
+int Player::load_track(int index)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    load_track_without_mutex(index);
+    return load_track_without_mutex(index);
 }
 
 bool Player::can_play() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return tracks.current != -1;
+    return files.current != -1 && tracks.current != -1;
 }
 
 bool Player::is_playing() const
@@ -256,6 +263,38 @@ void Player::pause()
     SDL_PauseAudioDevice(dev_id, 1);
 }
 
+void Player::next()
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    auto next = get_next();
+    if (next)
+        load_track_without_mutex(next.value());
+}
+
+void Player::prev()
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    auto prev = get_prev();
+    if (prev)
+        load_track_without_mutex(prev.value());
+}
+
+void Player::seek(int ms)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    int len = effective_length();
+    if (ms < 0)
+        ms = 0;
+    if (ms > len)
+        ms = len;
+    gme_seek(emu, ms);
+    // fade disappears on seek for some reason
+    if (options.fade_out_ms != 0)
+        gme_set_fade(emu, track.length - options.fade_out_ms);
+}
+
+
+
 std::optional<int> Player::get_next() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
@@ -276,40 +315,10 @@ std::optional<int> Player::get_prev() const
     return std::nullopt;
 }
 
-void Player::next()
-{
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    auto next = get_next();
-    if (next)
-        load_track_without_mutex(next.value());
-}
-
-void Player::prev()
-{
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    auto prev = get_prev();
-    if (prev)
-        load_track_without_mutex(prev.value());
-}
-
 int Player::position()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     return gme_tell(emu);
-}
-
-void Player::seek(int ms)
-{
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    int len = effective_length();
-    if (ms < 0)
-        ms = 0;
-    if (ms > len)
-        ms = len;
-    gme_seek(emu, ms);
-    // fade disappears on seek for some reason
-    if (options.fade_out_ms != 0)
-        gme_set_fade(emu, track.length - options.fade_out_ms);
 }
 
 int Player::length() const
@@ -327,10 +336,11 @@ int Player::effective_length() const
         : std::min<int>(track.length, track.length - options.fade_out_ms + 8_sec);
 }
 
-int Player::get_track_order_pos(int trackno) const
+void Player::file_names(std::function<void(const std::string &)> f) const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return tracks.order[trackno];
+    for (auto &file : files.cache)
+        f(file.file_path().stem().string());
 }
 
 void Player::track_names(std::function<void(const std::string &)> f) const

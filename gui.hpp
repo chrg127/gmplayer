@@ -59,21 +59,24 @@ signals:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
-    bool was_paused = false;
     Player *player;
     QSlider *duration_slider, *volume;
     QLabel *duration_label;
-    QString last_dir = ".";
+    QString last_file = ".";
+    QString last_playlist = ".";
     PlayButton *play_btn;
     QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
     QComboBox *tempo;
     Playlist *playlist;
     Playlist *file_playlist;
     std::map<QString, Shortcut> shortcuts;
+    bool was_paused = false;
 
     QMenu *create_menu(const char *name, auto&&... actions);
     void load_shortcuts();
-    void open_file(QString filename);
+    void open_playlist(const QString &filename);
+    void open_single_file(QString filename);
+    void finish_opening();
     void start_or_resume();
     void pause();
     void stop();

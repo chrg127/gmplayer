@@ -168,23 +168,25 @@ MainWindow::MainWindow(QWidget *parent)
             auto filename = QFileDialog::getOpenFileName(
                 this,
                 tr("Open file"),
-                last_dir,
+                last_file,
                 "Game music files (*.spc *.nsf)"
             );
-            if (!filename.isEmpty())
-                open_file(filename);
+            if (!filename.isEmpty()) {
+                last_file = filename;
+                open_single_file(filename);
+            }
         } },
         std::tuple { "Open playlist", [=, this](){
-            player->load_playlist("test_files/a.playlist");
-            // auto filename = QFileDialog::getOpenFileName(
-            //     this,
-            //     tr("Open playlist file"),
-            //     last_dir,
-            //     "Playlist files (*.playlist)"
-            // );
-            // if (!filename.isEmpty()) {
-            //     player->load_playlist(filename.toUtf8().constData());
-            // }
+            auto filename = QFileDialog::getOpenFileName(
+                this,
+                tr("Open playlist file"),
+                last_playlist,
+                "Playlist files (*.playlist)"
+            );
+            if (!filename.isEmpty()) {
+                last_playlist = filename;
+                open_playlist(filename);
+            }
         } },
         std::tuple { "Open recent",   [](){} }
     );
@@ -207,9 +209,8 @@ MainWindow::MainWindow(QWidget *parent)
         pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
-        if (!was_paused) {
+        if (!was_paused)
             start_or_resume();
-        }
     });
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this](int ms) {
         player->seek(ms);
@@ -420,20 +421,42 @@ QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
     return menu;
 }
 
-void MainWindow::open_file(QString filename)
+void MainWindow::open_playlist(const QString &filename)
 {
-    if (!player->add_file(filename.toStdString())) {
-        msgbox(QString("Couldn't open file %1. Error: %2").arg(filename));
+    player->open_file_playlist(filename.toUtf8().constData());
+    finish_opening();
+}
+
+void MainWindow::open_single_file(QString filename)
+{
+    player->clear_file_playlist();
+    bool err = player->add_file(filename.toStdString())
+    if (!err) {
+        msgbox(QString("Couldn't open file %1.").arg(filename));
         return;
     }
-    auto err = player->load_file(0);
-    if (err) {
-        msgbox(QString("Couldn't open file %1. Error: %2")
-                       .arg(filename)
-                       .arg(err));
-        return;
-    }
-    player->load_track(0);
+    finish_opening();
+}
+
+void MainWindow::finish_opening()
+{
+    // load first file in file playlist
+    int fileno  = player->load_file(0);
+    file_playlist->set_enabled(true);
+    file_playlist->clear();
+    player->file_names([&](const std::string &s) {
+        file_playlist->add(QString::fromStdString(s));
+    });
+    file_playlist->set_current(fileno);
+    // load first track in the file's track playlist
+    int trackno = player->load_track(0);
+    playlist->set_enabled(true);
+    playlist->clear();
+    player->track_names([&](const std::string &name) {
+        playlist->add(QString::fromStdString(name));
+    });
+    playlist->set_current(trackno);
+    // enable everything else
     play_btn->set_state(PlayButton::State::Play);
     duration_slider->setEnabled(true);
     stop_btn->setEnabled(true);
@@ -443,14 +466,6 @@ void MainWindow::open_file(QString filename)
     play_btn->setEnabled(true);
     volume->setEnabled(true);
     tempo->setEnabled(true);
-    playlist->set_enabled(true);
-    playlist->clear();
-    player->track_names([&](const std::string &name) {
-        playlist->add(QString::fromStdString(name));
-    });
-    playlist->set_current(player->get_track_order_pos(0));
-    file_playlist->set_enabled(true);
-    last_dir = filename;
 }
 
 void MainWindow::start_or_resume()
@@ -474,6 +489,7 @@ void MainWindow::stop()
     if (player->can_play()) {
         // load track also calls on_track_changed() callback, which causes a
         // call to start_or_resume, so put pause after load.
+        player->load_file(0);
         player->load_track(0);
         pause();
         duration_slider->setValue(0);
@@ -524,7 +540,7 @@ void MainWindow::dropEvent(QDropEvent *event)
         msgbox("Invalid file: The dropped file may not be a music file");
         return;
     }
-    open_file(url.toLocalFile());
+    open_single_file(url.toLocalFile());
     event->acceptProposedAction();
 }
 
