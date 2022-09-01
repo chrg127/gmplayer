@@ -72,16 +72,16 @@ class MainWindow : public QMainWindow {
     std::map<QString, Shortcut> shortcuts;
     bool was_paused = false;
 
-    QMenu *create_menu(const char *name, auto&&... actions);
-    void load_shortcuts();
     void open_playlist(const QString &filename);
     void open_single_file(QString filename);
     void finish_opening();
+    void load_shortcuts();
     void start_or_resume();
     void pause();
     void stop();
     void edit_settings();
     void edit_shortcuts();
+    // listeners to events sent by qt
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);

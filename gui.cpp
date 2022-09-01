@@ -84,6 +84,15 @@ void save_player_settings(PlayerOptions options)
     settings.endGroup();
 }
 
+void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("shortcuts");
+    for (auto [name, obj] : shortcuts)
+        settings.setValue(name, obj.shortcut->key().toString());
+    settings.endGroup();
+}
+
 } // namespace
 
 
@@ -163,8 +172,8 @@ MainWindow::MainWindow(QWidget *parent)
     PlayerOptions options = load_player_settings();
     player->get_options() = options;
 
-    create_menu("&File",
-        std::tuple { "Open file", [=, this] () {
+    create_menu(this, "&File",
+        std::make_tuple("Open file", [=, this] () {
             auto filename = QFileDialog::getOpenFileName(
                 this,
                 tr("Open file"),
@@ -175,8 +184,8 @@ MainWindow::MainWindow(QWidget *parent)
                 last_file = filename;
                 open_single_file(filename);
             }
-        } },
-        std::tuple { "Open playlist", [=, this](){
+        }),
+        std::make_tuple("Open playlist", [=, this](){
             auto filename = QFileDialog::getOpenFileName(
                 this,
                 tr("Open playlist file"),
@@ -187,20 +196,19 @@ MainWindow::MainWindow(QWidget *parent)
                 last_playlist = filename;
                 open_playlist(filename);
             }
-        } },
-        std::tuple { "Open recent",   [](){} }
+        }),
+        std::make_tuple("Open recent",   [](){})
     );
 
-    create_menu("&Edit",
-        std::tuple { "Settings",  &MainWindow::edit_settings  },
-        std::tuple { "Shortcuts", &MainWindow::edit_shortcuts }
+    create_menu(this, "&Edit",
+        std::make_tuple("Settings",  &MainWindow::edit_settings),
+        std::make_tuple("Shortcuts", &MainWindow::edit_shortcuts)
     );
 
-    create_menu("&About"
-    );
+    create_menu(this, "&About");
 
     // duration slider
-    duration_label = new QLabel("00:00 / 00:00");
+    duration_label  = new QLabel("00:00 / 00:00");
     duration_slider = new QSlider(Qt::Horizontal);
     duration_slider->setEnabled(false);
 
@@ -218,12 +226,11 @@ MainWindow::MainWindow(QWidget *parent)
         duration_label->setText(QString::fromStdString(str));
     });
 
-    // track information
-    auto *title   = new QLabel;
-    auto *game    = new QLabel;
-    auto *system  = new QLabel;
-    auto *author  = new QLabel;
-    auto *comment = new QLabel;
+    player->on_position_changed([=, this](int ms) {
+        duration_slider->setValue(ms);
+        auto str = format_duration(ms, duration_slider->maximum());
+        duration_label->setText(QString::fromStdString(str));
+    });
 
     // buttons under duration slider
     auto make_btn = [=, this](auto icon, auto f) {
@@ -238,6 +245,10 @@ MainWindow::MainWindow(QWidget *parent)
     play_btn->setEnabled(false);
     connect(play_btn, &PlayButton::play,  this, [=, this]() { player->start_or_resume(); });
     connect(play_btn, &PlayButton::pause, this, [=, this]() { player->pause(); });
+
+    player->on_track_ended([=, this]() {
+        play_btn->set_state(PlayButton::State::Pause);
+    });
 
     prev_track = make_btn(QStyle::SP_MediaSkipBackward, [=, this]() { player->prev(); });
     next_track = make_btn(QStyle::SP_MediaSkipForward,  [=, this]() { player->next(); });
@@ -309,12 +320,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(file_playlist, &Playlist::shuffle_clicked,  this, [&](bool state) { });
     connect(file_playlist, &Playlist::repeat_clicked,   this, [&](bool state) { });
 
-    // player stuff
-    player->on_position_changed([=, this](int ms) {
-        duration_slider->setValue(ms);
-        auto str = format_duration(ms, duration_slider->maximum());
-        duration_label->setText(QString::fromStdString(str));
-    });
+    // track information
+    auto *title   = new QLabel;
+    auto *game    = new QLabel;
+    auto *system  = new QLabel;
+    auto *author  = new QLabel;
+    auto *comment = new QLabel;
 
     player->on_track_changed([=, this](int num, gme_info_t *info, int length) {
         title   ->setText(info->song);
@@ -329,10 +340,7 @@ MainWindow::MainWindow(QWidget *parent)
         start_or_resume();
     });
 
-    player->on_track_ended([=, this]() {
-        play_btn->set_state(PlayButton::State::Pause);
-    });
-
+    // load shortcuts only after everything has been constructed
     load_shortcuts();
 
     // and now create the gui
@@ -340,11 +348,11 @@ MainWindow::MainWindow(QWidget *parent)
         make_layout<QVBoxLayout>(
             make_layout<QHBoxLayout>(
                 make_groupbox<QFormLayout>("Track info",
-                    std::tuple { new QLabel(tr("Title:")),   title      },
-                    std::tuple { new QLabel(tr("Game:")),    game       },
-                    std::tuple { new QLabel(tr("System:")),  system     },
-                    std::tuple { new QLabel(tr("Author:")),  author     },
-                    std::tuple { new QLabel(tr("Comment:")), comment    }
+                    std::make_tuple(new QLabel(tr("Title:")),   title),
+                    std::make_tuple(new QLabel(tr("Game:")),    game),
+                    std::make_tuple(new QLabel(tr("System:")),  system),
+                    std::make_tuple(new QLabel(tr("Author:")),  author),
+                    std::make_tuple(new QLabel(tr("Comment:")), comment)
                 ),
                 playlist,
                 file_playlist
@@ -400,27 +408,6 @@ void MainWindow::load_shortcuts()
     settings.endGroup();
 }
 
-void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("shortcuts");
-    for (auto [name, obj] : shortcuts)
-        settings.setValue(name, obj.shortcut->key().toString());
-    settings.endGroup();
-}
-
-QMenu *MainWindow::create_menu(const char *name, auto&&... actions)
-{
-    auto *menu = menuBar()->addMenu(tr(name));
-    auto f = [=, this](auto &a) {
-        auto *act = new QAction(tr(std::get<0>(a)), this);
-        connect(act, &QAction::triggered, this, std::get<1>(a));
-        menu->addAction(act);
-    };
-    (f(actions), ...);
-    return menu;
-}
-
 void MainWindow::open_playlist(const QString &filename)
 {
     player->open_file_playlist(filename.toUtf8().constData());
@@ -430,7 +417,7 @@ void MainWindow::open_playlist(const QString &filename)
 void MainWindow::open_single_file(QString filename)
 {
     player->clear_file_playlist();
-    bool err = player->add_file(filename.toStdString())
+    bool err = player->add_file(filename.toStdString());
     if (!err) {
         msgbox(QString("Couldn't open file %1.").arg(filename));
         return;

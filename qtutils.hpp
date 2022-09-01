@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tuple>
+#include <QObject>
 #include <QGridLayout>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -47,4 +48,17 @@ inline void msgbox(const QString &msg)
     QMessageBox box;
     box.setText(msg);
     box.exec();
+}
+
+template <typename T>
+QMenu *create_menu(T *window, const char *name, auto&&... actions)
+{
+    auto *menu = window->menuBar()->addMenu(QObject::tr(name));
+    auto f = [=](auto &a) {
+        auto *act = new QAction(QObject::tr(std::get<0>(a)), window);
+        QObject::connect(act, &QAction::triggered, window, std::get<1>(a));
+        menu->addAction(act);
+    };
+    (f(actions), ...);
+    return menu;
 }
