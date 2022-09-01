@@ -301,7 +301,7 @@ MainWindow::MainWindow(QWidget *parent)
     );
     connect(playlist, &Playlist::item_activated,   this, [&](int index) {
         player->load_track(index);
-        start_or_resume();
+        // start_or_resume();
     });
     connect(playlist, &Playlist::autoplay_clicked, this, [&](bool state) { player->set_autoplay(state); });
     connect(playlist, &Playlist::shuffle_clicked,  this, [&](bool state) { player->set_shuffle(state); });
@@ -315,7 +315,15 @@ MainWindow::MainWindow(QWidget *parent)
     file_playlist = new Playlist("File playlist");
     file_playlist->set_enabled(false);
     file_playlist->set_checked(false, false, false);
-    connect(file_playlist, &Playlist::item_activated,   this, [&](int  index) { });
+    connect(file_playlist, &Playlist::item_activated,   this, [&](int index) {
+        player->load_file(index);
+        int trackno = player->load_track(0);
+        playlist->clear();
+        player->track_names([&](const std::string &name) {
+            playlist->add(QString::fromStdString(name));
+        });
+        playlist->set_current(trackno);
+    });
     connect(file_playlist, &Playlist::autoplay_clicked, this, [&](bool state) { });
     connect(file_playlist, &Playlist::shuffle_clicked,  this, [&](bool state) { });
     connect(file_playlist, &Playlist::repeat_clicked,   this, [&](bool state) { });
@@ -428,7 +436,7 @@ void MainWindow::open_single_file(QString filename)
 void MainWindow::finish_opening()
 {
     // load first file in file playlist
-    int fileno  = player->load_file(0);
+    int fileno = player->load_file(0);
     file_playlist->set_enabled(true);
     file_playlist->clear();
     player->file_names([&](const std::string &s) {
