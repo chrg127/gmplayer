@@ -41,17 +41,14 @@ struct Shortcut {
 class Playlist : public QWidget {
     Q_OBJECT
     QListWidget *playlist;
-    QCheckBox *autoplay, *repeat, *shuffle;
+    QCheckBox *repeat, *shuffle;
 public:
     Playlist(const char *name, QWidget *parent = nullptr);
-    void set_enabled(bool enabled);
-    void set_checked(bool autoplay, bool repeat, bool shuffle);
     void set_current(int index);
     void add(const QString &name);
     void clear();
 signals:
     void item_activated(int index);
-    void autoplay_clicked(bool state);
     void repeat_clicked(bool state);
     void shuffle_clicked(bool state);
 };
@@ -67,10 +64,11 @@ class MainWindow : public QMainWindow {
     PlayButton *play_btn;
     QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
     QComboBox *tempo;
-    Playlist *playlist;
-    Playlist *file_playlist;
+    QListWidget *playlist;
+    QListWidget *file_playlist;
     std::map<QString, Shortcut> shortcuts;
     bool was_paused = false;
+    QCheckBox *autoplay, *repeat_track, *repeat_file, *shuffle_tracks, *shuffle_files;
 
     void open_playlist(const QString &filename);
     void open_single_file(QString filename);

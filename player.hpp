@@ -29,15 +29,14 @@ struct SDLMutex {
 
 struct PlayerOptions {
     int fade_out_ms         = 0;
-
-    bool autoplay_next      = false;
-    bool repeat             = false;
-    bool shuffle            = false;
-
+    bool autoplay           = false;
+    bool track_repeat       = false;
+    bool track_shuffle      = false;
+    bool file_repeat        = false;
+    bool file_shuffle       = false;
     int default_duration    = 3_min;
     int silence_detection   = 0;
     double tempo            = 1.0;
-
     int volume              = SDL_MIX_MAXVOLUME;
 };
 
@@ -72,6 +71,7 @@ class Player {
     std::function<void(int, gme_info_t *, int)> track_changed;
     std::function<void(int)>                    position_changed;
     std::function<void(void)>                   track_ended;
+    std::function<void(int)>                    file_changed;
 
     // options
     PlayerOptions options = {};
@@ -103,8 +103,9 @@ public:
     void prev();
     void seek(int ms);
 
-    std::optional<int> get_next() const;
-    std::optional<int> get_prev() const;
+    std::optional<std::pair<int, int>> get_next() const;
+    std::optional<int> get_prev_file() const;
+    std::optional<int> get_prev_track() const;
     int position();
     int length() const;
     int effective_length() const;
@@ -116,14 +117,17 @@ public:
     void set_tempo(double tempo);
     void set_silence_detection(bool ignore);
     void set_default_duration(int secs);
-    void set_autoplay(bool autoplay);
-    void set_repeat(bool repeat);
-    void set_shuffle(bool shuffle);
+    void set_autoplay(bool value);
+    void set_track_repeat(bool value);
+    void set_track_shuffle(bool value);
+    void set_file_repeat(bool value);
+    void set_file_shuffle(bool value);
     void set_volume(int value);
 
     void on_track_changed(auto &&fn)    { track_changed    = fn; }
     void on_position_changed(auto &&fn) { position_changed = fn; }
     void on_track_ended(auto &&fn)      { track_ended      = fn; }
+    void on_file_changed(auto &&fn)     { file_changed     = fn; }
 };
 
 // this is here for portability

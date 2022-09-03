@@ -80,14 +80,6 @@ namespace {
         Player & get()              { return *players[cur]; }
         void change_cur_to(int id)  { cur = id; }
     } object_handler;
-
-    std::optional<io::MappedFile> try_open_file(fs::path playlist_path, std::string_view filename)
-    {
-        for (auto p : { fs::path(filename), playlist_path.parent_path() / filename })
-            if (auto contents = io::MappedFile::open(p); contents)
-                return contents;
-        return std::nullopt;
-    }
 }
 
 // this must be in the global scope for the friend declaration inside Player to work.
@@ -102,20 +94,20 @@ void audio_callback(void *unused, u8 *stream, int stream_length)
 
 void Player::audio_callback(void *, u8 *stream, int len)
 {
-    // some songs don't have length information, hence the need for the third check.
-    if (!emu
-     || gme_track_ended(emu)
-     || gme_tell(emu) > track.length + 1_sec/2) {
+    if (!emu)
+        return;
+    // some songs don't have length information, hence the need for the second check.
+    if (gme_track_ended(emu) || gme_tell(emu) > track.length + 1_sec/2) {
         SDL_PauseAudioDevice(dev_id, 1);
         track_ended();
-        if (options.autoplay_next) {
-            auto next = get_next();
-            if (next)
-                load_track_without_mutex(next.value());
+        if (options.autoplay) {
+            if (auto next = get_next(); next) {
+                load_file (next.value().first);
+                load_track(next.value().second);
+            }
         }
         return;
     }
-
     // fill stream with silence. this is needed for MixAudio to work how we want.
     std::memset(stream, 0, len);
     short buf[SAMPLES * CHANNELS];
@@ -125,10 +117,10 @@ void Player::audio_callback(void *, u8 *stream, int len)
     position_changed(gme_tell(emu));
 }
 
-int Player::load_track_without_mutex(int index)
+int Player::load_track_without_mutex(int trackno)
 {
-    tracks.current = index;
-    int num = tracks.order[index];
+    tracks.current = trackno;
+    int num = tracks.order[trackno];
     gme_track_info(emu, &track.metadata, num);
     track.length = get_track_length(track.metadata, options.default_duration);
     gme_start_track(emu, num);
@@ -170,21 +162,29 @@ Player::~Player()
 
 
 
-void Player::open_file_playlist(fs::path filename)
+void Player::open_file_playlist(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     clear_file_playlist();
-    auto file = io::File::open(filename, io::Access::Read);
+    auto try_open_file = [&](std::string_view name) -> std::optional<io::MappedFile> {
+        for (auto p : { fs::path(name), path.parent_path() / name })
+            if (auto contents = io::MappedFile::open(p); contents)
+                return contents;
+        return std::nullopt;
+    };
+    auto file = io::File::open(path, io::Access::Read);
     if (!file) {
-        fmt::print(stderr, "can't open file {}\n", filename.c_str());
+        fmt::print(stderr, "can't open file {}\n", path.c_str());
         return;
     }
     for (std::string line; file.value().get_line(line); ) {
-        if (auto contents = try_open_file(filename, line); contents)
+        if (auto contents = try_open_file(line); contents)
             files.cache.push_back(std::move(contents.value()));
         else
             fmt::print(stderr, "can't open file {}\n", line);
     }
+    files.order.resize(files.cache.size());
+    generate_order(files.order, options.file_shuffle);
 }
 
 bool Player::add_file(fs::path path)
@@ -211,7 +211,8 @@ int Player::load_file(int fileno)
     if (files.current == fileno)
         return 0;
     files.current = fileno;
-    auto &file = files.cache[fileno];
+    int num = files.order[fileno];
+    auto &file = files.cache[num];
     gme_open_data(file.data(), file.size(), &emu, 44100);
     // when loading a file, try to see if there's a m3u file too
     // m3u files must have the same name as the file, but with extension m3u
@@ -226,8 +227,9 @@ int Player::load_file(int fileno)
 #endif
     tracks.count = gme_track_count(emu);
     tracks.order.resize(tracks.count);
-    generate_order(tracks.order, options.shuffle);
-    return 0;
+    generate_order(tracks.order, options.track_shuffle);
+    file_changed(num);
+    return num;
 }
 
 int Player::load_track(int index)
@@ -267,16 +269,21 @@ void Player::next()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     auto next = get_next();
-    if (next)
-        load_track_without_mutex(next.value());
+    if (next) {
+        load_file (next.value().first);
+        load_track(next.value().second);
+    }
 }
 
 void Player::prev()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    auto prev = get_prev();
-    if (prev)
-        load_track_without_mutex(prev.value());
+    if (auto prev = get_prev_track(); prev)
+        load_track(prev.value());
+    else if (auto prev = get_prev_file(); prev) {
+        load_file (prev.value());
+        load_track(tracks.count - 1);
+    }
 }
 
 void Player::seek(int ms)
@@ -295,23 +302,29 @@ void Player::seek(int ms)
 
 
 
-std::optional<int> Player::get_next() const
+std::optional<std::pair<int, int>> Player::get_next() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (tracks.current + 1 < tracks.count)
-        return tracks.current + 1;
-    if (options.repeat)
-        return tracks.current;
+    if (options.track_repeat)                    return std::pair{files.current,     tracks.current    };
+    if (tracks.current + 1 < tracks.count)       return std::pair{files.current,     tracks.current + 1};
+    if (options.file_repeat)                     return std::pair{files.current,                      0};
+    if (files.current  + 1 < files.cache.size()) return std::pair{files.current + 1,                  0};
     return std::nullopt;
 }
 
-std::optional<int> Player::get_prev() const
+std::optional<int> Player::get_prev_file() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (tracks.current - 1 >= 0)
-        return tracks.current - 1;
-    if (options.repeat)
-        return tracks.current;
+    if (options.file_repeat)                    return files.current;
+    if (files.current  - 1 >= 0)                return files.current - 1;
+    return std::nullopt;
+}
+
+std::optional<int> Player::get_prev_track() const
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    if (options.track_repeat)                   return tracks.current;
+    if (tracks.current - 1 >= 0)                return tracks.current - 1;
     return std::nullopt;
 }
 
@@ -392,23 +405,36 @@ void Player::set_default_duration(int secs)
     options.default_duration = secs * 1000;
 }
 
-void Player::set_autoplay(bool autoplay)
+void Player::set_autoplay(bool value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    options.autoplay_next = autoplay;
+    options.autoplay = value;
 }
 
-void Player::set_repeat(bool repeat)
+void Player::set_track_repeat(bool value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    options.repeat = repeat;
+    options.track_repeat = value;
 }
 
-void Player::set_shuffle(bool shuffle)
+void Player::set_track_shuffle(bool value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    options.shuffle = shuffle;
-    generate_order(tracks.order, options.shuffle);
+    options.track_shuffle = value;
+    generate_order(tracks.order, options.track_shuffle);
+}
+
+void Player::set_file_repeat(bool value)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.file_repeat = value;
+}
+
+void Player::set_file_shuffle(bool value)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.file_shuffle = value;
+    generate_order(files.order, options.file_shuffle);
 }
 
 void Player::set_volume(int value)
