@@ -134,25 +134,26 @@ MainWindow::MainWindow(QWidget *parent)
 
     create_menu(this, "&File",
         std::make_tuple("Open file", [=, this] () {
-            auto filename = QFileDialog::getOpenFileName(
-                this,
-                tr("Open file"),
-                last_file,
-                "Game music files (*.spc *.nsf)"
-            );
+            auto filename = QString("test_files/rudra.spc");
+            // auto filename = QFileDialog::getOpenFileName(
+                // this,
+                // tr("Open file"),
+                // last_file,
+                // "Game music files (*.spc *.nsf)"
+            // );
             if (!filename.isEmpty()) {
                 last_file = filename;
                 open_single_file(filename);
             }
         }),
         std::make_tuple("Open playlist", [=, this](){
-            auto filename = QString("test_files/a.playlist");
-            // auto filename = QFileDialog::getOpenFileName(
-            //     this,
-            //     tr("Open playlist file"),
-            //     last_playlist,
-            //     "Playlist files (*.playlist)"
-            // );
+            // auto filename = QString("test_files/a.playlist");
+            auto filename = QFileDialog::getOpenFileName(
+                this,
+                tr("Open playlist file"),
+                last_playlist,
+                "Playlist files (*.playlist)"
+            );
             if (!filename.isEmpty()) {
                 last_playlist = filename;
                 open_playlist(filename);

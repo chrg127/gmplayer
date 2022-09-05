@@ -190,11 +190,13 @@ void Player::open_file_playlist(fs::path path)
 bool Player::add_file(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (auto file = io::MappedFile::open(path); file) {
-        files.cache.push_back(std::move(file.value()));
-        return true;
-    }
-    return false;
+    auto file = io::MappedFile::open(path);
+    if (!file)
+        return false;
+    files.cache.push_back(std::move(file.value()));
+    files.order.resize(files.cache.size());
+    generate_order(files.order, options.file_shuffle);
+    return true;
 }
 
 void Player::clear_file_playlist()
