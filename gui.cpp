@@ -33,6 +33,7 @@
 #include <QMessageBox>
 #include <QShortcut>
 #include <QKeySequence>
+#include <QFileInfo>
 #include <fmt/core.h>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
@@ -88,6 +89,25 @@ void save_player_settings(PlayerOptions options)
     settings.endGroup();
 }
 
+std::pair<QStringList, QStringList> load_recent_files()
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("recent");
+    QStringList files     = settings.value("recent_files").toStringList();
+    QStringList playlists = settings.value("recent_playlists").toStringList();
+    settings.endGroup();
+    return {files, playlists};
+}
+
+void save_recent(const QStringList &files, const QStringList &playlists)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("recent");
+    settings.setValue("recent_files", files);
+    settings.setValue("recent_playlists", playlists);
+    settings.endGroup();
+}
+
 void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
@@ -118,6 +138,34 @@ void PlayButton::set_state(State state)
                                                         : QStyle::SP_MediaPause));
 }
 
+RecentList::RecentList(QMenu *menu, const QStringList &list)
+    : menu(menu), names(std::move(list))
+{
+    for (auto &path : names) {
+        auto filename = QFileInfo(path).fileName();
+        auto *act = new QAction(filename, this);
+        connect(act, &QAction::triggered, this, [=, this]() { emit clicked(path); });
+        menu->addAction(act);
+    }
+}
+
+void RecentList::add(const QString &name)
+{
+    auto it = std::remove(names.begin(), names.end(), name);
+    if (it != names.end())
+        names.erase(it);
+    names.prepend(name);
+    while (names.size() > 10)
+        names.removeLast();
+    menu->clear();
+    for (auto &path : names) {
+        auto filename = QFileInfo(path).fileName();
+        auto *act = new QAction(filename, this);
+        connect(act, &QAction::triggered, this, [=, this]() { emit clicked(path); });
+        menu->addAction(act);
+    }
+}
+
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -132,15 +180,15 @@ MainWindow::MainWindow(QWidget *parent)
     PlayerOptions options = load_player_settings();
     player->get_options() = options;
 
-    create_menu(this, "&File",
+    auto *file_menu = create_menu(this, "&File",
         std::make_tuple("Open file", [=, this] () {
-            auto filename = QString("test_files/rudra.spc");
-            // auto filename = QFileDialog::getOpenFileName(
-                // this,
-                // tr("Open file"),
-                // last_file,
-                // "Game music files (*.spc *.nsf)"
-            // );
+            // auto filename = QString("test_files/rudra.spc");
+            auto filename = QFileDialog::getOpenFileName(
+                this,
+                tr("Open file"),
+                last_file,
+                "Game music files (*.spc *.nsf)"
+            );
             if (!filename.isEmpty()) {
                 last_file = filename;
                 open_single_file(filename);
@@ -158,9 +206,14 @@ MainWindow::MainWindow(QWidget *parent)
                 last_playlist = filename;
                 open_playlist(filename);
             }
-        }),
-        std::make_tuple("Open recent",   [](){})
+        })
     );
+
+    auto [files, playlists] = load_recent_files();
+    recent_files = new RecentList(file_menu->addMenu(tr("&Recent files")), files);
+    connect(recent_files, &RecentList::clicked, this, [=, this](const QString &name) { open_single_file(name); });
+    recent_playlists = new RecentList(file_menu->addMenu(tr("R&ecent playlists")), playlists);
+    connect(recent_playlists, &RecentList::clicked, this, [=, this](const QString &name) { open_playlist(name); });
 
     create_menu(this, "&Edit",
         std::make_tuple("Settings",  &MainWindow::edit_settings),
@@ -413,6 +466,7 @@ void MainWindow::load_shortcuts()
 void MainWindow::open_playlist(const QString &filename)
 {
     player->open_file_playlist(filename.toUtf8().constData());
+    recent_playlists->add(filename);
     finish_opening();
 }
 
@@ -424,6 +478,7 @@ void MainWindow::open_single_file(QString filename)
         msgbox(QString("Couldn't open file %1.").arg(filename));
         return;
     }
+    recent_files->add(filename);
     finish_opening();
 }
 
@@ -491,6 +546,7 @@ void MainWindow::stop()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     save_player_settings(player->get_options());
+    save_recent(recent_files->filenames(), recent_playlists->filenames());
     save_shortcuts(shortcuts);
     event->accept();
 }

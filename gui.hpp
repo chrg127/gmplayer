@@ -9,6 +9,7 @@
 #include <QToolButton>
 #include <QDialog>
 #include <QPushButton>
+#include <QStringList>
 #include "player.hpp"
 #include "keyrecorder.hpp"
 
@@ -20,6 +21,7 @@ class QSpinBox;
 class QGroupBox;
 class QShortcut;
 class QComboBox;
+class QMenu;
 
 class PlayButton : public QToolButton {
     Q_OBJECT
@@ -53,40 +55,6 @@ signals:
     void shuffle_clicked(bool state);
 };
 
-class MainWindow : public QMainWindow {
-    Q_OBJECT
-
-    Player *player;
-    QSlider *duration_slider, *volume;
-    QLabel *duration_label;
-    QString last_file = ".";
-    QString last_playlist = ".";
-    PlayButton *play_btn;
-    QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
-    QComboBox *tempo;
-    QListWidget *playlist;
-    QListWidget *file_playlist;
-    std::map<QString, Shortcut> shortcuts;
-    bool was_paused = false;
-    QCheckBox *autoplay, *repeat_track, *repeat_file, *shuffle_tracks, *shuffle_files;
-
-    void open_playlist(const QString &filename);
-    void open_single_file(QString filename);
-    void finish_opening();
-    void load_shortcuts();
-    void start_or_resume();
-    void pause();
-    void stop();
-    void edit_settings();
-    void edit_shortcuts();
-    // listeners to events sent by qt
-    void closeEvent(QCloseEvent *event);
-    void dragEnterEvent(QDragEnterEvent *event);
-    void dropEvent(QDropEvent *event);
-public:
-    explicit MainWindow(QWidget *parent = nullptr);
-};
-
 class SettingsWindow : public QDialog {
     Q_OBJECT
     Player *player;
@@ -109,4 +77,50 @@ public:
 signals:
     void started();
     void got_key_sequence(const QKeySequence &keySequence);
+};
+
+class RecentList : public QObject {
+    Q_OBJECT
+    QStringList names;
+    QMenu *menu;
+public:
+    RecentList(QMenu *menu, const QStringList &list);
+    QStringList &filenames() { return names; }
+    void add(const QString &name);
+signals:
+    void clicked(const QString &filename);
+};
+
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+
+    Player *player;
+    QSlider *duration_slider, *volume;
+    QLabel *duration_label;
+    QString last_file = ".";
+    QString last_playlist = ".";
+    PlayButton *play_btn;
+    QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
+    QComboBox *tempo;
+    QListWidget *playlist, *file_playlist;
+    QCheckBox *autoplay, *repeat_track, *repeat_file, *shuffle_tracks, *shuffle_files;
+    std::map<QString, Shortcut> shortcuts;
+    bool was_paused = false;
+    RecentList *recent_files, *recent_playlists;
+
+    void open_playlist(const QString &filename);
+    void open_single_file(QString filename);
+    void finish_opening();
+    void load_shortcuts();
+    void start_or_resume();
+    void pause();
+    void stop();
+    void edit_settings();
+    void edit_shortcuts();
+    // listeners to events sent by qt
+    void closeEvent(QCloseEvent *event);
+    void dragEnterEvent(QDragEnterEvent *event);
+    void dropEvent(QDropEvent *event);
+public:
+    explicit MainWindow(QWidget *parent = nullptr);
 };
