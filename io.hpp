@@ -2,11 +2,13 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
 #include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include "external/expected.hpp"
 #include "common.hpp"
 
 #if defined(PLATFORM_LINUX)
@@ -53,9 +55,17 @@ inline void close_mapped_file(u8 *ptr, std::size_t len)
 
 #endif
 
+inline std::error_code make_error()
+{
+    return std::error_code(errno, std::system_category());
+}
+
 } // namespace detail
 
 enum class Access { Read, Write, Modify, Append, };
+
+template <typename T>
+using Result = tl::expected<T, std::error_code>;
 
 class File {
     std::unique_ptr<FILE, void (*)(FILE *)> file_ptr = { nullptr, detail::file_deleter };
@@ -66,7 +76,7 @@ class File {
     { }
 
 public:
-    static std::optional<File> open(std::filesystem::path pathname, Access access)
+    static Result<File> open(std::filesystem::path pathname, Access access)
     {
         FILE *fp = [&](const char *name) -> FILE * {
             switch (access) {
@@ -78,15 +88,15 @@ public:
             }
         }(pathname.c_str());
         if (!fp)
-            return std::nullopt;
-        return File{ fp, pathname };
+            return tl::unexpected{detail::make_error()};
+        return File{fp, pathname};
     }
 
-    static File assoc(FILE *fp) { return { fp, std::filesystem::path("/") }; }
+    static File assoc(FILE *fp) { return {fp, std::filesystem::path("/")}; }
 
     bool get_word(std::string &str)
     {
-        auto is_delim = [](int c) { return c == '\n' || c == ' '  || c == '\t'; };
+        auto is_delim = [](int c) { return c == ' '  || c == '\t' || c == '\r' || c == '\n'; };
         auto is_space = [](int c) { return c == ' '  || c == '\t' || c == '\r'; };
         str.erase();
         int c;
@@ -138,14 +148,15 @@ public:
         return *this;
     }
 
-    static std::optional<MappedFile> open(std::filesystem::path path)
+    static Result<MappedFile> open(std::filesystem::path path)
     {
         auto [p, s] = detail::open_mapped_file(path);
         if (!p)
-            return std::nullopt;
+            return tl::unexpected(detail::make_error());
         return MappedFile(p, s, path);
     }
 
+    std::span<u8> slice(std::size_t start, std::size_t length) { return { ptr + start, length}; }
     u8 operator[](std::size_t index)                           { return ptr[index]; }
     u8 *begin() const                                          { return ptr; }
     u8 *end() const                                            { return ptr + len; }
@@ -154,22 +165,21 @@ public:
     std::size_t size() const                                   { return len; }
     std::string filename() const                               { return path.filename().c_str(); }
     std::filesystem::path file_path() const noexcept           { return path; }
-    std::span<u8> slice(std::size_t start, std::size_t length) { return { ptr + start, length}; }
 };
 
 // reads an entire file into a string, skipping any file object construction.
-inline std::optional<std::string> read_file(std::filesystem::path path)
+inline Result<std::string> read_file(std::filesystem::path path)
 {
     FILE *file = fopen(path.c_str(), "rb");
     if (!file)
-        return std::nullopt;
+        return tl::unexpected(detail::make_error());
     fseek(file, 0l, SEEK_END);
     long size = ftell(file);
     rewind(file);
     std::string buf(size, ' ');
     size_t bytes_read = fread(buf.data(), sizeof(char), size, file);
     if (bytes_read < std::size_t(size))
-        return std::nullopt;
+        return tl::unexpected(detail::make_error());
     fclose(file);
     return buf;
 }

@@ -162,41 +162,58 @@ Player::~Player()
 
 
 
-void Player::open_file_playlist(fs::path path)
+OpenPlaylistResult Player::open_file_playlist(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     clear_file_playlist();
-    auto try_open_file = [&](std::string_view name) -> std::optional<io::MappedFile> {
-        for (auto p : { fs::path(name), path.parent_path() / name })
-            if (auto contents = io::MappedFile::open(p); contents)
-                return contents;
-        return std::nullopt;
-    };
     auto file = io::File::open(path, io::Access::Read);
     if (!file) {
         fmt::print(stderr, "can't open file {}\n", path.c_str());
-        return;
+        return { .pl_error = file.error() };
     }
+
+    OpenPlaylistResult r = { .pl_error = std::error_code{} };
+
+    auto validate = [](const char *s) -> gme_err_t {
+        gme_type_t type;
+        auto err = gme_identify_file(s, &type);
+        if (type == nullptr)
+            return err;
+        return nullptr;
+    };
+
+    auto try_open_file = [&](std::string_view name) -> std::optional<io::MappedFile> {
+        for (auto p : { fs::path(name), path.parent_path() / name })
+            if (auto err = validate(p.c_str()); err)
+                r.errors.push_back(fmt::format("{}: {}", p.string(), err));
+            else if (auto f = io::MappedFile::open(p); !f)
+                r.errors.push_back(fmt::format("{}: {}", p.string(), f.error().message()));
+            else
+                return std::move(f.value());
+        return std::nullopt;
+    };
+
     for (std::string line; file.value().get_line(line); ) {
         if (auto contents = try_open_file(line); contents)
             files.cache.push_back(std::move(contents.value()));
         else
-            fmt::print(stderr, "can't open file {}\n", line);
+            r.not_opened.push_back(line);
     }
     files.order.resize(files.cache.size());
     generate_order(files.order, options.file_shuffle);
+    return r;
 }
 
-bool Player::add_file(fs::path path)
+std::error_code Player::add_file(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     auto file = io::MappedFile::open(path);
     if (!file)
-        return false;
+        return file.error();
     files.cache.push_back(std::move(file.value()));
     files.order.resize(files.cache.size());
     generate_order(files.order, options.file_shuffle);
-    return true;
+    return std::error_code{};
 }
 
 void Player::clear_file_playlist()

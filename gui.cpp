@@ -465,7 +465,27 @@ void MainWindow::load_shortcuts()
 
 void MainWindow::open_playlist(const QString &filename)
 {
-    player->open_file_playlist(filename.toUtf8().constData());
+    auto res = player->open_file_playlist(filename.toUtf8().constData());
+    if (res.pl_error != std::error_code{}) {
+        msgbox(QString("Couldn't open file %1 (%2).")
+            .arg(filename)
+            .arg(QString::fromStdString(res.pl_error.message())));
+        return;
+    }
+    if (res.not_opened.size() != 0) {
+        QMessageBox box;
+        box.setText("Errors were found while opening the playlist.");
+        box.setInformativeText("Check the details for the errors.");
+        QString text;
+        text += "Files not opened:\n";
+        for (auto &file : res.not_opened)
+            text += QString::fromStdString(file) + "\n";
+        text += "Errors found:\n";
+        for (auto &err : res.errors)
+            text += QString::fromStdString(err) + "\n";
+        box.setDetailedText(text);
+        box.exec();
+    }
     recent_playlists->add(filename);
     finish_opening();
 }
@@ -473,9 +493,11 @@ void MainWindow::open_playlist(const QString &filename)
 void MainWindow::open_single_file(QString filename)
 {
     player->clear_file_playlist();
-    bool err = player->add_file(filename.toStdString());
-    if (!err) {
-        msgbox(QString("Couldn't open file %1.").arg(filename));
+    auto err = player->add_file(filename.toStdString());
+    if (err != std::error_code()) {
+        msgbox(QString("Couldn't open file %1 (%2)")
+            .arg(filename)
+            .arg(QString::fromStdString(err.message())));
         return;
     }
     recent_files->add(filename);

@@ -40,6 +40,12 @@ struct PlayerOptions {
     int volume              = SDL_MIX_MAXVOLUME;
 };
 
+struct OpenPlaylistResult {
+    std::error_code pl_error;
+    std::vector<std::string> not_opened;
+    std::vector<std::string> errors;
+};
+
 class Player {
     // emulator and audio device objects.
     // a mutex is needed because audio plays in another thread.
@@ -88,8 +94,8 @@ public:
     Player(const Player &) = delete;
     Player & operator=(const Player &) = delete;
 
-    void open_file_playlist(std::filesystem::path path);
-    bool add_file(std::filesystem::path path);
+    OpenPlaylistResult open_file_playlist(std::filesystem::path path);
+    std::error_code add_file(std::filesystem::path path);
     void clear_file_playlist();
 
     int load_file(int fileno);
