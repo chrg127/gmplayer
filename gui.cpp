@@ -2,38 +2,33 @@
 
 #include <tuple>
 #include <QWidget>
-#include <QMenuBar>
 #include <QLabel>
 #include <QPushButton>
 #include <QLineEdit>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
-#include <QGridLayout>
 #include <QListWidget>
-#include <QStackedWidget>
-#include <QStatusBar>
-#include <QSizePolicy>
 #include <QTextEdit>
 #include <QComboBox>
 #include <QSlider>
-#include <QStyle>
 #include <QToolButton>
-#include <QFileDialog>
-#include <QListWidget>
-#include <QGroupBox>
 #include <QCheckBox>
 #include <QSpinBox>
 #include <QDialogButtonBox>
+#include <QGroupBox>
+#include <QMenuBar>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QGridLayout>
+#include <QFileDialog>
 #include <QSettings>
 #include <QCloseEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
-#include <QMimeData>
-#include <QDebug>
 #include <QMessageBox>
 #include <QShortcut>
 #include <QKeySequence>
 #include <QFileInfo>
+#include <QMimeData>
+#include <QDebug>
 #include <fmt/core.h>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
@@ -149,6 +144,8 @@ RecentList::RecentList(QMenu *menu, const QStringList &list)
     }
 }
 
+
+
 void RecentList::add(const QString &name)
 {
     auto it = std::remove(names.begin(), names.end(), name);
@@ -164,6 +161,100 @@ void RecentList::add(const QString &name)
         connect(act, &QAction::triggered, this, [=, this]() { emit clicked(path); });
         menu->addAction(act);
     }
+}
+
+
+
+SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
+{
+    auto options = player->get_options();
+    int length_ms = player->length();
+    length_ms = length_ms == 0 ? 10_min : length_ms;
+
+    auto *fade = new QCheckBox(tr("&Enable fade-out"));
+    fade->setChecked(options.fade_out_ms != 0);
+
+    auto *fade_secs = new QSpinBox;
+    fade_secs->setMaximum(length_ms / 1000);
+    fade_secs->setValue(options.fade_out_ms / 1000);
+    fade_secs->setEnabled(fade->isChecked());
+
+    connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
+        fade_secs->setEnabled(state);
+        if (!state)
+            fade_secs->setValue(0);
+    });
+
+    auto *default_duration = new QSpinBox;
+    default_duration->setMaximum(10_min / 1000);
+    default_duration->setValue(options.default_duration / 1000);
+
+    auto *silence_detection = new QCheckBox(tr("Do silence detection"));
+    silence_detection->setChecked(options.silence_detection == 1);
+
+    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
+                                          | QDialogButtonBox::Cancel);
+    connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
+        player->set_fade(fade_secs->value());
+        player->set_default_duration(default_duration->value());
+        player->set_silence_detection(silence_detection->isChecked());
+        accept();
+    });
+
+    connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    setLayout(make_layout<QVBoxLayout>(
+        fade,
+        label_pair("Fade seconds:", fade_secs),
+        label_pair("Default duration:", default_duration),
+        silence_detection,
+        button_box
+    ));
+}
+
+
+
+ShortcutsWindow::ShortcutsWindow(const std::map<QString, Shortcut> &shortcuts)
+{
+    auto *layout = new QFormLayout;
+    for (auto [_, obj] : shortcuts) {
+        auto *edit = new RecorderButton(obj.shortcut->key().toString());
+        layout->addRow(new QLabel(obj.display_name), edit);
+        connect(edit, &RecorderButton::released, this, [=, this] {
+            edit->setText("...");
+        });
+        connect(edit, &RecorderButton::got_key_sequence, this, [=, this](const auto &seq) {
+            edit->setText(seq.toString());
+            obj.shortcut->setKey(seq);
+        });
+    }
+
+    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
+                                          | QDialogButtonBox::Cancel);
+    connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
+        accept();
+    });
+    connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    setLayout(make_layout<QVBoxLayout>(layout, button_box));
+}
+
+
+
+RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *parent)
+    : QPushButton(text, parent)
+    , recorder(new KeyRecorder(this, key_count, this))
+{
+    connect(this, &QPushButton::released, this, [=, this] {
+        grabKeyboard();
+        grabMouse();
+        recorder->start();
+    });
+    connect(recorder, &KeyRecorder::got_key_sequence, this, [=, this] (const auto &keys) {
+        releaseMouse();
+        releaseKeyboard();
+        emit got_key_sequence(keys);
+    });
 }
 
 
@@ -615,91 +706,3 @@ void MainWindow::dropEvent(QDropEvent *event)
 }
 
 
-
-SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
-{
-    auto options = player->get_options();
-    int length_ms = player->length();
-    length_ms = length_ms == 0 ? 10_min : length_ms;
-
-    auto *fade = new QCheckBox(tr("&Enable fade-out"));
-    fade->setChecked(options.fade_out_ms != 0);
-
-    auto *fade_secs = new QSpinBox;
-    fade_secs->setMaximum(length_ms / 1000);
-    fade_secs->setValue(options.fade_out_ms / 1000);
-    fade_secs->setEnabled(fade->isChecked());
-
-    connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
-        fade_secs->setEnabled(state);
-        if (!state)
-            fade_secs->setValue(0);
-    });
-
-    auto *default_duration = new QSpinBox;
-    default_duration->setMaximum(10_min / 1000);
-    default_duration->setValue(options.default_duration / 1000);
-
-    auto *silence_detection = new QCheckBox(tr("Do silence detection"));
-    silence_detection->setChecked(options.silence_detection == 1);
-
-    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
-                                          | QDialogButtonBox::Cancel);
-    connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
-        player->set_fade(fade_secs->value());
-        player->set_default_duration(default_duration->value());
-        player->set_silence_detection(silence_detection->isChecked());
-        accept();
-    });
-
-    connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
-
-    setLayout(make_layout<QVBoxLayout>(
-        fade,
-        label_pair("Fade seconds:", fade_secs),
-        label_pair("Default duration:", default_duration),
-        silence_detection,
-        button_box
-    ));
-}
-
-ShortcutsWindow::ShortcutsWindow(const std::map<QString, Shortcut> &shortcuts)
-{
-    auto *layout = new QFormLayout;
-    for (auto [_, obj] : shortcuts) {
-        auto *edit = new RecorderButton(obj.shortcut->key().toString());
-        layout->addRow(new QLabel(obj.display_name), edit);
-        connect(edit, &RecorderButton::released, this, [=, this] {
-            edit->setText("...");
-        });
-        connect(edit, &RecorderButton::got_key_sequence, this, [=, this](const auto &seq) {
-            edit->setText(seq.toString());
-            obj.shortcut->setKey(seq);
-        });
-    }
-
-    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
-                                          | QDialogButtonBox::Cancel);
-    connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
-        accept();
-    });
-    connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
-
-    setLayout(make_layout<QVBoxLayout>(layout, button_box));
-}
-
-RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *parent)
-    : QPushButton(text, parent)
-    , recorder(new KeyRecorder(this, key_count, this))
-{
-    connect(this, &QPushButton::released, this, [=, this] {
-        grabKeyboard();
-        grabMouse();
-        recorder->start();
-    });
-    connect(recorder, &KeyRecorder::got_key_sequence, this, [=, this] (const auto &keys) {
-        releaseMouse();
-        releaseKeyboard();
-        emit got_key_sequence(keys);
-    });
-}

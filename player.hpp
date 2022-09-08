@@ -83,8 +83,6 @@ class Player {
     PlayerOptions options = {};
 
     void audio_callback(void *unused, uint8_t *stream, int stream_length);
-    int load_track_without_mutex(int num);
-
     friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
 
 public:

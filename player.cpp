@@ -90,8 +90,6 @@ void audio_callback(void *unused, u8 *stream, int stream_length)
 
 
 
-// private functions
-
 void Player::audio_callback(void *, u8 *stream, int len)
 {
     if (!emu)
@@ -116,24 +114,6 @@ void Player::audio_callback(void *, u8 *stream, int len)
     SDL_MixAudioFormat(stream, (const u8 *) buf, obtained.format, sizeof(buf), options.volume);
     position_changed(gme_tell(emu));
 }
-
-int Player::load_track_without_mutex(int trackno)
-{
-    tracks.current = trackno;
-    int num = tracks.order[trackno];
-    gme_track_info(emu, &track.metadata, num);
-    track.length = get_track_length(track.metadata, options.default_duration);
-    gme_start_track(emu, num);
-    if (track.length < options.fade_out_ms)
-        options.fade_out_ms = track.length;
-    if (options.fade_out_ms != 0)
-        gme_set_fade(emu, track.length - options.fade_out_ms);
-    gme_set_tempo(emu, options.tempo);
-    track_changed(num, track.metadata, track.length);
-    return num;
-}
-
-
 
 Player::Player()
     : options{{}}
@@ -251,10 +231,21 @@ int Player::load_file(int fileno)
     return num;
 }
 
-int Player::load_track(int index)
+int Player::load_track(int trackno)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return load_track_without_mutex(index);
+    tracks.current = trackno;
+    int num = tracks.order[trackno];
+    gme_track_info(emu, &track.metadata, num);
+    track.length = get_track_length(track.metadata, options.default_duration);
+    gme_start_track(emu, num);
+    if (track.length < options.fade_out_ms)
+        options.fade_out_ms = track.length;
+    if (options.fade_out_ms != 0)
+        gme_set_fade(emu, track.length - options.fade_out_ms);
+    gme_set_tempo(emu, options.tempo);
+    track_changed(num, track.metadata, track.length);
+    return num;
 }
 
 bool Player::can_play() const
