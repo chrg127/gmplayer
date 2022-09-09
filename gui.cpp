@@ -33,8 +33,10 @@
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
 #include "player.hpp"
+#include "io.hpp"
 
 
+namespace fs = std::filesystem;
 
 namespace {
 
@@ -398,29 +400,86 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     // track and file playlist
-    playlist = new QListWidget;
-    connect(playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *) {
-        player->load_track(playlist->currentRow());
+    track_playlist = new QListWidget;
+    track_playlist->setEnabled(false);
+    connect(track_playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *) {
+        player->load_track(track_playlist->currentRow());
     });
 
     file_playlist = new QListWidget;
+    file_playlist->setContextMenuPolicy(Qt::CustomContextMenu);
+    file_playlist->setEnabled(false);
     connect(file_playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *) {
         int fileno = file_playlist->currentRow();
         player->load_file(fileno);
         player->load_track(0);
         int trackno = player->load_track(0);
-        playlist->clear();
+        track_playlist->clear();
         player->track_names([&](const std::string &name) {
-            new QListWidgetItem(QString::fromStdString(name), playlist);
+            new QListWidgetItem(QString::fromStdString(name), track_playlist);
         });
-        playlist->setCurrentRow(trackno);
+        track_playlist->setCurrentRow(trackno);
     });
     player->on_file_changed([&](int fileno) {
-        playlist->clear();
+        track_playlist->clear();
         player->track_names([&](const std::string &name) {
-            new QListWidgetItem(QString::fromStdString(name), playlist);
+            new QListWidgetItem(QString::fromStdString(name), track_playlist);
         });
         file_playlist->setCurrentRow(fileno);
+    });
+    connect(file_playlist, &QWidget::customContextMenuRequested, this, [&](const QPoint &p) {
+        QPoint pos = file_playlist->mapToGlobal(p);
+        QMenu menu;
+        menu.addAction("Add to playlist...",    [&]() {
+            auto filename = QFileDialog::getOpenFileName(
+                this,
+                tr("Open file"),
+                last_file,
+                "Game music files (*.spc *.nsf)"
+            );
+            if (filename.isEmpty())
+                return;
+            last_file = filename;
+            auto err = player->add_file(filename.toStdString());
+            if (err != std::error_code()) {
+                msgbox(QString("Couldn't open file %1 (%2)")
+                    .arg(filename)
+                    .arg(QString::fromStdString(err.message())));
+                return;
+            }
+            file_playlist->clear();
+            player->file_names([&](const std::string &s) {
+                new QListWidgetItem(QString::fromStdString(s), file_playlist);
+            });
+            next_track->setEnabled(bool(player->get_next()));
+            prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
+        });
+        menu.addAction("Remove from playlist",  [&]() {
+            player->remove_file(file_playlist->currentRow());
+            file_playlist->clear();
+            player->file_names([&](const std::string &s) {
+                new QListWidgetItem(QString::fromStdString(s), file_playlist);
+            });
+            next_track->setEnabled(bool(player->get_next()));
+            prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
+        });
+        menu.addAction("Save playlist",         [&]() {
+            auto filename = QFileDialog::getSaveFileName(
+                this,
+                tr("Save playlist"),
+                last_playlist,
+                "Playlist files (*.playlist)"
+            );
+            if (auto f = io::File::open(fs::path(filename.toStdString()), io::Access::Write); f)
+                player->save_file_playlist(f.value());
+            else {
+                msgbox(QString("Couldn't open file %1. (%2)")
+                    .arg(filename)
+                    .arg(QString::fromStdString(f.error().message())));
+                return;
+            }
+        });
+        menu.exec(pos);
     });
 
     // playlist settings
@@ -477,7 +536,7 @@ MainWindow::MainWindow(QWidget *parent)
         duration_slider->setRange(0, player->effective_length());
         next_track->setEnabled(bool(player->get_next()));
         prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
-        playlist->setCurrentRow(num);
+        track_playlist->setCurrentRow(num);
         start_or_resume();
     });
 
@@ -497,7 +556,7 @@ MainWindow::MainWindow(QWidget *parent)
                 ),
                 make_layout<QVBoxLayout>(
                     make_layout<QHBoxLayout>(
-                        make_layout<QVBoxLayout>(new QLabel("Track playlist"), playlist),
+                        make_layout<QVBoxLayout>(new QLabel("Track playlist"), track_playlist),
                         make_layout<QVBoxLayout>(new QLabel("File playlist"), file_playlist)
                     ),
                     box
@@ -606,11 +665,11 @@ void MainWindow::finish_opening()
     file_playlist->setCurrentRow(fileno);
     // load first track in the file's track playlist
     int trackno = player->load_track(0);
-    playlist->clear();
+    track_playlist->clear();
     player->track_names([&](const std::string &name) {
-        new QListWidgetItem(QString::fromStdString(name), playlist);
+        new QListWidgetItem(QString::fromStdString(name), track_playlist);
     });
-    playlist->setCurrentRow(trackno);
+    track_playlist->setCurrentRow(trackno);
     // enable everything else
     play_btn->set_state(PlayButton::State::Play);
     duration_slider->setEnabled(true);
@@ -626,6 +685,8 @@ void MainWindow::finish_opening()
     repeat_file->setEnabled(true);
     shuffle_tracks->setEnabled(true);
     shuffle_files->setEnabled(true);
+    track_playlist->setEnabled(true);
+    file_playlist->setEnabled(true);
 }
 
 void MainWindow::start_or_resume()

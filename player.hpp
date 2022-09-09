@@ -12,7 +12,10 @@
 
 class Music_Emu;
 class gme_info_t;
-namespace io { class MappedFile; }
+namespace io {
+    class File;
+    class MappedFile;
+}
 
 using gme_err_t = const char *;
 
@@ -94,6 +97,8 @@ public:
 
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
     std::error_code add_file(std::filesystem::path path);
+    void remove_file(int fileno);
+    void save_file_playlist(io::File &to);
     void clear_file_playlist();
 
     int load_file(int fileno);

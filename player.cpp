@@ -196,6 +196,21 @@ std::error_code Player::add_file(fs::path path)
     return std::error_code{};
 }
 
+void Player::remove_file(int fileno)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    files.cache.erase(files.cache.begin() + fileno);
+    files.order.resize(files.cache.size());
+    generate_order(files.order, options.file_shuffle);
+}
+
+void Player::save_file_playlist(io::File &to)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    for (auto &file : files.cache)
+        fmt::print(to.data(), "{}\n", file.file_path().string());
+}
+
 void Player::clear_file_playlist()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
