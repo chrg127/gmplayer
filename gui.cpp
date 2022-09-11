@@ -455,7 +455,10 @@ MainWindow::MainWindow(QWidget *parent)
             prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
         });
         menu.addAction("Remove from playlist",  [&]() {
-            player->remove_file(file_playlist->currentRow());
+            if (!player->remove_file(file_playlist->currentRow())) {
+                msgbox("Cannot remove currently playing file!");
+                return;
+            }
             file_playlist->clear();
             player->file_names([&](const std::string &s) {
                 new QListWidgetItem(QString::fromStdString(s), file_playlist);

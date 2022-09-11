@@ -97,7 +97,7 @@ public:
 
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
     std::error_code add_file(std::filesystem::path path);
-    void remove_file(int fileno);
+    bool remove_file(int fileno);
     void save_file_playlist(io::File &to);
     void clear_file_playlist();
 
