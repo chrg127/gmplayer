@@ -118,8 +118,10 @@ public:
     int position();
     int length() const;
     int effective_length() const;
-    void file_names(std::function<void(const std::string &)> f) const;
-    void track_names(std::function<void(const std::string &)> f) const;
+    std::vector<std::string> file_names() const;
+    std::vector<std::string> track_names() const;
+    void shuffle_tracks();
+    void shuffle_files();
 
     PlayerOptions & get_options();
     void set_fade(int secs);
@@ -128,9 +130,7 @@ public:
     void set_default_duration(int secs);
     void set_autoplay(bool value);
     void set_track_repeat(bool value);
-    void set_track_shuffle(bool value);
     void set_file_repeat(bool value);
-    void set_file_shuffle(bool value);
     void set_volume(int value);
 
     void on_track_changed(auto &&fn)    { track_changed    = fn; }

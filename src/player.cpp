@@ -180,7 +180,7 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
             r.not_opened.push_back(line);
     }
     files.order.resize(files.cache.size());
-    generate_order(files.order, options.file_shuffle);
+    generate_order(files.order, false);
     return r;
 }
 
@@ -192,7 +192,7 @@ std::error_code Player::add_file(fs::path path)
         return file.error();
     files.cache.push_back(std::move(file.value()));
     files.order.resize(files.cache.size());
-    generate_order(files.order, options.file_shuffle);
+    generate_order(files.order, false);
     return std::error_code{};
 }
 
@@ -203,7 +203,7 @@ bool Player::remove_file(int fileno)
         return false;
     files.cache.erase(files.cache.begin() + fileno);
     files.order.resize(files.cache.size());
-    generate_order(files.order, options.file_shuffle);
+    generate_order(files.order, false);
     return true;
 }
 
@@ -244,7 +244,7 @@ int Player::load_file(int fileno)
 #endif
     tracks.count = gme_track_count(emu);
     tracks.order.resize(tracks.count);
-    generate_order(tracks.order, options.track_shuffle);
+    generate_order(tracks.order, false);
     file_changed(num);
     return num;
 }
@@ -377,21 +377,54 @@ int Player::effective_length() const
         : std::min<int>(track.length, track.length - options.fade_out_ms + 8_sec);
 }
 
-void Player::file_names(std::function<void(const std::string &)> f) const
+std::vector<std::string> Player::file_names() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    for (auto &file : files.cache)
-        f(file.file_path().stem().string());
+    std::vector<std::string> names;
+    for (auto i : files.order)
+        names.push_back(files.cache[i].file_path().stem().string());
+    return names;
 }
 
-void Player::track_names(std::function<void(const std::string &)> f) const
+std::vector<std::string> Player::track_names() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    for (int i = 0; i < tracks.count; i++) {
+    std::vector<std::string> names;
+    for (auto i : tracks.order) {
         gme_info_t *info;
         gme_track_info(emu, &info, i);
-        f(info->song[0] == '\0' ? fmt::format("Track {}", i) : info->song);
+        names.push_back(info->song[0] == '\0' ? fmt::format("Track {}", i) : info->song);
     }
+    return names;
+}
+
+// void Player::file_names(std::function<void(const std::string &)> f) const
+// {
+//     std::lock_guard<SDLMutex> lock(audio_mutex);
+//     for (auto &file : files.cache)
+//         f(file.file_path().stem().string());
+// }
+
+// void Player::track_names(std::function<void(const std::string &)> f) const
+// {
+//     std::lock_guard<SDLMutex> lock(audio_mutex);
+//     for (int i = 0; i < tracks.count; i++) {
+//         gme_info_t *info;
+//         gme_track_info(emu, &info, i);
+//         f(info->song[0] == '\0' ? fmt::format("Track {}", i) : info->song);
+//     }
+// }
+
+void Player::shuffle_tracks()
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    generate_order(tracks.order, true);
+}
+
+void Player::shuffle_files()
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    generate_order(files.order, true);
 }
 
 
@@ -445,24 +478,10 @@ void Player::set_track_repeat(bool value)
     options.track_repeat = value;
 }
 
-void Player::set_track_shuffle(bool value)
-{
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    options.track_shuffle = value;
-    generate_order(tracks.order, options.track_shuffle);
-}
-
 void Player::set_file_repeat(bool value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.file_repeat = value;
-}
-
-void Player::set_file_shuffle(bool value)
-{
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    options.file_shuffle = value;
-    generate_order(files.order, options.file_shuffle);
 }
 
 void Player::set_volume(int value)

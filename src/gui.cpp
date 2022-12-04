@@ -261,6 +261,32 @@ RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *pare
 
 
 
+PlaylistWidget::PlaylistWidget(const QString &name, QWidget *parent)
+    : QWidget(parent)
+{
+    list = new QListWidget;
+    shuffle = new QPushButton("Shuffle");
+    connect(list, &QListWidget::itemActivated, this, &PlaylistWidget::item_activated);
+    connect(shuffle, &QPushButton::released, this, &PlaylistWidget::shuffle_selected);
+    setLayout(make_layout<QVBoxLayout>(new QLabel(name), list, shuffle));
+}
+
+void PlaylistWidget::update_names(int n, std::vector<std::string> &&names)
+{
+    list->clear();
+    for (auto &name : names)
+        new QListWidgetItem(QString::fromStdString(name), list);
+    list->setCurrentRow(n);
+}
+
+void PlaylistWidget::setup_context_menu(std::function<void(const QPoint &)> fn)
+{
+    list->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(list, &QWidget::customContextMenuRequested, this, fn);
+}
+
+
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -400,35 +426,34 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     // track and file playlist
-    track_playlist = new QListWidget;
+    track_playlist = new PlaylistWidget("Track playlist");
     track_playlist->setEnabled(false);
-    connect(track_playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *) {
-        player->load_track(track_playlist->currentRow());
+    connect(track_playlist, &PlaylistWidget::item_activated, this, [&]() {
+        player->load_track(track_playlist->list->currentRow());
+    });
+    connect(track_playlist, &PlaylistWidget::shuffle_selected, this, [&]() {
+        player->shuffle_tracks();
+        track_playlist->update_names(0, player->track_names());
     });
 
-    file_playlist = new QListWidget;
-    file_playlist->setContextMenuPolicy(Qt::CustomContextMenu);
+    file_playlist = new PlaylistWidget("File playlist");
     file_playlist->setEnabled(false);
-    connect(file_playlist, &QListWidget::itemActivated, this, [&](QListWidgetItem *) {
-        int fileno = file_playlist->currentRow();
-        player->load_file(fileno);
-        player->load_track(0);
-        int trackno = player->load_track(0);
-        track_playlist->clear();
-        player->track_names([&](const std::string &name) {
-            new QListWidgetItem(QString::fromStdString(name), track_playlist);
-        });
-        track_playlist->setCurrentRow(trackno);
+    connect(file_playlist, &PlaylistWidget::item_activated, this, [&]() {
+        player->load_file(file_playlist->list->currentRow());
+        track_playlist->update_names(player->load_track(0), player->track_names());
     });
+    connect(file_playlist, &PlaylistWidget::shuffle_selected, this, [&]() {
+        player->shuffle_files();
+        file_playlist->update_names(0, player->file_names());
+    });
+
     player->on_file_changed([&](int fileno) {
-        track_playlist->clear();
-        player->track_names([&](const std::string &name) {
-            new QListWidgetItem(QString::fromStdString(name), track_playlist);
-        });
-        file_playlist->setCurrentRow(fileno);
+        track_playlist->update_names(0, player->track_names());
+        file_playlist->list->setCurrentRow(fileno);
     });
-    connect(file_playlist, &QWidget::customContextMenuRequested, this, [&](const QPoint &p) {
-        QPoint pos = file_playlist->mapToGlobal(p);
+
+    file_playlist->setup_context_menu([&](const QPoint &p) {
+        QPoint pos = file_playlist->list->mapToGlobal(p);
         QMenu menu;
         menu.addAction("Add to playlist...",    [&]() {
             auto filename = QFileDialog::getOpenFileName(
@@ -447,22 +472,16 @@ MainWindow::MainWindow(QWidget *parent)
                     .arg(QString::fromStdString(err.message())));
                 return;
             }
-            file_playlist->clear();
-            player->file_names([&](const std::string &s) {
-                new QListWidgetItem(QString::fromStdString(s), file_playlist);
-            });
+            file_playlist->update_names(0, player->file_names());
             next_track->setEnabled(bool(player->get_next()));
             prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
         });
         menu.addAction("Remove from playlist",  [&]() {
-            if (!player->remove_file(file_playlist->currentRow())) {
+            if (!player->remove_file(file_playlist->list->currentRow())) {
                 msgbox("Cannot remove currently playing file!");
                 return;
             }
-            file_playlist->clear();
-            player->file_names([&](const std::string &s) {
-                new QListWidgetItem(QString::fromStdString(s), file_playlist);
-            });
+            file_playlist->update_names(0, player->file_names());
             next_track->setEnabled(bool(player->get_next()));
             prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
         });
@@ -494,16 +513,12 @@ MainWindow::MainWindow(QWidget *parent)
     } while (0)
 
     PLAYER_SETTING(autoplay,       "Autoplay",          autoplay);
-    PLAYER_SETTING(shuffle_tracks, "Shuffle tracks",    track_shuffle);
-    PLAYER_SETTING(shuffle_files,  "Shuffle files",     file_shuffle);
     PLAYER_SETTING(repeat_track,   "Repeat track",      track_repeat);
     PLAYER_SETTING(repeat_file,    "Repeat file",       file_repeat);
 
 #undef PLAYER_SETTING
 
     connect(autoplay,       &QCheckBox::stateChanged, this, [=, this] (int state) { player->set_autoplay(state); });
-    connect(shuffle_tracks, &QCheckBox::stateChanged, this, [=, this] (int state) { player->set_track_shuffle(state); });
-    connect(shuffle_files,  &QCheckBox::stateChanged, this, [=, this] (int state) { player->set_file_shuffle(state); });
     connect(repeat_track,   &QCheckBox::stateChanged, this, [=, this] (int state) {
         player->set_track_repeat(state);
         next_track->setEnabled(bool(player->get_next()));
@@ -518,9 +533,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *box = make_groupbox<QGridLayout>("Playlist settings",
         std::make_tuple(autoplay,       0, 0),
         std::make_tuple(repeat_track,   1, 0),
-        std::make_tuple(repeat_file,    1, 1),
-        std::make_tuple(shuffle_tracks, 2, 0),
-        std::make_tuple(shuffle_files,  2, 1)
+        std::make_tuple(repeat_file,    1, 1)
     );
 
     // track information
@@ -539,7 +552,7 @@ MainWindow::MainWindow(QWidget *parent)
         duration_slider->setRange(0, player->effective_length());
         next_track->setEnabled(bool(player->get_next()));
         prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
-        track_playlist->setCurrentRow(num);
+        track_playlist->list->setCurrentRow(num);
         start_or_resume();
     });
 
@@ -558,10 +571,7 @@ MainWindow::MainWindow(QWidget *parent)
                     std::make_tuple(new QLabel(tr("Comment:")), comment)
                 ),
                 make_layout<QVBoxLayout>(
-                    make_layout<QHBoxLayout>(
-                        make_layout<QVBoxLayout>(new QLabel("Track playlist"), track_playlist),
-                        make_layout<QVBoxLayout>(new QLabel("File playlist"), file_playlist)
-                    ),
+                    make_layout<QHBoxLayout>(track_playlist, file_playlist),
                     box
                 )
             ),
@@ -660,19 +670,9 @@ void MainWindow::open_single_file(QString filename)
 void MainWindow::finish_opening()
 {
     // load first file in file playlist
-    int fileno = player->load_file(0);
-    file_playlist->clear();
-    player->file_names([&](const std::string &s) {
-        new QListWidgetItem(QString::fromStdString(s), file_playlist);
-    });
-    file_playlist->setCurrentRow(fileno);
+    file_playlist->update_names(player->load_file(0), player->file_names());
     // load first track in the file's track playlist
-    int trackno = player->load_track(0);
-    track_playlist->clear();
-    player->track_names([&](const std::string &name) {
-        new QListWidgetItem(QString::fromStdString(name), track_playlist);
-    });
-    track_playlist->setCurrentRow(trackno);
+    track_playlist->update_names(player->load_track(0), player->track_names());
     // enable everything else
     play_btn->set_state(PlayButton::State::Play);
     duration_slider->setEnabled(true);
@@ -686,10 +686,8 @@ void MainWindow::finish_opening()
     autoplay->setEnabled(true);
     repeat_track->setEnabled(true);
     repeat_file->setEnabled(true);
-    shuffle_tracks->setEnabled(true);
-    shuffle_files->setEnabled(true);
-    track_playlist->setEnabled(true);
     file_playlist->setEnabled(true);
+    track_playlist->setEnabled(true);
 }
 
 void MainWindow::start_or_resume()
@@ -720,14 +718,6 @@ void MainWindow::stop()
     }
 }
 
-void MainWindow::closeEvent(QCloseEvent *event)
-{
-    save_player_settings(player->get_options());
-    save_recent(recent_files->filenames(), recent_playlists->filenames());
-    save_shortcuts(shortcuts);
-    event->accept();
-}
-
 void MainWindow::edit_settings()
 {
     auto *wnd = new SettingsWindow(player, this);
@@ -744,6 +734,14 @@ void MainWindow::edit_shortcuts()
 {
     auto *wnd = new ShortcutsWindow(shortcuts);
     wnd->open();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    save_player_settings(player->get_options());
+    save_recent(recent_files->filenames(), recent_playlists->filenames());
+    save_shortcuts(shortcuts);
+    event->accept();
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
@@ -768,5 +766,3 @@ void MainWindow::dropEvent(QDropEvent *event)
     open_single_file(url.toLocalFile());
     event->acceptProposedAction();
 }
-
-

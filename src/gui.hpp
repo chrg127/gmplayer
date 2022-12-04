@@ -34,17 +34,17 @@ signals:
     void pause();
 };
 
-struct Shortcut {
-    QShortcut *shortcut;
-    QString name;
-    QString display_name;
-};
-
 class SettingsWindow : public QDialog {
     Q_OBJECT
     Player *player;
 public:
     explicit SettingsWindow(Player *player, QWidget *parent = nullptr);
+};
+
+struct Shortcut {
+    QShortcut *shortcut;
+    QString name;
+    QString display_name;
 };
 
 class ShortcutsWindow : public QDialog {
@@ -76,27 +76,42 @@ signals:
     void clicked(const QString &filename);
 };
 
+class PlaylistWidget : public QWidget {
+    Q_OBJECT
+public:
+    QListWidget *list;
+    QPushButton *shuffle;
+
+    explicit PlaylistWidget(const QString &name, QWidget *parent = nullptr);
+    void update_names(int n, std::vector<std::string> &&names);
+    void setup_context_menu(std::function<void(const QPoint &)> fn);
+signals:
+    void item_activated();
+    void shuffle_selected();
+};
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
-    Player *player;
-    QSlider *duration_slider, *volume;
-    QLabel *duration_label;
+    Player  *player;
     QString last_file = ".";
     QString last_playlist = ".";
+    std::map<QString, Shortcut> shortcuts;
+    bool was_paused = false;
+    // widgets
+    QSlider *duration_slider, *volume;
+    QLabel  *duration_label;
     PlayButton *play_btn;
     QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
     QComboBox *tempo;
-    QListWidget *track_playlist, *file_playlist;
-    QCheckBox *autoplay, *repeat_track, *repeat_file, *shuffle_tracks, *shuffle_files;
-    std::map<QString, Shortcut> shortcuts;
-    bool was_paused = false;
+    PlaylistWidget *track_playlist, *file_playlist;
+    QCheckBox *autoplay, *repeat_track, *repeat_file;
     RecentList *recent_files, *recent_playlists;
 
+    void load_shortcuts();
     void open_playlist(const QString &filename);
     void open_single_file(QString filename);
     void finish_opening();
-    void load_shortcuts();
     void start_or_resume();
     void pause();
     void stop();
