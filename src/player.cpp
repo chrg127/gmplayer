@@ -1,5 +1,6 @@
 #include "player.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -58,9 +59,8 @@ namespace {
     void generate_order(std::span<int> buf, bool shuffle)
     {
         std::iota(buf.begin(), buf.end(), 0);
-        if (shuffle) {
-            rng::shuffle_in_place(buf);
-        }
+        if (shuffle)
+            std::shuffle(buf.begin(), buf.end(), rng::rng);
     }
 
     /*
