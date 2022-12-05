@@ -78,13 +78,18 @@ signals:
 
 class PlaylistWidget : public QWidget {
     Q_OBJECT
-public:
+
     QListWidget *list;
     QPushButton *shuffle;
-
+public:
     explicit PlaylistWidget(const QString &name, QWidget *parent = nullptr);
     void update_names(int n, std::vector<std::string> &&names);
     void setup_context_menu(std::function<void(const QPoint &)> fn);
+    void set_current(int n);
+    int current();
+    QPoint map_point(const QPoint &p);
+    QListWidget *playlist()    const { return list; }
+    QPushButton *shuffle_btn() const { return shuffle; }
 signals:
     void item_activated();
     void shuffle_selected();
@@ -104,9 +109,10 @@ class MainWindow : public QMainWindow {
     PlayButton *play_btn;
     QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
     QComboBox *tempo;
-    PlaylistWidget *track_playlist, *file_playlist;
+    PlaylistWidget *tracklist, *filelist;
     QCheckBox *autoplay, *repeat_track, *repeat_file;
     RecentList *recent_files, *recent_playlists;
+    std::vector<QWidget *> to_enable;
 
     void load_shortcuts();
     void open_playlist(const QString &filename);
@@ -121,6 +127,18 @@ class MainWindow : public QMainWindow {
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);
+
+    void add_to_enable(auto... objects)
+    {
+        (to_enable.push_back(objects), ...);
+    }
+
+    void update_next_prev_track()
+    {
+        next_track->setEnabled(bool(player->get_next()));
+        prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
+    }
+
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 };

@@ -62,3 +62,11 @@ QMenu *create_menu(T *window, const char *name, auto&&... actions)
     (f(actions), ...);
     return menu;
 }
+
+QCheckBox *make_checkbox(const QString &name, bool checked, QObject *o, auto &&fn)
+{
+    auto c = new QCheckBox(name);
+    c->setChecked(checked);
+    QObject::connect(c, &QCheckBox::stateChanged, o, fn);
+    return c;
+}
