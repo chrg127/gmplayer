@@ -18,10 +18,12 @@ find_package(SDL2 REQUIRED)
 find_package(fmt REQUIRED)
 
 include_directories(${SDL2_INCLUDE_DIRS})
-include_directories(gme/include)
-include_directories(.)
-link_directories(gme/lib)
+include_directories(external/include)
+link_directories(external/lib)
 
-add_executable(gmplayer src/main.cpp src/gui.cpp src/player.cpp src/keyrecorder.cpp)
+add_executable(gmplayer src/main.cpp
+                        src/gui.cpp
+                        src/player.cpp
+                        src/keyrecorder.cpp)
 
 target_link_libraries(gmplayer Qt5::Widgets ${SDL2_LIBRARIES} fmt pthread gme)

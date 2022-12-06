@@ -8,7 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <external/expected.hpp>
+#include <expected.hpp>
 #include "common.hpp"
 
 #if defined(PLATFORM_LINUX)
