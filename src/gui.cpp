@@ -29,6 +29,10 @@
 #include <QFileInfo>
 #include <QMimeData>
 #include <QDebug>
+#include <QVariant>
+#include <QVariantMap>
+#include <Mpris>
+#include <MprisPlayer>
 #include <fmt/core.h>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
@@ -135,6 +139,8 @@ void PlayButton::set_state(State state)
     setIcon(style()->standardIcon(state == State::Pause ? QStyle::SP_MediaPlay
                                                         : QStyle::SP_MediaPause));
 }
+
+
 
 RecentList::RecentList(QMenu *menu, const QStringList &list)
     : menu(menu), names(std::move(list))
@@ -286,6 +292,13 @@ void PlaylistWidget::set_current(int n) { list->setCurrentRow(n); }
 int  PlaylistWidget::current()          { return list->currentRow(); }
 QPoint PlaylistWidget::map_point(const QPoint &p) { return list->mapToGlobal(p); }
 
+QVariantMap make_metadata(auto&&... args)
+{
+    QVariantMap map;
+    (map.insert(Mpris::metadataToString(std::get<0>(args)), QVariant(std::get<1>(args))), ...);
+    return map;
+}
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -298,6 +311,43 @@ MainWindow::MainWindow(QWidget *parent)
     player = new Player;
     PlayerOptions options = load_player_settings();
     player->get_options() = options;
+
+    mpris = new MprisPlayer(this);
+    mpris->setCanGoNext(true);
+    mpris->setServiceName("fuckyou");
+    mpris->setCanQuit(true);
+    mpris->setCanRaise(false);
+    mpris->setCanSetFullscreen(false);
+    // mpris->setDesktopEntry();
+    mpris->setHasTrackList(true);
+    mpris->setIdentity("gmplayer");
+    mpris->setSupportedUriSchemes(QStringList{"file"});
+    // mpris->setSupportedMimeTypes();
+    mpris->setCanControl(true);
+    mpris->setCanGoNext(true);
+    mpris->setCanGoPrevious(true);
+    mpris->setCanPause(true);
+    mpris->setCanPlay(true);
+    mpris->setCanSeek(true);
+    mpris->setLoopStatus(Mpris::LoopStatus::None);
+    mpris->setMaximumRate(2.0);
+    mpris->setMinimumRate(0.5);
+    mpris->setMetadata(make_metadata());
+    mpris->setPlaybackStatus(Mpris::PlaybackStatus::Stopped);
+    mpris->setPosition(0);
+    mpris->setRate(1.0);
+    mpris->setShuffle(false);
+    mpris->setVolume(1.0);
+
+    connect(mpris, &MprisPlayer::pauseRequested, this, [=, this] { pause(); });
+    connect(mpris, &MprisPlayer::playRequested,  this, [=, this] { start_or_resume(); });
+    connect(mpris, &MprisPlayer::playPauseRequested,  this, [=, this] {
+        fmt::print("play pause requested\n");
+        if (player->is_playing())
+            pause();
+        else
+            start_or_resume();
+    });
 
     auto *file_menu = create_menu(this, "&File",
         std::make_tuple("Open file", [=, this] () {
@@ -329,9 +379,9 @@ MainWindow::MainWindow(QWidget *parent)
     );
 
     auto [files, playlists] = load_recent_files();
-    recent_files = new RecentList(file_menu->addMenu(tr("&Recent files")), files);
-    connect(recent_files, &RecentList::clicked, this, [=, this](const QString &name) { open_single_file(name); });
+    recent_files     = new RecentList(file_menu->addMenu(tr("&Recent files")), files);
     recent_playlists = new RecentList(file_menu->addMenu(tr("R&ecent playlists")), playlists);
+    connect(recent_files,     &RecentList::clicked, this, [=, this](const QString &name) { open_single_file(name); });
     connect(recent_playlists, &RecentList::clicked, this, [=, this](const QString &name) { open_playlist(name); });
 
     create_menu(this, "&Edit",
@@ -378,8 +428,8 @@ MainWindow::MainWindow(QWidget *parent)
     stop_btn   = make_btn(QStyle::SP_MediaStop,         &MainWindow::stop);
 
     play_btn = new PlayButton;
-    connect(play_btn, &PlayButton::play,  this, [=, this]() { player->start_or_resume(); });
-    connect(play_btn, &PlayButton::pause, this, [=, this]() { player->pause(); });
+    connect(play_btn, &PlayButton::play,  this, [=, this]() { start_or_resume(); });
+    connect(play_btn, &PlayButton::pause, this, [=, this]() { pause(); });
 
     player->on_track_ended([=, this]() {
         play_btn->set_state(PlayButton::State::Pause);
@@ -445,6 +495,13 @@ MainWindow::MainWindow(QWidget *parent)
         duration_slider->setRange(0, player->effective_length());
         update_next_prev_track();
         tracklist->set_current(num);
+
+        mpris->setMetadata(make_metadata(
+            std::tuple{ Mpris::Metadata::Title,  QString(info->song) },
+            std::tuple{ Mpris::Metadata::Album,  QString(info->game) },
+            std::tuple{ Mpris::Metadata::Artist, QString(info->author) }
+        ));
+
         start_or_resume();
     });
 
@@ -596,7 +653,7 @@ void MainWindow::load_shortcuts()
     };
 
     settings.beginGroup("shortcuts");
-    add_shortcut("play", "Play/Pause", "Ctrl+Space",        [=, this] { player->is_playing() ? pause() : start_or_resume(); });
+    add_shortcut("play", "Play/Pause",      "Ctrl+Space",   [=, this] { player->is_playing() ? pause() : start_or_resume(); });
     add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { if (player->can_play()) player->next();    });
     add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { if (player->can_play()) player->prev();    });
     add_shortcut("stop",  "Stop",           "Ctrl+S",       &MainWindow::stop);
@@ -663,6 +720,7 @@ void MainWindow::start_or_resume()
     if (player->can_play()) {
         player->start_or_resume();
         play_btn->set_state(PlayButton::State::Play);
+        mpris->setPlaybackStatus(Mpris::PlaybackStatus::Playing);
     }
 }
 
@@ -671,6 +729,7 @@ void MainWindow::pause()
     if (player->can_play()) {
         player->pause();
         play_btn->set_state(PlayButton::State::Pause);
+        mpris->setPlaybackStatus(Mpris::PlaybackStatus::Paused);
     }
 }
 

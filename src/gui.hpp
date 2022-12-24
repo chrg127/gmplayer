@@ -22,6 +22,7 @@ class QGroupBox;
 class QShortcut;
 class QComboBox;
 class QMenu;
+class MprisPlayer;
 
 class PlayButton : public QToolButton {
     Q_OBJECT
@@ -98,7 +99,7 @@ signals:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
-    Player  *player;
+    Player *player;
     QString last_file = ".";
     QString last_playlist = ".";
     std::map<QString, Shortcut> shortcuts;
@@ -113,6 +114,7 @@ class MainWindow : public QMainWindow {
     QCheckBox *autoplay, *repeat_track, *repeat_file;
     RecentList *recent_files, *recent_playlists;
     std::vector<QWidget *> to_enable;
+    MprisPlayer *mpris;
 
     void load_shortcuts();
     void open_playlist(const QString &filename);
