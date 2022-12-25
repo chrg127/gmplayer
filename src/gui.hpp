@@ -101,7 +101,6 @@ class MainWindow : public QMainWindow {
 
     Player *player;
     QString last_file = ".";
-    QString last_playlist = ".";
     std::map<QString, Shortcut> shortcuts;
     bool was_paused = false;
     // widgets
@@ -125,6 +124,7 @@ class MainWindow : public QMainWindow {
     void stop();
     void edit_settings();
     void edit_shortcuts();
+
     // listeners to events sent by qt
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
