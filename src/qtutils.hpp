@@ -43,10 +43,12 @@ QFormLayout *label_pair(const char *text, T *widget)
     });
 }
 
-inline void msgbox(const QString &msg)
+inline void msgbox(const QString &msg, const QString &info = "", const QString &details = "")
 {
     QMessageBox box;
     box.setText(msg);
+    box.setInformativeText(info);
+    box.setDetailedText(details);
     box.exec();
 }
 
@@ -69,4 +71,28 @@ QCheckBox *make_checkbox(const QString &name, bool checked, QObject *o, auto &&f
     c->setChecked(checked);
     QObject::connect(c, &QCheckBox::stateChanged, o, fn);
     return c;
+}
+
+QCheckBox *make_checkbox(const QString &name, bool checked)
+{
+    auto c = new QCheckBox(name);
+    c->setChecked(checked);
+    return c;
+}
+
+QComboBox *make_combo(int cur, auto&&... args)
+{
+    auto *b = new QComboBox;
+    (b->addItem(std::get<0>(args), std::get<1>(args)), ...);
+    b->setCurrentIndex(cur);
+    return b;
+}
+
+QSpinBox *make_spinbox(int maximum, int value, bool enabled = true)
+{
+    auto *s = new QSpinBox;
+    s->setMaximum(maximum);
+    s->setValue(value);
+    s->setEnabled(enabled);
+    return s;
 }

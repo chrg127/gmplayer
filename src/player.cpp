@@ -181,6 +181,7 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
     }
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
+    file_order_changed(file_names());
     return r;
 }
 
@@ -193,6 +194,7 @@ std::error_code Player::add_file(fs::path path)
     files.cache.push_back(std::move(file.value()));
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
+    file_order_changed(file_names());
     return std::error_code{};
 }
 
@@ -204,6 +206,7 @@ bool Player::remove_file(int fileno)
     files.cache.erase(files.cache.begin() + fileno);
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
+    file_order_changed(file_names());
     return true;
 }
 
@@ -220,6 +223,7 @@ void Player::clear_file_playlist()
     files.cache.clear();
     files.order.clear();
     files.current = -1;
+    file_order_changed(file_names());
 }
 
 int Player::load_file(int fileno)
@@ -243,6 +247,7 @@ int Player::load_file(int fileno)
     tracks.count = gme_track_count(emu);
     tracks.order.resize(tracks.count);
     generate_order(tracks.order, false);
+    track_order_changed(track_names());
     file_changed(fileno);
     return num;
 }
@@ -283,12 +288,32 @@ void Player::start_or_resume()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     SDL_PauseAudioDevice(dev_id, 0);
+    played();
 }
 
 void Player::pause()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     SDL_PauseAudioDevice(dev_id, 1);
+    paused();
+}
+
+void Player::play_pause()
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    if (is_playing())
+        pause();
+    else
+        start_or_resume();
+}
+
+void Player::stop()
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    load_file(0);
+    load_track(0);
+    pause();
+    stopped();
 }
 
 void Player::next()
@@ -326,6 +351,7 @@ void Player::seek(int ms)
         gme_set_fade(emu, track.length - options.fade_out_ms);
 }
 
+void Player::seek_relative(int off) { seek(position() + off); }
 
 
 std::optional<std::pair<int, int>> Player::get_next() const
@@ -400,12 +426,14 @@ void Player::shuffle_tracks()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     generate_order(tracks.order, true);
+    track_order_changed(track_names());
 }
 
 void Player::shuffle_files()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     generate_order(files.order, true);
+    file_order_changed(file_names());
 }
 
 
@@ -469,4 +497,12 @@ void Player::set_volume(int value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.volume = value;
+    volume_changed(options.volume);
+}
+
+void Player::set_volume_relative(int offset)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    options.volume += offset;
+    volume_changed(options.volume);
 }

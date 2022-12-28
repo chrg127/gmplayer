@@ -13,27 +13,9 @@
 #include "player.hpp"
 #include "keyrecorder.hpp"
 
-class QLabel;
-class QSlider;
-class QListWidget;
-class QCheckBox;
-class QSpinBox;
-class QGroupBox;
 class QShortcut;
-class QComboBox;
 class QMenu;
 class MprisPlayer;
-
-class PlayButton : public QToolButton {
-    Q_OBJECT
-public:
-    enum class State { Play, Pause } state = State::Pause;
-    PlayButton(QWidget *parent = nullptr);
-    void set_state(State state);
-signals:
-    void play();
-    void pause();
-};
 
 class SettingsWindow : public QDialog {
     Q_OBJECT
@@ -65,6 +47,7 @@ signals:
     void got_key_sequence(const QKeySequence &keySequence);
 };
 
+// keeps track of recently opened files
 class RecentList : public QObject {
     Q_OBJECT
     QStringList names;
@@ -77,25 +60,6 @@ signals:
     void clicked(const QString &filename);
 };
 
-class PlaylistWidget : public QWidget {
-    Q_OBJECT
-
-    QListWidget *list;
-    QPushButton *shuffle;
-public:
-    explicit PlaylistWidget(const QString &name, QWidget *parent = nullptr);
-    void update_names(int n, std::vector<std::string> &&names);
-    void setup_context_menu(std::function<void(const QPoint &)> fn);
-    void set_current(int n);
-    int current();
-    QPoint map_point(const QPoint &p);
-    QListWidget *playlist()    const { return list; }
-    QPushButton *shuffle_btn() const { return shuffle; }
-signals:
-    void item_activated();
-    void shuffle_selected();
-};
-
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -103,25 +67,19 @@ class MainWindow : public QMainWindow {
     QString last_file = ".";
     std::map<QString, Shortcut> shortcuts;
     bool was_paused = false;
+
     // widgets
-    QSlider *duration_slider, *volume;
-    QLabel  *duration_label;
-    PlayButton *play_btn;
-    QToolButton *stop_btn, *prev_track, *next_track, *volume_btn;
-    QComboBox *tempo;
-    PlaylistWidget *tracklist, *filelist;
-    QCheckBox *autoplay, *repeat_track, *repeat_file;
+    QToolButton *prev_track, *next_track;
     RecentList *recent_files, *recent_playlists;
     std::vector<QWidget *> to_enable;
     MprisPlayer *mpris;
 
+    void update_next_prev_track();
+    std::optional<QString> file_dialog(const QString &window_name, const QString &desc);
+    QString save_dialog(const QString &window_name, const QString &desc);
     void load_shortcuts();
     void open_playlist(const QString &filename);
     void open_single_file(QString filename);
-    void finish_opening();
-    void start_or_resume();
-    void pause();
-    void stop();
     void edit_settings();
     void edit_shortcuts();
 
@@ -130,16 +88,7 @@ class MainWindow : public QMainWindow {
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);
 
-    void add_to_enable(auto... objects)
-    {
-        (to_enable.push_back(objects), ...);
-    }
-
-    void update_next_prev_track()
-    {
-        next_track->setEnabled(bool(player->get_next()));
-        prev_track->setEnabled(player->get_prev_track() || bool(player->get_prev_file()));
-    }
+    void add_to_enable(auto... objects) { (to_enable.push_back(objects), ...); }
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);

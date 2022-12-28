@@ -76,12 +76,6 @@ class Player {
         int count = 0;
     } tracks;
 
-    // callbacks
-    std::function<void(int, gme_info_t *, int)> track_changed;
-    std::function<void(int)>                    position_changed;
-    std::function<void(void)>                   track_ended;
-    std::function<void(int)>                    file_changed;
-
     // options
     PlayerOptions options = {};
 
@@ -108,9 +102,12 @@ public:
 
     void start_or_resume();
     void pause();
+    void play_pause();
+    void stop();
     void next();
     void prev();
     void seek(int ms);
+    void seek_relative(int off);
 
     std::optional<std::pair<int, int>> get_next() const;
     std::optional<int> get_prev_file() const;
@@ -132,11 +129,25 @@ public:
     void set_track_repeat(bool value);
     void set_file_repeat(bool value);
     void set_volume(int value);
+    void set_volume_relative(int offset);
 
-    void on_track_changed(auto &&fn)    { track_changed    = fn; }
-    void on_position_changed(auto &&fn) { position_changed = fn; }
-    void on_track_ended(auto &&fn)      { track_ended      = fn; }
-    void on_file_changed(auto &&fn)     { file_changed     = fn; }
+    // callbacks
+#define CALLBACK(name, ...) \
+private: std::function<void(__VA_ARGS__)> name;      \
+public:  void on_##name(auto &&fn) { name = fn; }    \
+
+    CALLBACK(track_changed, int, gme_info_t *, int)
+    CALLBACK(position_changed, int)
+    CALLBACK(track_ended, void)
+    CALLBACK(file_changed, int)
+    CALLBACK(volume_changed, int)
+    CALLBACK(paused, void)
+    CALLBACK(played, void)
+    CALLBACK(stopped, void)
+    CALLBACK(file_order_changed, const std::vector<std::string> &)
+    CALLBACK(track_order_changed, const std::vector<std::string> &)
+
+#undef CALLBACK
 };
 
 // this is here for portability

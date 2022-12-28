@@ -41,17 +41,15 @@
 
 namespace fs = std::filesystem;
 
-
-
 namespace {
 
-std::string format_duration(int ms, int max)
+QString format_duration(int ms, int max)
 {
     int mins = ms / 1000 / 60;
     int secs = ms / 1000 % 60;
     int max_mins = max / 1000 / 60;
     int max_secs = max / 1000 % 60;
-    return fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs);
+    return QString::fromStdString(fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs));
 };
 
 PlayerOptions load_player_settings()
@@ -119,26 +117,21 @@ void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
     settings.endGroup();
 }
 
+QVariantMap make_metadata(auto&&... args)
+{
+    QVariantMap map;
+    (map.insert(Mpris::metadataToString(std::get<0>(args)), QVariant(std::get<1>(args))), ...);
+    return map;
+}
+
+void update_list(QListWidget *list, const auto &names)
+{
+    list->clear();
+    for (auto &name : names)
+        new QListWidgetItem(QString::fromStdString(name), list);
+}
+
 } // namespace
-
-
-
-PlayButton::PlayButton(QWidget *parent)
-    : QToolButton(parent)
-{
-    setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-    connect(this, &QToolButton::clicked, this, [&]() {
-        set_state(state == State::Play ? State::Pause : State::Play);
-        emit state == State::Pause ? pause() : play();
-    });
-}
-
-void PlayButton::set_state(State state)
-{
-    this->state = state;
-    setIcon(style()->standardIcon(state == State::Pause ? QStyle::SP_MediaPlay
-                                                        : QStyle::SP_MediaPause));
-}
 
 
 
@@ -152,8 +145,6 @@ RecentList::RecentList(QMenu *menu, const QStringList &list)
         menu->addAction(act);
     }
 }
-
-
 
 void RecentList::add(const QString &name)
 {
@@ -177,29 +168,18 @@ void RecentList::add(const QString &name)
 SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
 {
     auto options = player->get_options();
-    int length_ms = player->length();
-    length_ms = length_ms == 0 ? 10_min : length_ms;
+    int length_ms = player->length() == 0 ? 10_min : player->length();
 
-    auto *fade = new QCheckBox(tr("&Enable fade-out"));
-    fade->setChecked(options.fade_out_ms != 0);
-
-    auto *fade_secs = new QSpinBox;
-    fade_secs->setMaximum(length_ms / 1000);
-    fade_secs->setValue(options.fade_out_ms / 1000);
-    fade_secs->setEnabled(fade->isChecked());
+    auto *fade = make_checkbox(tr("&Enable fade-out"), options.fade_out_ms != 0);
+    auto *fade_secs = make_spinbox(length_ms / 1000, options.fade_out_ms / 1000, fade->isChecked());
+    auto *default_duration = make_spinbox(10_min / 1000, options.default_duration / 1000);
+    auto *silence_detection = make_checkbox(tr("Do silence detection"), options.silence_detection == 1);
 
     connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
         fade_secs->setEnabled(state);
         if (!state)
             fade_secs->setValue(0);
     });
-
-    auto *default_duration = new QSpinBox;
-    default_duration->setMaximum(10_min / 1000);
-    default_duration->setValue(options.default_duration / 1000);
-
-    auto *silence_detection = new QCheckBox(tr("Do silence detection"));
-    silence_detection->setChecked(options.silence_detection == 1);
 
     auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
                                           | QDialogButtonBox::Cancel);
@@ -229,16 +209,13 @@ ShortcutsWindow::ShortcutsWindow(const std::map<QString, Shortcut> &shortcuts)
     for (auto [_, obj] : shortcuts) {
         auto *edit = new RecorderButton(obj.shortcut->key().toString());
         layout->addRow(new QLabel(obj.display_name), edit);
-        connect(edit, &RecorderButton::released, this, [=, this] {
-            edit->setText("...");
-        });
+        connect(edit, &RecorderButton::released,         this, [=, this] { edit->setText("..."); });
         connect(edit, &RecorderButton::got_key_sequence, this, [=, this](const auto &seq) {
             edit->setText(seq.toString());
             obj.shortcut->setKey(seq);
         });
     }
-    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
-                                          | QDialogButtonBox::Cancel);
+    auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() { accept(); });
     connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
     setLayout(make_layout<QVBoxLayout>(layout, button_box));
@@ -247,8 +224,7 @@ ShortcutsWindow::ShortcutsWindow(const std::map<QString, Shortcut> &shortcuts)
 
 
 RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *parent)
-    : QPushButton(text, parent)
-    , recorder(new KeyRecorder(this, key_count, this))
+    : QPushButton(text, parent), recorder(new KeyRecorder(this, key_count, this))
 {
     connect(this, &QPushButton::released, this, [=, this] {
         grabKeyboard();
@@ -260,43 +236,6 @@ RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *pare
         releaseKeyboard();
         emit got_key_sequence(keys);
     });
-}
-
-
-
-PlaylistWidget::PlaylistWidget(const QString &name, QWidget *parent)
-    : QWidget(parent)
-{
-    list = new QListWidget;
-    shuffle = new QPushButton("Shuffle");
-    connect(list, &QListWidget::itemActivated, this, &PlaylistWidget::item_activated);
-    connect(shuffle, &QPushButton::released, this, &PlaylistWidget::shuffle_selected);
-    setLayout(make_layout<QVBoxLayout>(new QLabel(name), list, shuffle));
-}
-
-void PlaylistWidget::update_names(int n, std::vector<std::string> &&names)
-{
-    list->clear();
-    for (auto &name : names)
-        new QListWidgetItem(QString::fromStdString(name), list);
-    list->setCurrentRow(n);
-}
-
-void PlaylistWidget::setup_context_menu(std::function<void(const QPoint &)> fn)
-{
-    list->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(list, &QWidget::customContextMenuRequested, this, fn);
-}
-
-void PlaylistWidget::set_current(int n) { list->setCurrentRow(n); }
-int  PlaylistWidget::current()          { return list->currentRow(); }
-QPoint PlaylistWidget::map_point(const QPoint &p) { return list->mapToGlobal(p); }
-
-QVariantMap make_metadata(auto&&... args)
-{
-    QVariantMap map;
-    (map.insert(Mpris::metadataToString(std::get<0>(args)), QVariant(std::get<1>(args))), ...);
-    return map;
 }
 
 
@@ -362,63 +301,38 @@ MainWindow::MainWindow(QWidget *parent)
     connect(mpris, &MprisPlayer::shuffleRequested,  this, [=, this] (bool shuffle) {
         // TODO if shuffle == false, this should put the files back in normal order
         player->shuffle_files();
-        filelist->update_names(0, player->file_names());
-        player->load_file(filelist->current());
+        player->load_file(0);
     });
 
     connect(mpris, &MprisPlayer::volumeRequested,   this, [=, this] (double vol) {
-        if (vol < 0.0)
-            vol = 0.0;
-        // TODO needs a lerp
-        player->set_volume(vol);
-        volume->setValue(vol);
+        player->set_volume(std::lerp(0.0, get_max_volume_value(), vol < 0.0 ? 0.0 : vol));
     });
 
-    connect(mpris, &MprisPlayer::nextRequested,      this, [=, this] { player->next(); update_next_prev_track(); });
-    connect(mpris, &MprisPlayer::previousRequested,  this, [=, this] { player->prev(); update_next_prev_track(); });
-    connect(mpris, &MprisPlayer::seekRequested,      this, [=, this] (qlonglong offset) { player->seek(player->position() + offset); });
-    connect(mpris, &MprisPlayer::pauseRequested,     this, [=, this] { pause(); });
-    connect(mpris, &MprisPlayer::playRequested,      this, [=, this] { start_or_resume(); });
-    connect(mpris, &MprisPlayer::playPauseRequested, this, [=, this] {
-        fmt::print("play pause requested\n");
-        if (player->is_playing())
-            pause();
-        else
-            start_or_resume();
-    });
+    connect(mpris, &MprisPlayer::pauseRequested,     this, [=, this] { player->pause(); });
+    connect(mpris, &MprisPlayer::playRequested,      this, [=, this] { player->start_or_resume(); });
+    connect(mpris, &MprisPlayer::playPauseRequested, this, [=, this] { player->play_pause(); });
+    connect(mpris, &MprisPlayer::stopRequested,      this, [=, this] { player->stop(); });
+    connect(mpris, &MprisPlayer::nextRequested,      this, [=, this] { player->next(); });
+    connect(mpris, &MprisPlayer::previousRequested,  this, [=, this] { player->prev(); });
+    connect(mpris, &MprisPlayer::seekRequested,      this, [=, this] (auto offset) { player->seek_relative(offset); });
 
-    connect(mpris, &MprisPlayer::openUriRequested, this, [=, this] (const QUrl &url) {
-        qDebug() << url;
-    });
-
-    connect(mpris, &MprisPlayer::seeked, this, [=, this] (qlonglong pos) {
-        // i have no idea what's this supposed to be
-    });
-
+    // the stuff i have no idea what to do with
+    connect(mpris, &MprisPlayer::openUriRequested, this, [=, this] (const QUrl &url) { qDebug() << url; });
+    connect(mpris, &MprisPlayer::seeked,           this, [=, this] (qlonglong pos) { });
     connect(mpris, &MprisPlayer::setPositionRequested, this, [=, this] (const auto &id, qlonglong pos) {
         qDebug() << id;
         player->seek(pos);
     });
 
-    connect(mpris, &MprisPlayer::stopRequested, this, [=, this] { stop(); });
-
     // create menus
     auto *file_menu = create_menu(this, "&File",
-        std::make_tuple("Open file", [=, this] () {
-            auto filename = QFileDialog::getOpenFileName(this, tr("Open file"), last_file,
-                                                         "Game music files (*.spc *.nsf)");
-            if (!filename.isEmpty()) {
-                last_file = filename;
-                open_single_file(filename);
-            }
+        std::make_tuple("Open file",     [this] {
+            if (auto f = file_dialog("Open file", "Game music files (*.spc *.nsf)"); f)
+                open_single_file(f.value());
         }),
-        std::make_tuple("Open playlist", [=, this](){
-            auto filename = QFileDialog::getOpenFileName(this, tr("Open playlist file"), last_file,
-                                                         "Playlist files (*.playlist)");
-            if (!filename.isEmpty()) {
-                last_file = filename;
-                open_playlist(filename);
-            }
+        std::make_tuple("Open playlist", [this] {
+            if (auto f = file_dialog("Open playlist", "Playlist files (*.playlist)"); f)
+                open_playlist(f.value());
         })
     );
 
@@ -429,35 +343,35 @@ MainWindow::MainWindow(QWidget *parent)
 
     create_menu(this, "&About");
 
-    // recent files stuff
+    // set up recent files
     auto [files, playlists] = load_recent_files();
     recent_files     = new RecentList(file_menu->addMenu(tr("&Recent files")), files);
     recent_playlists = new RecentList(file_menu->addMenu(tr("R&ecent playlists")), playlists);
-    connect(recent_files,     &RecentList::clicked, this, [=, this](const QString &name) { open_single_file(name); });
-    connect(recent_playlists, &RecentList::clicked, this, [=, this](const QString &name) { open_playlist(name); });
+    connect(recent_files,     &RecentList::clicked, this, &MainWindow::open_single_file);
+    connect(recent_playlists, &RecentList::clicked, this, &MainWindow::open_playlist);
+
+    // set up shortcuts
+    load_shortcuts();
 
     // duration slider
-    duration_label  = new QLabel("00:00 / 00:00");
-    duration_slider = new QSlider(Qt::Horizontal);
-
+    auto *duration_slider = new QSlider(Qt::Horizontal);
+    auto *duration_label = new QLabel("00:00 / 00:00");
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
         was_paused = !player->is_playing();
-        pause();
+        player->pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
+        player->seek(duration_slider->value());
         if (!was_paused)
-            start_or_resume();
+            player->start_or_resume();
     });
-    connect(duration_slider, &QSlider::sliderMoved, this, [=, this](int ms) {
-        player->seek(ms);
-        auto str = format_duration(ms, duration_slider->maximum());
-        duration_label->setText(QString::fromStdString(str));
+    connect(duration_slider, &QSlider::sliderMoved, this, [=, this] (int ms) {
+        duration_label->setText(format_duration(ms, duration_slider->maximum()));
     });
 
     player->on_position_changed([=, this](int ms) {
         duration_slider->setValue(ms);
-        auto str = format_duration(ms, duration_slider->maximum());
-        duration_label->setText(QString::fromStdString(str));
+        duration_label->setText(format_duration(ms, duration_slider->maximum()));
     });
 
     // buttons under duration slider
@@ -468,49 +382,40 @@ MainWindow::MainWindow(QWidget *parent)
         return b;
     };
 
-    next_track = make_btn(QStyle::SP_MediaSkipForward,  [=, this]() { player->next(); });
-    prev_track = make_btn(QStyle::SP_MediaSkipBackward, [=, this]() { player->prev(); });
-    stop_btn   = make_btn(QStyle::SP_MediaStop,         &MainWindow::stop);
+    auto *play_btn  = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
+    auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { player->stop();       });
+    next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { player->next();       });
+    prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { player->prev();       });
 
-    play_btn = new PlayButton;
-    connect(play_btn, &PlayButton::play,  this, [=, this]() { start_or_resume(); });
-    connect(play_btn, &PlayButton::pause, this, [=, this]() { pause(); });
+    // volume slider and button
+    auto *volume_slider = new QSlider(Qt::Horizontal);
+    volume_slider->setRange(0, get_max_volume_value());
+    volume_slider->setValue(options.volume);
 
-    player->on_track_ended([=, this]() {
-        play_btn->set_state(PlayButton::State::Pause);
+    connect(volume_slider, &QSlider::sliderMoved, this, [=, this] (int value) { player->set_volume(value); });
+    QToolButton *volume_btn = make_btn(
+        options.volume == 0 ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume,
+        [=, this, last = options.volume == 0 ? get_max_volume_value() : options.volume] () mutable {
+            int vol = volume_slider->value();
+            player->set_volume(vol != 0 ? last = vol, 0 : last);
+        }
+    );
+
+    player->on_volume_changed([=, this] (int value) {
+        volume_slider->setValue(value);
+        volume_btn->setIcon(style()->standardIcon(value == 0 ? QStyle::SP_MediaVolumeMuted
+                                                             : QStyle::SP_MediaVolume));
     });
 
-    tempo = new QComboBox;
-    tempo->addItem("2x",     2.0);
-    tempo->addItem("Normal", 1.0);
-    tempo->addItem("0.5x",   0.5);
-    tempo->setCurrentIndex(options.tempo == 2.0 ? 2
-                         : options.tempo == 1.0 ? 1
-                         : options.tempo == 0.5 ? 0
-                         : 1);
+    // tempo (i.e. speedup up/slowing the song)
+    auto *tempo = make_combo(options.tempo == 0.5 ? 0
+                           : options.tempo == 1.0 ? 1
+                           : options.tempo == 2.0 ? 2 : 1,
+                           std::make_tuple("2x",   2.0),
+                           std::make_tuple("1x",   1.0),
+                           std::make_tuple("0.5x", 0.5));
     connect(tempo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=, this] (int i) {
         player->set_tempo(tempo->currentData().toDouble());
-    });
-
-    volume = new QSlider(Qt::Horizontal);
-    volume->setRange(0, get_max_volume_value());
-    volume->setValue(options.volume);
-    volume_btn = make_btn(QStyle::SP_MediaVolume, [=, this, last_volume = options.volume] () mutable {
-        if (volume->value() != 0) {
-            last_volume = volume->value();
-            volume->setValue(0);
-            volume_btn->setIcon(style()->standardIcon(QStyle::SP_MediaVolumeMuted));
-        } else {
-            volume->setValue(last_volume);
-            volume_btn->setIcon(style()->standardIcon(QStyle::SP_MediaVolume));
-        }
-    });
-    connect(volume, &QSlider::valueChanged, this, [=, this]() {
-        player->set_volume(volume->value());
-        volume_btn->setIcon(style()->standardIcon(
-            volume->value() == 0 ? QStyle::SP_MediaVolumeMuted
-                                 : QStyle::SP_MediaVolume
-        ));
     });
 
     // track information
@@ -520,7 +425,22 @@ MainWindow::MainWindow(QWidget *parent)
     auto *author  = new QLabel;
     auto *comment = new QLabel;
 
-    player->on_track_changed([=, this](int num, gme_info_t *info, int length) {
+    // track playlist
+    auto *tracklist     = new QListWidget;
+    auto *track_shuffle = new QPushButton("Shuffle");
+    connect(tracklist,     &QListWidget::itemActivated, this, [=, this] { player->load_track(tracklist->currentRow()); });
+    connect(track_shuffle, &QPushButton::released,      this, [=, this] { player->shuffle_tracks(); player->load_track(0); });
+
+    // file playlist
+    auto *filelist     = new QListWidget;
+    auto *file_shuffle = new QPushButton("Shuffle");
+    connect(filelist,     &QListWidget::itemActivated, this, [=, this] { player->load_file(filelist->currentRow()); });
+    connect(file_shuffle, &QPushButton::released,      this, [=, this] { player->shuffle_files(); player->load_file(0); });
+
+    player->on_file_order_changed( [=, this] (const auto &names) { update_list(filelist,  names); });
+    player->on_track_order_changed([=, this] (const auto &names) { update_list(tracklist, names); });
+
+    player->on_track_changed([=, this](int trackno, gme_info_t *info, int length) {
         title   ->setText(info->song);
         game    ->setText(info->game);
         author  ->setText(info->author);
@@ -528,104 +448,76 @@ MainWindow::MainWindow(QWidget *parent)
         comment ->setText(info->comment);
         duration_slider->setRange(0, player->effective_length());
         update_next_prev_track();
-        tracklist->set_current(num);
-
+        tracklist->setCurrentRow(trackno);
+        player->start_or_resume();
         mpris->setMetadata(make_metadata(
             std::tuple{ Mpris::Metadata::Title,  QString(info->song) },
             std::tuple{ Mpris::Metadata::Album,  QString(info->game) },
             std::tuple{ Mpris::Metadata::Artist, QString(info->author) }
         ));
-
-        start_or_resume();
     });
 
-    // track playlist
-    tracklist = new PlaylistWidget("Track playlist");
-    connect(tracklist, &PlaylistWidget::item_activated, this, [&]() {
-        player->load_track(tracklist->current());
-    });
-    connect(tracklist, &PlaylistWidget::shuffle_selected, this, [&]() {
-        player->shuffle_tracks();
-        tracklist->update_names(0, player->track_names());
-    });
-
-    // file playlist
-    filelist = new PlaylistWidget("File playlist");
-    connect(filelist, &PlaylistWidget::item_activated, this, [&]() {
-        player->load_file(filelist->current());
-    });
-    connect(filelist, &PlaylistWidget::shuffle_selected, this, [&]() {
-        player->shuffle_files();
-        filelist->update_names(0, player->file_names());
-        player->load_file(filelist->current());
-    });
-
-    player->on_file_changed([&](int fileno) {
-        tracklist->update_names(player->load_track(0), player->track_names());
-        filelist->set_current(fileno);
+    player->on_file_changed([=, this] (int fileno) {
+        filelist->setCurrentRow(fileno);
+        player->load_track(0);
     });
 
     // context menu for file playlist, which lets the user edit the playlist
-    filelist->setup_context_menu([&](const QPoint &p) {
-        QPoint pos = filelist->map_point(p);
+    filelist->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(filelist, &QWidget::customContextMenuRequested, this, [=, this] (const QPoint &p) {
         QMenu menu;
-        menu.addAction("Add to playlist...",    [&]() {
-            auto filename = QFileDialog::getOpenFileName(
-                this,
-                tr("Open file"),
-                last_file,
-                "Game music files (*.spc *.nsf)"
-            );
-            if (filename.isEmpty())
+        menu.addAction("Add to playlist...", [=, this] {
+            auto filename = file_dialog(tr("Open file"), "Game music files (*.spc *.nsf)");
+            if (!filename)
                 return;
-            last_file = filename;
-            auto err = player->add_file(filename.toStdString());
-            if (err != std::error_code()) {
+            else if (auto err = player->add_file(filename.value().toStdString()); err != std::error_code())
                 msgbox(QString("Couldn't open file %1 (%2)")
-                    .arg(filename)
+                    .arg(filename.value())
                     .arg(QString::fromStdString(err.message())));
-                return;
-            }
-            filelist->update_names(0, player->file_names());
-            update_next_prev_track();
+            else
+                update_next_prev_track();
         });
-        menu.addAction("Remove from playlist",  [&]() {
-            if (!player->remove_file(filelist->current())) {
+        menu.addAction("Remove from playlist", [=, this] {
+            if (!player->remove_file(filelist->currentRow()))
                 msgbox("Cannot remove currently playing file!");
-                return;
-            }
-            filelist->update_names(0, player->file_names());
-            update_next_prev_track();
+            else
+                update_next_prev_track();
         });
-        menu.addAction("Save playlist",         [&]() {
-            auto filename = QFileDialog::getSaveFileName(this, tr("Save playlist"), last_file,
-                                                         "Playlist files (*.playlist)");
+        menu.addAction("Save playlist", [=, this]() {
+            auto filename = save_dialog(tr("Save playlist"), "Playlist files (*.playlist)");
             if (auto f = io::File::open(fs::path(filename.toStdString()), io::Access::Write); f)
                 player->save_file_playlist(f.value());
-            else {
+            else
                 msgbox(QString("Couldn't open file %1. (%2)")
                     .arg(filename)
                     .arg(QString::fromStdString(f.error().message())));
-                return;
-            }
         });
-        menu.exec(pos);
+        menu.exec(filelist->mapToGlobal(p));
     });
 
     // playlist settings
-    autoplay     = make_checkbox("Autoplay",     options.autoplay,     this, [=, this] (int state) { player->set_autoplay(state); });
-    repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player->set_track_repeat(state); update_next_prev_track(); });
-    repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player->set_file_repeat(state);  update_next_prev_track(); });
+    auto *autoplay     = make_checkbox("Autoplay",     options.autoplay,     this, [=, this] (int state) { player->set_autoplay(state); });
+    auto *repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player->set_track_repeat(state); update_next_prev_track(); });
+    auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player->set_file_repeat(state);  update_next_prev_track(); });
 
-    // load shortcuts only after everything has been constructed
-    load_shortcuts();
+    player->on_played([=, this] {
+        play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
+        mpris->setPlaybackStatus(Mpris::PlaybackStatus::Playing);
+    });
+
+    player->on_paused([=, this] {
+        play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+        mpris->setPlaybackStatus(Mpris::PlaybackStatus::Paused);
+    });
+
+    player->on_stopped    ([=, this] { duration_slider->setValue(0); });
+    player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
 
     // disable everything
     add_to_enable(
         duration_slider, play_btn, prev_track, next_track, stop_btn, tempo,
-        volume, volume_btn, tracklist->playlist(), tracklist->shuffle_btn(),
-        filelist->playlist(), filelist->shuffle_btn(),
-        autoplay, repeat_track, repeat_file
+        volume_slider, volume_btn, tracklist, track_shuffle, filelist,
+        file_shuffle, autoplay, repeat_track, repeat_file
     );
     for (auto &w : to_enable)
         w->setEnabled(false);
@@ -634,7 +526,8 @@ MainWindow::MainWindow(QWidget *parent)
     center->setLayout(
         make_layout<QVBoxLayout>(
             make_layout<QHBoxLayout>(
-                tracklist, filelist
+                make_layout<QVBoxLayout>(new QLabel("Track playlist"), tracklist, track_shuffle),
+                make_layout<QVBoxLayout>(new QLabel("File playlist"), filelist,  file_shuffle)
             ),
             make_layout<QHBoxLayout>(
                 make_groupbox<QFormLayout>("Track info",
@@ -660,20 +553,38 @@ MainWindow::MainWindow(QWidget *parent)
                 new QLabel(tr("Tempo:")),
                 tempo,
                 volume_btn,
-                volume
+                volume_slider
             ),
             new QWidget
         )
     );
 }
 
+void MainWindow::update_next_prev_track()
+{
+    next_track->setEnabled(bool(player->get_next()));
+    prev_track->setEnabled(player->get_prev_track() || player->get_prev_file());
+}
+
+std::optional<QString> MainWindow::file_dialog(const QString &window_name, const QString &desc)
+{
+    auto filename = QFileDialog::getOpenFileName(this, window_name, last_file, desc);
+    if (filename.isEmpty())
+        return std::nullopt;
+    last_file = filename;
+    return filename;
+}
+
+QString MainWindow::save_dialog(const QString &window_name, const QString &desc)
+{
+    return QFileDialog::getSaveFileName(this, window_name, last_file, desc);
+}
+
 void MainWindow::load_shortcuts()
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    auto add_shortcut = [&](const QString &name,
-                            const QString &display_name,
-                            const QString &key,
-                            auto &&fn) {
+    auto add_shortcut = [&](const QString &name, const QString &display_name,
+                            const QString &key, auto &&fn) {
         auto value = settings.value(name, key).toString();
         auto *shortcut = new QShortcut(QKeySequence(value), this);
         connect(shortcut, &QShortcut::activated, this, fn);
@@ -683,16 +594,15 @@ void MainWindow::load_shortcuts()
             .display_name = display_name
         };
     };
-
     settings.beginGroup("shortcuts");
-    add_shortcut("play", "Play/Pause",      "Ctrl+Space",   [=, this] { player->is_playing() ? pause() : start_or_resume(); });
-    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { if (player->can_play()) player->next();    });
-    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { if (player->can_play()) player->prev();    });
-    add_shortcut("stop",  "Stop",           "Ctrl+S",       &MainWindow::stop);
-    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { if (player->can_play()) player->seek(player->position() + 1_sec); });
-    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { if (player->can_play()) player->seek(player->position() - 1_sec); });
-    add_shortcut("volup", "Volume up",      "0",            [=, this] { volume->setValue(volume->value() + 2); });
-    add_shortcut("voldw", "Volume down",    "9",            [=, this] { volume->setValue(volume->value() - 2); });
+    add_shortcut("play", "Play/Pause",      "Ctrl+Space",   [=, this] { player->play_pause(); });
+    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();    });
+    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();    });
+    add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { player->stop(); });
+    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { player->seek_relative(1_sec); });
+    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { player->seek_relative(1_sec); });
+    add_shortcut("volup", "Volume up",      "0",            [=, this] { player->set_volume_relative( 2); });
+    add_shortcut("voldw", "Volume down",    "9",            [=, this] { player->set_volume_relative(-2); });
     settings.endGroup();
 }
 
@@ -706,9 +616,6 @@ void MainWindow::open_playlist(const QString &filename)
         return;
     }
     if (res.not_opened.size() != 0) {
-        QMessageBox box;
-        box.setText("Errors were found while opening the playlist.");
-        box.setInformativeText("Check the details for the errors.");
         QString text;
         text += "Files not opened:\n";
         for (auto &file : res.not_opened)
@@ -716,11 +623,14 @@ void MainWindow::open_playlist(const QString &filename)
         text += "Errors found:\n";
         for (auto &err : res.errors)
             text += QString::fromStdString(err) + "\n";
-        box.setDetailedText(text);
-        box.exec();
+        msgbox("Errors were found while opening the playlist.",
+               "Check the details for the errors.",
+               text);
     }
     recent_playlists->add(filename);
-    finish_opening();
+    player->load_file(0);
+    for (auto &w : to_enable)
+        w->setEnabled(true);
 }
 
 void MainWindow::open_single_file(QString filename)
@@ -734,47 +644,9 @@ void MainWindow::open_single_file(QString filename)
         return;
     }
     recent_files->add(filename);
-    finish_opening();
-}
-
-void MainWindow::finish_opening()
-{
-    filelist ->update_names(player->load_file(0), player->file_names());
-    tracklist->update_names(player->load_track(0), player->track_names());
+    player->load_file(0);
     for (auto &w : to_enable)
         w->setEnabled(true);
-    update_next_prev_track();
-    play_btn->set_state(PlayButton::State::Play);
-}
-
-void MainWindow::start_or_resume()
-{
-    if (player->can_play()) {
-        player->start_or_resume();
-        play_btn->set_state(PlayButton::State::Play);
-        mpris->setPlaybackStatus(Mpris::PlaybackStatus::Playing);
-    }
-}
-
-void MainWindow::pause()
-{
-    if (player->can_play()) {
-        player->pause();
-        play_btn->set_state(PlayButton::State::Pause);
-        mpris->setPlaybackStatus(Mpris::PlaybackStatus::Paused);
-    }
-}
-
-void MainWindow::stop()
-{
-    if (player->can_play()) {
-        // load track also calls on_track_changed() callback, which causes a
-        // call to start_or_resume, so put pause after load.
-        player->load_file(0);
-        player->load_track(0);
-        pause();
-        duration_slider->setValue(0);
-    }
 }
 
 void MainWindow::edit_settings()
@@ -782,10 +654,10 @@ void MainWindow::edit_settings()
     auto *wnd = new SettingsWindow(player, this);
     wnd->open();
     connect(wnd, &QDialog::finished, this, [=, this](int result) {
-        if (result == QDialog::Accepted && player->can_play()) {
-            duration_slider->setRange(0, player->effective_length());
+        // reset song to start position
+        // (this is due to the modified fade applying to the song)
+        if (result == QDialog::Accepted)
             player->seek(0);
-        }
     });
 }
 
@@ -805,9 +677,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
 {
-    if (event->mimeData()->hasFormat("text/plain")) {
+    if (event->mimeData()->hasFormat("text/plain"))
         event->acceptProposedAction();
-    }
 }
 
 void MainWindow::dropEvent(QDropEvent *event)
