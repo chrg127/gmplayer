@@ -109,8 +109,9 @@ public:
     void seek(int ms);
     void seek_relative(int off);
 
-    std::optional<std::pair<int, int>> get_next() const;
+    std::optional<int> get_next_file() const;
     std::optional<int> get_prev_file() const;
+    std::optional<int> get_next_track() const;
     std::optional<int> get_prev_track() const;
     int position();
     int length() const;

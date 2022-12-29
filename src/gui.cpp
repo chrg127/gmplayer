@@ -434,8 +434,8 @@ MainWindow::MainWindow(QWidget *parent)
     // file playlist
     auto *filelist     = new QListWidget;
     auto *file_shuffle = new QPushButton("Shuffle");
-    connect(filelist,     &QListWidget::itemActivated, this, [=, this] { player->load_file(filelist->currentRow()); });
-    connect(file_shuffle, &QPushButton::released,      this, [=, this] { player->shuffle_files(); player->load_file(0); });
+    connect(filelist,     &QListWidget::itemActivated,  this, [=, this] { player->load_file(filelist->currentRow()); });
+    connect(file_shuffle, &QPushButton::released,       this, [=, this] { player->shuffle_files(); player->load_file(0); });
 
     player->on_file_order_changed( [=, this] (const auto &names) { update_list(filelist,  names); });
     player->on_track_order_changed([=, this] (const auto &names) { update_list(tracklist, names); });
@@ -562,7 +562,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::update_next_prev_track()
 {
-    next_track->setEnabled(bool(player->get_next()));
+    next_track->setEnabled(player->get_next_track() || player->get_next_file());
     prev_track->setEnabled(player->get_prev_track() || player->get_prev_file());
 }
 

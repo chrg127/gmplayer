@@ -98,12 +98,8 @@ void Player::audio_callback(void *, u8 *stream, int len)
     if (gme_track_ended(emu) || gme_tell(emu) > track.length + 1_sec/2) {
         SDL_PauseAudioDevice(dev_id, 1);
         track_ended();
-        if (options.autoplay) {
-            if (auto next = get_next(); next) {
-                load_file (next.value().first);
-                load_track(next.value().second);
-            }
-        }
+        if (options.autoplay)
+            next();
         return;
     }
     // fill stream with silence. this is needed for MixAudio to work how we want.
@@ -265,7 +261,7 @@ int Player::load_track(int trackno)
     if (options.fade_out_ms != 0)
         gme_set_fade(emu, track.length - options.fade_out_ms);
     gme_set_tempo(emu, options.tempo);
-    track_changed(num, track.metadata, track.length);
+    track_changed(trackno, track.metadata, track.length);
     return num;
 }
 
@@ -319,10 +315,11 @@ void Player::stop()
 void Player::next()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    auto next = get_next();
-    if (next) {
-        load_file (next.value().first);
-        load_track(next.value().second);
+    if (auto next = get_next_track(); next)
+        load_track(next.value());
+    else if (auto next = get_next_file(); next) {
+        load_file(next.value());
+        load_track(0);
     }
 }
 
@@ -353,30 +350,35 @@ void Player::seek(int ms)
 
 void Player::seek_relative(int off) { seek(position() + off); }
 
-
-std::optional<std::pair<int, int>> Player::get_next() const
+std::optional<int> Player::get_next_file() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (options.track_repeat)                    return std::pair{files.current,     tracks.current    };
-    if (tracks.current + 1 < tracks.count)       return std::pair{files.current,     tracks.current + 1};
-    if (options.file_repeat)                     return std::pair{files.current,                      0};
-    if (files.current  + 1 < files.cache.size()) return std::pair{files.current + 1,                  0};
+    if (options.file_repeat)                    return files.current;
+    if (files.current + 1 < files.cache.size()) return files.current + 1;
     return std::nullopt;
 }
 
 std::optional<int> Player::get_prev_file() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (options.file_repeat)                    return files.current;
-    if (files.current  - 1 >= 0)                return files.current - 1;
+    if (options.file_repeat)     return files.current;
+    if (files.current - 1 >= 0)  return files.current - 1;
+    return std::nullopt;
+}
+
+std::optional<int> Player::get_next_track() const
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    if (options.track_repeat)              return tracks.current;
+    if (tracks.current + 1 < tracks.count) return tracks.current + 1;
     return std::nullopt;
 }
 
 std::optional<int> Player::get_prev_track() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    if (options.track_repeat)                   return tracks.current;
-    if (tracks.current - 1 >= 0)                return tracks.current - 1;
+    if (options.track_repeat)    return tracks.current;
+    if (tracks.current - 1 >= 0) return tracks.current - 1;
     return std::nullopt;
 }
 
