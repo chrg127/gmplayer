@@ -34,9 +34,7 @@ struct PlayerOptions {
     int fade_out_ms         = 0;
     bool autoplay           = false;
     bool track_repeat       = false;
-    bool track_shuffle      = false;
     bool file_repeat        = false;
-    bool file_shuffle       = false;
     int default_duration    = 3_min;
     int silence_detection   = 0;
     double tempo            = 1.0;

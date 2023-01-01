@@ -62,9 +62,7 @@ PlayerOptions load_player_settings()
         .fade_out_ms        = settings.value("fade_out_ms",                            0).toInt(),
         .autoplay           = settings.value("autoplay",                           false).toBool(),
         .track_repeat       = settings.value("track_repeat",                       false).toBool(),
-        .track_shuffle      = settings.value("track_shuffle",                      false).toBool(),
         .file_repeat        = settings.value("file_repeat",                        false).toBool(),
-        .file_shuffle       = settings.value("file_shuffle",                       false).toBool(),
         .default_duration   = settings.value("default_duration",              int(3_min)).toInt(),
         .silence_detection  = settings.value("silence_detection",                      0).toInt(),
         .tempo              = settings.value("tempo",                                1.0).toDouble(),
@@ -81,9 +79,7 @@ void save_player_settings(PlayerOptions options)
     settings.setValue("fade_out_ms",       options.fade_out_ms);
     settings.setValue("autoplay",          options.autoplay);
     settings.setValue("track_repeat",      options.track_repeat);
-    settings.setValue("track_shuffle",     options.track_shuffle);
     settings.setValue("file_repeat",       options.file_repeat);
-    settings.setValue("file_shuffle",      options.file_shuffle);
     settings.setValue("default_duration",  options.default_duration);
     settings.setValue("silence_detection", options.silence_detection);
     settings.setValue("tempo",             options.tempo);
