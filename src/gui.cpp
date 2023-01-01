@@ -1,6 +1,7 @@
 #include "gui.hpp"
 
 #include <tuple>
+#include <QApplication>
 #include <QWidget>
 #include <QLabel>
 #include <QPushButton>
@@ -31,6 +32,7 @@
 #include <QDebug>
 #include <QVariant>
 #include <QVariantMap>
+#include <QStandardPaths>
 #include <Mpris>
 #include <MprisPlayer>
 #include <fmt/core.h>
@@ -252,17 +254,21 @@ MainWindow::MainWindow(QWidget *parent)
     PlayerOptions options = load_player_settings();
     player->get_options() = options;
 
-    mpris = new MprisPlayer(this);
-    mpris->setCanGoNext(true);
-    mpris->setServiceName("fuckyou");
+    auto *mpris = new MprisPlayer(this);
+    mpris->setServiceName("gmplayer");
     mpris->setCanQuit(true);
     mpris->setCanRaise(false);
     mpris->setCanSetFullscreen(false);
-    // mpris->setDesktopEntry();
-    mpris->setHasTrackList(true);
+    mpris->setFullscreen(false);
+    mpris->setDesktopEntry(
+        QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "gmplayer.desktop")
+    );
+    mpris->setHasTrackList(false);
     mpris->setIdentity("gmplayer");
     mpris->setSupportedUriSchemes(QStringList{"file"});
-    // mpris->setSupportedMimeTypes();
+    mpris->setSupportedMimeTypes(
+        QStringList{"application/x-pkcs7-certificates", "application/octet-stream", "text/plain"}
+    );
     mpris->setCanControl(true);
     mpris->setCanGoNext(true);
     mpris->setCanGoPrevious(true);
@@ -275,39 +281,11 @@ MainWindow::MainWindow(QWidget *parent)
     mpris->setMetadata(make_metadata());
     mpris->setPlaybackStatus(Mpris::PlaybackStatus::Stopped);
     mpris->setPosition(0);
-    mpris->setRate(1.0);
+    mpris->setRate(options.tempo);
     mpris->setShuffle(false);
-    mpris->setVolume(1.0);
+    mpris->setVolume(options.volume);
 
-    connect(mpris, &MprisPlayer::loopStatusRequested, this, [=, this] (Mpris::LoopStatus status) {
-        switch (status) {
-        case Mpris::LoopStatus::None:
-            player->set_track_repeat(false);
-            player->set_file_repeat(false);
-            break;
-        case Mpris::LoopStatus::Track:
-            player->set_track_repeat(true);
-            break;
-        case Mpris::LoopStatus::Playlist:
-            //player->set_file_repeat(true);
-            break;
-        }
-    });
-
-    connect(mpris, &MprisPlayer::rateRequested,     this, [=, this] (double rate) {
-        player->set_tempo(rate);
-    });
-
-    connect(mpris, &MprisPlayer::shuffleRequested,  this, [=, this] (bool shuffle) {
-        // TODO if shuffle == false, this should put the files back in normal order
-        player->shuffle_files();
-        player->load_file(0);
-    });
-
-    connect(mpris, &MprisPlayer::volumeRequested,   this, [=, this] (double vol) {
-        player->set_volume(std::lerp(0.0, get_max_volume_value(), vol < 0.0 ? 0.0 : vol));
-    });
-
+    connect(mpris, &MprisPlayer::quitRequested,      this, [=, this] { QApplication::quit(); });
     connect(mpris, &MprisPlayer::pauseRequested,     this, [=, this] { player->pause(); });
     connect(mpris, &MprisPlayer::playRequested,      this, [=, this] { player->start_or_resume(); });
     connect(mpris, &MprisPlayer::playPauseRequested, this, [=, this] { player->play_pause(); });
@@ -315,13 +293,39 @@ MainWindow::MainWindow(QWidget *parent)
     connect(mpris, &MprisPlayer::nextRequested,      this, [=, this] { player->next(); });
     connect(mpris, &MprisPlayer::previousRequested,  this, [=, this] { player->prev(); });
     connect(mpris, &MprisPlayer::seekRequested,      this, [=, this] (auto offset) { player->seek_relative(offset); });
-
-    // the stuff i have no idea what to do with
-    connect(mpris, &MprisPlayer::openUriRequested, this, [=, this] (const QUrl &url) { qDebug() << url; });
-    connect(mpris, &MprisPlayer::seeked,           this, [=, this] (qlonglong pos) { });
+    connect(mpris, &MprisPlayer::rateRequested,      this, [=, this] (double rate) { player->set_tempo(rate); });
+    connect(mpris, &MprisPlayer::shuffleRequested,   this, [=, this] (bool do_shuffle) {
+        player->shuffle_files(do_shuffle);
+        player->load_file(0);
+    });
+    connect(mpris, &MprisPlayer::volumeRequested,    this, [=, this] (double vol) {
+        player->set_volume(std::lerp(0.0, get_max_volume_value(), vol < 0.0 ? 0.0 : vol));
+    });
+    connect(mpris, &MprisPlayer::openUriRequested, this, [=, this] (const QUrl &url) {
+        open_single_file(url.toLocalFile());
+    });
     connect(mpris, &MprisPlayer::setPositionRequested, this, [=, this] (const auto &id, qlonglong pos) {
-        qDebug() << id;
         player->seek(pos);
+    });
+
+    connect(mpris, &MprisPlayer::loopStatusRequested, this, [=, this] (Mpris::LoopStatus status) {
+        switch (status) {
+        case Mpris::LoopStatus::None:
+            player->set_autoplay(false);
+            player->set_track_repeat(false);
+            player->set_file_repeat(false);
+            break;
+        case Mpris::LoopStatus::Track:
+            player->set_autoplay(true);
+            player->set_track_repeat(true);
+            player->set_file_repeat(true);
+            break;
+        case Mpris::LoopStatus::Playlist:
+            player->set_autoplay(true);
+            player->set_track_repeat(false);
+            player->set_file_repeat(false);
+            break;
+        }
     });
 
     // create menus
@@ -372,6 +376,8 @@ MainWindow::MainWindow(QWidget *parent)
     player->on_position_changed([=, this](int ms) {
         duration_slider->setValue(ms);
         duration_label->setText(format_duration(ms, duration_slider->maximum()));
+        // for some reason mpris uses microseconds instead of milliseconds
+        mpris->setPosition(ms * 1000);
     });
 
     // buttons under duration slider
@@ -405,6 +411,7 @@ MainWindow::MainWindow(QWidget *parent)
         volume_slider->setValue(value);
         volume_btn->setIcon(style()->standardIcon(value == 0 ? QStyle::SP_MediaVolumeMuted
                                                              : QStyle::SP_MediaVolume));
+        mpris->setVolume(double(value) / double(get_max_volume_value()));
     });
 
     // tempo (i.e. speedup up/slowing the song)
@@ -418,6 +425,8 @@ MainWindow::MainWindow(QWidget *parent)
         player->set_tempo(tempo->currentData().toDouble());
     });
 
+    player->on_tempo_changed([=, this] (double value) { mpris->setRate(value); });
+
     // track information
     auto *title   = new QLabel;
     auto *game    = new QLabel;
@@ -429,16 +438,21 @@ MainWindow::MainWindow(QWidget *parent)
     auto *tracklist     = new QListWidget;
     auto *track_shuffle = new QPushButton("Shuffle");
     connect(tracklist,     &QListWidget::itemActivated, this, [=, this] { player->load_track(tracklist->currentRow()); });
-    connect(track_shuffle, &QPushButton::released,      this, [=, this] { player->shuffle_tracks(); player->load_track(0); });
+    connect(track_shuffle, &QPushButton::released,      this, [=, this] { player->shuffle_tracks(true); player->load_track(0); });
 
     // file playlist
     auto *filelist     = new QListWidget;
     auto *file_shuffle = new QPushButton("Shuffle");
     connect(filelist,     &QListWidget::itemActivated,  this, [=, this] { player->load_file(filelist->currentRow()); });
-    connect(file_shuffle, &QPushButton::released,       this, [=, this] { player->shuffle_files(); player->load_file(0); });
+    connect(file_shuffle, &QPushButton::released,       this, [=, this] { player->shuffle_files(true); player->load_file(0); });
 
-    player->on_file_order_changed( [=, this] (const auto &names) { update_list(filelist,  names); });
-    player->on_track_order_changed([=, this] (const auto &names) { update_list(tracklist, names); });
+    player->on_file_order_changed( [=, this] (const auto &names, bool shuffled) {
+        update_list(filelist, names);
+        mpris->setShuffle(shuffled);
+    });
+    player->on_track_order_changed([=, this] (const auto &names, bool _) {
+        update_list(tracklist, names);
+    });
 
     player->on_track_changed([=, this](int trackno, gme_info_t *info, int length) {
         title   ->setText(info->song);
@@ -446,15 +460,18 @@ MainWindow::MainWindow(QWidget *parent)
         author  ->setText(info->author);
         system  ->setText(info->system);
         comment ->setText(info->comment);
-        duration_slider->setRange(0, player->effective_length());
+        auto len = player->effective_length();
+        duration_slider->setRange(0, len);
         update_next_prev_track();
         tracklist->setCurrentRow(trackno);
-        player->start_or_resume();
         mpris->setMetadata(make_metadata(
-            std::tuple{ Mpris::Metadata::Title,  QString(info->song) },
-            std::tuple{ Mpris::Metadata::Album,  QString(info->game) },
-            std::tuple{ Mpris::Metadata::Artist, QString(info->author) }
+            std::tuple{ Mpris::Metadata::TrackId, QString("/%1%2").arg(player->current_file()).arg(trackno) },
+            std::tuple{ Mpris::Metadata::Length,  len },
+            std::tuple{ Mpris::Metadata::Title,   QString(info->song) },
+            std::tuple{ Mpris::Metadata::Album,   QString(info->game) },
+            std::tuple{ Mpris::Metadata::Artist,  QString(info->author) }
         ));
+        player->start_or_resume();
     });
 
     player->on_file_changed([=, this] (int fileno) {
@@ -497,8 +514,18 @@ MainWindow::MainWindow(QWidget *parent)
 
     // playlist settings
     auto *autoplay     = make_checkbox("Autoplay",     options.autoplay,     this, [=, this] (int state) { player->set_autoplay(state); });
-    auto *repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player->set_track_repeat(state); update_next_prev_track(); });
-    auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player->set_file_repeat(state);  update_next_prev_track(); });
+    auto *repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player->set_track_repeat(state); });
+    auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player->set_file_repeat(state); });
+
+    player->on_repeat_changed([=, this] (bool autoplay, bool repeat_track, bool repeat_file) {
+        if (!autoplay)
+            mpris->setLoopStatus(Mpris::LoopStatus::Track);
+        else if (repeat_track)
+            mpris->setLoopStatus(Mpris::LoopStatus::Track);
+        else
+            mpris->setLoopStatus(Mpris::LoopStatus::Playlist);
+        update_next_prev_track();
+    });
 
     player->on_played([=, this] {
         play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
@@ -595,7 +622,7 @@ void MainWindow::load_shortcuts()
         };
     };
     settings.beginGroup("shortcuts");
-    add_shortcut("play", "Play/Pause",      "Ctrl+Space",   [=, this] { player->play_pause(); });
+    add_shortcut("play",  "Play/Pause",     "Ctrl+Space",   [=, this] { player->play_pause(); });
     add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();    });
     add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();    });
     add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { player->stop(); });
@@ -633,7 +660,7 @@ void MainWindow::open_playlist(const QString &filename)
         w->setEnabled(true);
 }
 
-void MainWindow::open_single_file(QString filename)
+void MainWindow::open_single_file(const QString &filename)
 {
     player->clear_file_playlist();
     auto err = player->add_file(filename.toStdString());

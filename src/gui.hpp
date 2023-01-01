@@ -72,14 +72,13 @@ class MainWindow : public QMainWindow {
     QToolButton *prev_track, *next_track;
     RecentList *recent_files, *recent_playlists;
     std::vector<QWidget *> to_enable;
-    MprisPlayer *mpris;
 
     void update_next_prev_track();
     std::optional<QString> file_dialog(const QString &window_name, const QString &desc);
     QString save_dialog(const QString &window_name, const QString &desc);
     void load_shortcuts();
     void open_playlist(const QString &filename);
-    void open_single_file(QString filename);
+    void open_single_file(const QString &filename);
     void edit_settings();
     void edit_shortcuts();
 

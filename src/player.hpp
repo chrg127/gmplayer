@@ -109,6 +109,8 @@ public:
     void seek(int ms);
     void seek_relative(int off);
 
+    int current_track() const;
+    int current_file() const;
     std::optional<int> get_next_file() const;
     std::optional<int> get_prev_file() const;
     std::optional<int> get_next_track() const;
@@ -118,8 +120,8 @@ public:
     int effective_length() const;
     std::vector<std::string> file_names() const;
     std::vector<std::string> track_names() const;
-    void shuffle_tracks();
-    void shuffle_files();
+    void shuffle_tracks(bool do_shuffle);
+    void shuffle_files(bool do_shuffle);
 
     PlayerOptions & get_options();
     void set_fade(int secs);
@@ -145,8 +147,10 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(paused, void)
     CALLBACK(played, void)
     CALLBACK(stopped, void)
-    CALLBACK(file_order_changed, const std::vector<std::string> &)
-    CALLBACK(track_order_changed, const std::vector<std::string> &)
+    CALLBACK(file_order_changed, const std::vector<std::string> &, bool)
+    CALLBACK(track_order_changed, const std::vector<std::string> &, bool)
+    CALLBACK(repeat_changed, bool, bool, bool)
+    CALLBACK(tempo_changed, double)
 
 #undef CALLBACK
 };
