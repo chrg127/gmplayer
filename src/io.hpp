@@ -160,8 +160,8 @@ public:
     u8 operator[](std::size_t index)                           { return ptr[index]; }
     u8 *begin() const                                          { return ptr; }
     u8 *end() const                                            { return ptr + len; }
-    u8 *data()                                                 { return ptr; }
     const u8 *data() const                                     { return ptr; }
+    u8 *data()                                                 { return ptr; }
     std::size_t size() const                                   { return len; }
     std::string filename() const                               { return path.filename().c_str(); }
     std::filesystem::path file_path() const noexcept           { return path; }

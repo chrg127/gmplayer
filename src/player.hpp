@@ -17,8 +17,6 @@ namespace io {
     class MappedFile;
 }
 
-using gme_err_t = const char *;
-
 inline constexpr std::size_t operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
 inline constexpr std::size_t operator"" _min(unsigned long long mins) { return mins * 60_sec; }
 
@@ -42,10 +40,18 @@ struct PlayerOptions {
 };
 
 struct OpenPlaylistResult {
-    std::error_code pl_error;
+    std::error_condition pl_error;
     std::vector<std::string> not_opened;
-    std::vector<std::string> errors;
+    std::vector<std::error_condition> errors;
 };
+
+struct GMEErrorCategory : public std::error_category {
+    ~GMEErrorCategory() {}
+    const char *name() const noexcept { return "gme error"; }
+    std::string message(int n) const;
+};
+
+inline GMEErrorCategory gme_error_category;
 
 class Player {
     // emulator and audio device objects.
@@ -88,7 +94,7 @@ public:
     Player & operator=(const Player &) = delete;
 
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
-    std::error_code add_file(std::filesystem::path path);
+    std::error_condition add_file(std::filesystem::path path);
     bool remove_file(int fileno);
     void save_file_playlist(io::File &to);
     void clear_file_playlist();

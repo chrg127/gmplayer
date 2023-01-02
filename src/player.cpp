@@ -63,6 +63,18 @@ namespace {
             std::shuffle(buf.begin(), buf.end(), rng::rng);
     }
 
+    std::error_condition validate(const io::MappedFile &f)
+    {
+        gme_type_t type;
+        auto err = gme_identify_file(f.filename().c_str(), &type);
+        if (type == nullptr)
+            return std::error_condition(1, gme_error_category);
+        auto header = gme_identify_header(f.data());
+        if (strcmp(header, "") == 0)
+            return std::error_condition(2, gme_error_category);
+        return std::error_condition{};
+    }
+
     /*
      * problem: we have one single player and we'd like to make it into a class to use
      * actual ctors and dtors (instead of manually calling an init() and free().
@@ -86,6 +98,20 @@ namespace {
 void audio_callback(void *unused, u8 *stream, int stream_length)
 {
     object_handler.get().audio_callback(unused, stream, stream_length);
+}
+
+
+
+// GMEErrorCategory gme_error_category;
+
+std::string GMEErrorCategory::message(int n) const
+{
+    switch (n) {
+    case 0: return "Success";
+    case 1: return "Invalid music file type";
+    case 2: return "Invalid music file header";
+    default: return "Unknown error";
+    }
 }
 
 
@@ -138,34 +164,28 @@ Player::~Player()
 
 
 
+
+
 OpenPlaylistResult Player::open_file_playlist(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     clear_file_playlist();
     auto file = io::File::open(path, io::Access::Read);
-    if (!file) {
-        fmt::print(stderr, "can't open file {}\n", path.c_str());
-        return { .pl_error = file.error() };
-    }
+    if (!file)
+        return { .pl_error = file.error().default_error_condition() };
 
-    OpenPlaylistResult r = { .pl_error = std::error_code{} };
-
-    auto validate = [](const char *s) -> gme_err_t {
-        gme_type_t type;
-        auto err = gme_identify_file(s, &type);
-        if (type == nullptr)
-            return err;
-        return nullptr;
-    };
+    OpenPlaylistResult r = { .pl_error = std::error_condition{} };
 
     auto try_open_file = [&](std::string_view name) -> std::optional<io::MappedFile> {
-        for (auto p : { fs::path(name), path.parent_path() / name })
-            if (auto err = validate(p.c_str()); err)
-                r.errors.push_back(fmt::format("{}: {}", p.string(), err));
-            else if (auto f = io::MappedFile::open(p); !f)
-                r.errors.push_back(fmt::format("{}: {}", p.string(), f.error().message()));
+        for (auto p : { fs::path(name), path.parent_path() / name }) {
+            auto f = io::MappedFile::open(p);
+            if (!f)
+                r.errors.push_back(f.error().default_error_condition());
+            else if (auto err = validate(f.value()); err)
+                r.errors.push_back(err);
             else
                 return std::move(f.value());
+        }
         return std::nullopt;
     };
 
@@ -175,23 +195,26 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
         else
             r.not_opened.push_back(line);
     }
+
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
     file_order_changed(file_names(), false);
     return r;
 }
 
-std::error_code Player::add_file(fs::path path)
+std::error_condition Player::add_file(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     auto file = io::MappedFile::open(path);
     if (!file)
-        return file.error();
+        return file.error().default_error_condition();
+    if (auto err = validate(file.value()); err)
+        return err;
     files.cache.push_back(std::move(file.value()));
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
     file_order_changed(file_names(), false);
-    return std::error_code{};
+    return std::error_condition{};
 }
 
 bool Player::remove_file(int fileno)

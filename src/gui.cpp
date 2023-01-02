@@ -429,6 +429,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *system  = new QLabel;
     auto *author  = new QLabel;
     auto *comment = new QLabel;
+    auto *dumper  = new QLabel;
 
     // track playlist
     auto *tracklist     = new QListWidget;
@@ -456,6 +457,7 @@ MainWindow::MainWindow(QWidget *parent)
         author  ->setText(info->author);
         system  ->setText(info->system);
         comment ->setText(info->comment);
+        dumper  ->setText(info->dumper);
         auto len = player->effective_length();
         duration_slider->setRange(0, len);
         update_next_prev_track();
@@ -498,11 +500,12 @@ MainWindow::MainWindow(QWidget *parent)
         });
         menu.addAction("Save playlist", [=, this]() {
             auto filename = save_dialog(tr("Save playlist"), "Playlist files (*.playlist)");
-            if (auto f = io::File::open(fs::path(filename.toStdString()), io::Access::Write); f)
+            auto path = fs::path(filename.toStdString());
+            if (auto f = io::File::open(path, io::Access::Write); f)
                 player->save_file_playlist(f.value());
             else
                 msgbox(QString("Couldn't open file %1. (%2)")
-                    .arg(filename)
+                    .arg(QString::fromStdString(path.filename()))
                     .arg(QString::fromStdString(f.error().message())));
         });
         menu.exec(filelist->mapToGlobal(p));
@@ -558,7 +561,8 @@ MainWindow::MainWindow(QWidget *parent)
                     std::make_tuple(new QLabel(tr("Game:")),    game),
                     std::make_tuple(new QLabel(tr("System:")),  system),
                     std::make_tuple(new QLabel(tr("Author:")),  author),
-                    std::make_tuple(new QLabel(tr("Comment:")), comment)
+                    std::make_tuple(new QLabel(tr("Comment:")), comment),
+                    std::make_tuple(new QLabel(tr("Dumper:")),  dumper)
                 ),
                 make_groupbox<QVBoxLayout>("Playlist settings",
                     autoplay, repeat_track, repeat_file
@@ -645,10 +649,9 @@ void MainWindow::open_playlist(const QString &filename)
             text += QString::fromStdString(file) + "\n";
         text += "Errors found:\n";
         for (auto &err : res.errors)
-            text += QString::fromStdString(err) + "\n";
+            text += QString::fromStdString(err.message()) + "\n";
         msgbox("Errors were found while opening the playlist.",
-               "Check the details for the errors.",
-               text);
+               "Check the details for the errors.", text);
     }
     recent_playlists->add(filename);
     player->load_file(0);
@@ -659,10 +662,11 @@ void MainWindow::open_playlist(const QString &filename)
 void MainWindow::open_single_file(const QString &filename)
 {
     player->clear_file_playlist();
-    auto err = player->add_file(filename.toStdString());
-    if (err != std::error_code()) {
+    auto path = fs::path(filename.toStdString());
+    auto err = player->add_file(path);
+    if (err != std::error_condition{}) {
         msgbox(QString("Couldn't open file %1 (%2)")
-            .arg(filename)
+            .arg(QString::fromStdString(path.filename()))
             .arg(QString::fromStdString(err.message())));
         return;
     }
