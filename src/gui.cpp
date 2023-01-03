@@ -527,6 +527,7 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     player->on_played([=, this] {
+        play_btn->setEnabled(true);
         play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
         mpris->setPlaybackStatus(Mpris::PlaybackStatus::Playing);
     });
@@ -538,6 +539,40 @@ MainWindow::MainWindow(QWidget *parent)
 
     player->on_stopped    ([=, this] { duration_slider->setValue(0); });
     player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
+
+    player->on_load_file_error([=, this] (const std::string &filename,
+                                          std::error_condition error,
+                                          const char *gme_message) {
+        msgbox(QString("Couldn't load file %1. (%2) (%3)")
+            .arg(QString::fromStdString(filename))
+            .arg(QString::fromStdString(error.message()))
+            .arg(gme_message));
+        play_btn->setEnabled(false);
+        player->pause();
+    });
+
+    player->on_load_track_error([=, this] (const std::string &filename,
+                                           const char *trackname,
+                                           int trackno,
+                                           std::error_condition error,
+                                           const char *gme_message) {
+        msgbox(QString("Couldn't load track %1 (%2) of file %3. (%4) (%5)")
+            .arg(trackno)
+            .arg(trackname)
+            .arg(QString::fromStdString(filename))
+            .arg(QString::fromStdString(error.message()))
+            .arg(gme_message));
+        play_btn->setEnabled(false);
+        player->pause();
+    });
+
+    player->on_seek_error([=, this] (std::error_condition error, const char *gme_message) {
+        msgbox(QString("Got a seek error. (%2) (%3)")
+            .arg(QString::fromStdString(error.message()))
+            .arg(gme_message));
+        play_btn->setEnabled(false);
+        player->pause();
+    });
 
     // disable everything
     add_to_enable(

@@ -155,6 +155,9 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(track_order_changed, const std::vector<std::string> &, bool)
     CALLBACK(repeat_changed, bool, bool, bool)
     CALLBACK(tempo_changed, double)
+    CALLBACK(load_file_error, const std::string &, std::error_condition, const char *)
+    CALLBACK(load_track_error, const std::string &, const char *, int, std::error_condition, const char *)
+    CALLBACK(seek_error, std::error_condition, const char *)
 
 #undef CALLBACK
 };

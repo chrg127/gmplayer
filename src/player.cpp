@@ -102,8 +102,6 @@ void audio_callback(void *unused, u8 *stream, int stream_length)
 
 
 
-// GMEErrorCategory gme_error_category;
-
 std::string GMEErrorCategory::message(int n) const
 {
     switch (n) {
@@ -251,8 +249,9 @@ int Player::load_file(int fileno)
     files.current = fileno;
     int num = files.order[fileno];
     auto &file = files.cache[num];
-    // TODO: we should handle errors regarding invalid music files
-    gme_open_data(file.data(), file.size(), &emu, 44100);
+    auto err = gme_open_data(file.data(), file.size(), &emu, 44100);
+    if (err)
+        load_file_error(file.filename(), std::error_condition(3, gme_error_category), err);
     // when loading a file, try to see if there's a m3u file too
     // m3u files must have the same name as the file, but with extension m3u
     // if there are any errors, ignore them (m3u loading is not important)
@@ -277,9 +276,12 @@ int Player::load_track(int trackno)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     tracks.current = trackno;
     int num = tracks.order[trackno];
-    gme_track_info(emu, &track.metadata, num);
+    auto filename = files.cache[files.order[files.current]].filename();
+    if (auto err = gme_track_info(emu, &track.metadata, num); err)
+        load_track_error(filename, "", num, std::error_condition(4, gme_error_category), err);
     track.length = get_track_length(track.metadata, options.default_duration);
-    gme_start_track(emu, num);
+    if (auto err = gme_start_track(emu, num); err)
+        load_track_error(filename, track.metadata->song, num, std::error_condition(4, gme_error_category), err);
     if (track.length < options.fade_out_ms)
         options.fade_out_ms = track.length;
     if (options.fade_out_ms != 0)
@@ -360,11 +362,9 @@ void Player::seek(int ms)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     int len = effective_length();
-    if (ms < 0)
-        ms = 0;
-    if (ms > len)
-        ms = len;
-    gme_seek(emu, ms);
+    ms = ms < 0   ? 0 : ms > len ? len : ms;
+    if (auto err = gme_seek(emu, ms); err)
+        seek_error(std::error_condition(5, gme_error_category), err);
     // fade disappears on seek for some reason
     if (options.fade_out_ms != 0)
         gme_set_fade(emu, track.length - options.fade_out_ms);
