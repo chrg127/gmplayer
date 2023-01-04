@@ -230,8 +230,8 @@ bool Player::remove_file(int fileno)
 void Player::save_file_playlist(io::File &to)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    for (auto &file : files.cache)
-        fmt::print(to.data(), "{}\n", file.file_path().string());
+    for (auto i : files.order)
+        fmt::print(to.data(), "{}\n", files.cache[i].file_path().string());
 }
 
 void Player::clear_file_playlist()
@@ -471,6 +471,29 @@ void Player::shuffle_files(bool do_shuffle)
     generate_order(files.order, do_shuffle);
     file_order_changed(file_names(), do_shuffle);
 }
+
+int Player::move_track(int n, int where, int min, int max)
+{
+    if (n < min || n > max)
+        return n;
+    std::swap(tracks.order[n], tracks.order[n + where]);
+    track_order_changed(track_names(), false);
+    return n + where;
+}
+
+int Player::move_file(int n, int where, int min, int max)
+{
+    if (n < min || n > max)
+        return n;
+    std::swap(files.order[n], files.order[n + where]);
+    file_order_changed(file_names(), false);
+    return n + where;
+}
+
+int Player::move_track_up(int trackno)   { return move_track(trackno, -1, 1, tracks.order.size() - 1); }
+int Player::move_track_down(int trackno) { return move_track(trackno, +1, 0, tracks.order.size() - 2); }
+int Player::move_file_up(int fileno)     { return move_file(  fileno, -1, 1, files.order.size() - 1); }
+int Player::move_file_down(int fileno)   { return move_file(  fileno, +1, 0, files.order.size() - 2); }
 
 
 

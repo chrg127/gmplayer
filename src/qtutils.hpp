@@ -96,3 +96,10 @@ QSpinBox *make_spinbox(int maximum, int value, bool enabled = true)
     s->setEnabled(enabled);
     return s;
 }
+
+QPushButton *make_button(const QString &name, QObject *o, auto &&fn)
+{
+    auto *b = new QPushButton(name);
+    QObject::connect(b, &QPushButton::released, o, fn);
+    return b;
+}

@@ -433,15 +433,17 @@ MainWindow::MainWindow(QWidget *parent)
 
     // track playlist
     auto *tracklist     = new QListWidget;
-    auto *track_shuffle = new QPushButton("Shuffle");
-    connect(tracklist,     &QListWidget::itemActivated, this, [=, this] { player->load_track(tracklist->currentRow()); });
-    connect(track_shuffle, &QPushButton::released,      this, [=, this] { player->shuffle_tracks(true); player->load_track(0); });
+    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { player->load_track(tracklist->currentRow()); });
+    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle_tracks(true); player->load_track(0); });
+    auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move_track_up(tracklist->currentRow())); });
+    auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move_track_down(tracklist->currentRow())); });
 
     // file playlist
     auto *filelist     = new QListWidget;
-    auto *file_shuffle = new QPushButton("Shuffle");
-    connect(filelist,     &QListWidget::itemActivated,  this, [=, this] { player->load_file(filelist->currentRow()); });
-    connect(file_shuffle, &QPushButton::released,       this, [=, this] { player->shuffle_files(true); player->load_file(0); });
+    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { player->load_file(filelist->currentRow()); });
+    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle_files(true); player->load_file(0); });
+    auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move_file_up(filelist->currentRow())); });
+    auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move_file_down(filelist->currentRow())); });
 
     player->on_file_order_changed( [=, this] (const auto &names, bool shuffled) {
         update_list(filelist, names);
@@ -577,8 +579,9 @@ MainWindow::MainWindow(QWidget *parent)
     // disable everything
     add_to_enable(
         duration_slider, play_btn, prev_track, next_track, stop_btn, tempo,
-        volume_slider, volume_btn, tracklist, track_shuffle, filelist,
-        file_shuffle, autoplay, repeat_track, repeat_file
+        volume_slider, volume_btn, tracklist, track_shuffle, track_up, track_down,
+        filelist, file_shuffle, file_up, file_down,
+        autoplay, repeat_track, repeat_file
     );
     for (auto &w : to_enable)
         w->setEnabled(false);
@@ -587,8 +590,16 @@ MainWindow::MainWindow(QWidget *parent)
     center->setLayout(
         make_layout<QVBoxLayout>(
             make_layout<QHBoxLayout>(
-                make_layout<QVBoxLayout>(new QLabel("Track playlist"), tracklist, track_shuffle),
-                make_layout<QVBoxLayout>(new QLabel("File playlist"), filelist,  file_shuffle)
+                make_layout<QVBoxLayout>(
+                    new QLabel("Track playlist"),
+                    tracklist,
+                    make_layout<QHBoxLayout>(track_shuffle, track_up, track_down)
+                ),
+                make_layout<QVBoxLayout>(
+                    new QLabel("File playlist"),
+                    filelist,
+                    make_layout<QHBoxLayout>(file_shuffle, file_up, file_down)
+                )
             ),
             make_layout<QHBoxLayout>(
                 make_groupbox<QFormLayout>("Track info",

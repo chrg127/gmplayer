@@ -126,6 +126,12 @@ public:
     std::vector<std::string> track_names() const;
     void shuffle_tracks(bool do_shuffle);
     void shuffle_files(bool do_shuffle);
+    int move_track(int n, int where, int min, int max);
+    int move_file(int n, int where, int min, int max);
+    int move_track_up(int trackno);
+    int move_track_down(int trackno);
+    int move_file_up(int fileno);
+    int move_file_down(int fileno);
 
     PlayerOptions & get_options();
     void set_fade(int secs);
