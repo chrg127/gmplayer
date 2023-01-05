@@ -106,6 +106,23 @@ void save_recent(const QStringList &files, const QStringList &playlists)
     settings.endGroup();
 }
 
+QString load_last_dir()
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("directories");
+    QString last_dir = settings.value("last_visited", ".").toString();
+    settings.endGroup();
+    return last_dir;
+}
+
+void save_last_dir(const QString &dir)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("directories");
+    settings.setValue("last_visited", dir);
+    settings.endGroup();
+}
+
 void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
@@ -352,6 +369,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // set up shortcuts
     load_shortcuts();
+
+    // set up last visited directory
+    last_file = load_last_dir();
 
     // duration slider
     auto *duration_slider = new QSlider(Qt::Horizontal);
@@ -745,6 +765,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     save_player_settings(player->get_options());
     save_recent(recent_files->filenames(), recent_playlists->filenames());
     save_shortcuts(shortcuts);
+    save_last_dir(last_file);
     event->accept();
 }
 
