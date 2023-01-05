@@ -9,12 +9,14 @@
 #include "player.hpp"
 
 bool sdl_running = true;
+bool got_sigint = false;
 
 void handle_sdl_events()
 {
     for (SDL_Event ev; SDL_PollEvent(&ev); ) {
         switch (ev.type) {
         case SDL_QUIT:
+            got_sigint = true;
             sdl_running = false;
         }
     }
@@ -31,7 +33,8 @@ int main(int argc, char *argv[])
             handle_sdl_events();
             SDL_Delay(16);
         }
-        mw.close();
+        if (got_sigint)
+            mw.close();
     });
 
     mw.show();
