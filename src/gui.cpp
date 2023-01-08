@@ -40,6 +40,7 @@
 #include "qtutils.hpp"
 #include "player.hpp"
 #include "io.hpp"
+#include "appinfo.hpp"
 
 namespace fs = std::filesystem;
 
@@ -255,6 +256,26 @@ RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *pare
 
 
 
+AboutDialog::AboutDialog(QWidget *parent)
+{
+    auto *icon = new QLabel;
+    QPixmap pic("gmplayer.png");
+    icon->setPixmap(pic);
+    auto *label = new QLabel(QString("<h2><b>gmplayer %1</b></h2>").arg(version));
+    auto *about_label = new QLabel(about_text); about_label->setOpenExternalLinks(true);
+    auto *lib_label   = new QLabel(lib_text);   lib_label->setOpenExternalLinks(true);
+    auto *tabs = make_tabs(
+        std::make_tuple(about_label, "About"),
+        std::make_tuple(lib_label, "Libraries")
+    );
+    setWindowTitle("About gmplayer");
+    auto *title_lt = make_layout<QHBoxLayout>(icon, label);
+    title_lt->addStretch();
+    setLayout(make_layout<QVBoxLayout>(title_lt, tabs));
+}
+
+
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -358,7 +379,13 @@ MainWindow::MainWindow(QWidget *parent)
         std::make_tuple("Shortcuts", &MainWindow::edit_shortcuts)
     );
 
-    create_menu(this, "&About");
+    create_menu(this, "&About",
+        std::make_tuple("About gmplayer", [=, this] {
+            auto *wnd = new AboutDialog();
+            wnd->open();
+        }),
+        std::make_tuple("About Qt", &QApplication::aboutQt)
+    );
 
     // set up recent files
     auto [files, playlists] = load_recent_files();

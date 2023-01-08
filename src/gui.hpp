@@ -60,6 +60,12 @@ signals:
     void clicked(const QString &filename);
 };
 
+struct AboutDialog : public QDialog {
+    Q_OBJECT
+public:
+    explicit AboutDialog(QWidget *parent = nullptr);
+};
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 

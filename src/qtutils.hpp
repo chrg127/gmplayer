@@ -103,3 +103,10 @@ QPushButton *make_button(const QString &name, QObject *o, auto &&fn)
     QObject::connect(b, &QPushButton::released, o, fn);
     return b;
 }
+
+QTabWidget *make_tabs(auto&&... args)
+{
+    auto *tabs = new QTabWidget;
+    (tabs->addTab(std::get<0>(args), std::get<1>(args)), ...);
+    return tabs;
+}
