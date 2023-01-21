@@ -6,6 +6,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QMessageBox>
+#include <QDirIterator>
 
 template <typename T> void add_to_layout(T *lt, QWidget *w) { lt->addWidget(w); }
 template <typename T> void add_to_layout(T *lt, QLayout *l) { lt->addLayout(l); }
@@ -109,4 +110,11 @@ QTabWidget *make_tabs(auto&&... args)
     auto *tabs = new QTabWidget;
     (tabs->addTab(std::get<0>(args), std::get<1>(args)), ...);
     return tabs;
+}
+
+void print_all_resources()
+{
+    QDirIterator it(":", QDirIterator::Subdirectories);
+    while (it.hasNext())
+        qDebug() << it.next();
 }

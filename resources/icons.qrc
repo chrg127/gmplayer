@@ -1,0 +1,9 @@
+ <!DOCTYPE RCC><RCC version="1.0">
+     <qresource>
+        <file>icons/gmplayer16.png</file>
+        <file>icons/gmplayer32.png</file>
+        <file>icons/gmplayer64.png</file>
+        <file>icons/gmplayer128.png</file>
+        <file>icons/gmplayer256.png</file>
+    </qresource>
+</RCC>

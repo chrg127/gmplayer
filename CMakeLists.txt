@@ -29,6 +29,7 @@ link_directories(${MPRISQT5_LIBRARY_DIRS})
 link_directories(${SDL2_LIBRARY_DIRS})
 link_directories(external/lib)
 
-add_executable(gmplayer src/main.cpp src/gui.cpp src/player.cpp src/keyrecorder.cpp)
+add_executable(gmplayer src/main.cpp src/gui.cpp src/player.cpp
+                        src/keyrecorder.cpp resources/icons.qrc)
 
 target_link_libraries(gmplayer Qt5::Widgets ${SDL2_LIBRARIES} fmt pthread gme ${MPRISQT5_LIBRARIES})
