@@ -65,7 +65,7 @@ inline std::error_code make_error()
 enum class Access { Read, Write, Modify, Append, };
 
 template <typename T>
-using IOResult = tl::expected<T, std::error_code>;
+using Result = tl::expected<T, std::error_code>;
 
 class File {
     std::unique_ptr<FILE, void (*)(FILE *)> file_ptr = { nullptr, detail::file_deleter };
@@ -76,7 +76,7 @@ class File {
     { }
 
 public:
-    static IOResult<File> open(std::filesystem::path pathname, Access access)
+    static Result<File> open(std::filesystem::path pathname, Access access)
     {
         FILE *fp = [&](const char *name) -> FILE * {
             switch (access) {
@@ -148,7 +148,7 @@ public:
         return *this;
     }
 
-    static IOResult<MappedFile> open(std::filesystem::path path)
+    static Result<MappedFile> open(std::filesystem::path path)
     {
         auto [p, s] = detail::open_mapped_file(path);
         if (!p)
@@ -168,7 +168,7 @@ public:
 };
 
 // reads an entire file into a string, skipping any file object construction.
-inline IOResult<std::string> read_file(std::filesystem::path path)
+inline Result<std::string> read_file(std::filesystem::path path)
 {
     FILE *file = fopen(path.c_str(), "rb");
     if (!file)
