@@ -4,4 +4,5 @@ SPC
 build
 gme/*
 other
-external
+external/lib
+external/features

@@ -30,7 +30,7 @@ when installing:
 Assuming you are in a debian-based distribution, both SDL2 and QtMpris can be
 installed with the following command:
 
-    sudo apt install libmpris-qt5-1 libmpris-qt5-dev libsdl2-2.0-0 libsdl2-dev
+    sudo apt install libmpris-qt5-dev libsdl2-dev
 
 For other distributions the specific names of the package may vary.
 
@@ -49,4 +49,3 @@ The commands should be run under the project's root directory. -B for cmake
 specifies the directory to put the build files. -C for make specifies where
 to find the Makefile.
 After the commands are done, the executable should be found inside build/.
-
