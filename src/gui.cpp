@@ -259,8 +259,7 @@ RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *pare
 AboutDialog::AboutDialog(QWidget *parent)
 {
     auto *icon = new QLabel;
-    QPixmap pic("gmplayer.png");
-    icon->setPixmap(pic);
+    icon->setPixmap(QPixmap(("icons/gmplayer32.png")));
     auto *label = new QLabel(QString("<h2><b>gmplayer %1</b></h2>").arg(version));
     auto *about_label = new QLabel(about_text); about_label->setOpenExternalLinks(true);
     auto *lib_label   = new QLabel(lib_text);   lib_label->setOpenExternalLinks(true);
@@ -283,6 +282,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *center = new QWidget(this);
     setCentralWidget(center);
     setAcceptDrops(true);
+    setWindowIcon(QIcon("icons/gmplayer64.png"));
 
     player = new Player;
     PlayerOptions options = load_player_settings();
