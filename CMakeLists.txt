@@ -19,7 +19,6 @@ pkg_check_modules(MPRISQT5 REQUIRED mpris-qt5)
 
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
 find_package(SDL2 REQUIRED)
-find_package(fmt REQUIRED)
 
 include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${MPRISQT5_INCLUDE_DIRS})
@@ -32,4 +31,4 @@ link_directories(external/lib)
 add_executable(gmplayer src/main.cpp src/gui.cpp src/player.cpp
                         src/keyrecorder.cpp resources/icons.qrc)
 
-target_link_libraries(gmplayer Qt5::Widgets ${SDL2_LIBRARIES} fmt pthread gme ${MPRISQT5_LIBRARIES})
+target_link_libraries(gmplayer Qt5::Widgets ${SDL2_LIBRARIES} pthread gme ${MPRISQT5_LIBRARIES})

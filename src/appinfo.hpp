@@ -28,7 +28,6 @@ gmplayer uses the following libraries:
     <li><a href="https://bitbucket.org/mpyne/game-music-emu/wiki/Home">Game_Music_Emu</a></li>
     <li><a href="https://www.libsdl.org">SDL2</a></li>
     <li><a href="https://github.com/sailfishos/qtmpris">MprisQt</a></li>
-    <li><a href="https://github.com/fmtlib/fmt">fmt</a></li>
 </ul>
 
 <p style="white-space: pre-wrap; margin: 25px;">

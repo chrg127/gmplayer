@@ -35,7 +35,6 @@
 #include <QStandardPaths>
 #include <Mpris>
 #include <MprisPlayer>
-#include <fmt/core.h>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
 #include "player.hpp"
@@ -48,11 +47,11 @@ namespace {
 
 QString format_duration(int ms, int max)
 {
-    int mins = ms / 1000 / 60;
-    int secs = ms / 1000 % 60;
-    int max_mins = max / 1000 / 60;
-    int max_secs = max / 1000 % 60;
-    return QString::fromStdString(fmt::format("{:02}:{:02}/{:02}:{:02}", mins, secs, max_mins, max_secs));
+    return QString("%1:%2/%3:%4")
+        .arg(ms  / 1000 / 60, 2, 10, QChar('0'))
+        .arg(ms  / 1000 % 60, 2, 10, QChar('0'))
+        .arg(max / 1000 / 60, 2, 10, QChar('0'))
+        .arg(max / 1000 % 60, 2, 10, QChar('0'));
 };
 
 PlayerOptions load_player_settings()

@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <array>
 #include <optional>
 #include <mutex>
@@ -13,7 +15,6 @@
 #include <filesystem>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
-#include <fmt/core.h>
 #include <gme/gme.h>
 #include "random.hpp"
 #include "io.hpp"
@@ -27,26 +28,6 @@ const int CHANNELS  = 2;
 
 
 namespace {
-    void dump_info(gme_info_t *info)
-    {
-        fmt::print(stderr,
-            "length = {}\n"
-            "intro length = {}\n"
-            "loop length = {}\n"
-            "play length = {}\n"
-            "system = {}\n"
-            "game = {}\n"
-            "song = {}\n"
-            "author = {}\n"
-            "copyright = {}\n"
-            "comment = {}\n"
-            "dumper = {}\n",
-            info->length, info->intro_length, info->loop_length, info->play_length,
-            info->system, info->game, info->song, info->author, info->copyright,
-            info->comment, info->dumper
-        );
-    }
-
     int get_track_length(gme_info_t *info, int default_duration = 3_min)
     {
         if (info->length > 0)
@@ -231,7 +212,7 @@ void Player::save_file_playlist(io::File &to)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     for (auto i : files.order)
-        fmt::print(to.data(), "{}\n", files.cache[i].file_path().string());
+        fprintf(to.data(), "%s\n", files.cache[i].file_path().c_str());
 }
 
 void Player::clear_file_playlist()
@@ -259,7 +240,7 @@ int Player::load_file(int fileno)
 #ifdef DEBUG
     err = gme_load_m3u(emu, m3u_path.c_str());
     if (err)
-        fmt::print(stderr, "warning: m3u: {}\n", err);
+        fprintf(stderr, "warning: m3u: %s\n", err);
 #else
     gme_load_m3u(emu, m3u_path.c_str());
 #endif
@@ -453,7 +434,8 @@ std::vector<std::string> Player::track_names() const
     for (auto i : tracks.order) {
         gme_info_t *info;
         gme_track_info(emu, &info, i);
-        names.push_back(info->song[0] == '\0' ? fmt::format("Track {}", i) : info->song);
+        names.push_back(info->song[0] ? info->song
+                                      : std::string("Track ") + std::to_string(i));
     }
     return names;
 }
