@@ -69,7 +69,7 @@ public:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
-    Player *player;
+    Player player;
     QString last_file = ".";
     std::map<QString, Shortcut> shortcuts;
     bool was_paused = false;

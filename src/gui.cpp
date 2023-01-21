@@ -284,9 +284,8 @@ MainWindow::MainWindow(QWidget *parent)
     setAcceptDrops(true);
     setWindowIcon(QIcon("icons/gmplayer64.png"));
 
-    player = new Player;
     PlayerOptions options = load_player_settings();
-    player->get_options() = options;
+    player.get_options() = options;
 
     auto *mpris = new MprisPlayer(this);
     mpris->setServiceName("gmplayer");
@@ -320,44 +319,44 @@ MainWindow::MainWindow(QWidget *parent)
     mpris->setVolume(options.volume);
 
     connect(mpris, &MprisPlayer::quitRequested,      this, [=, this] { QApplication::quit(); });
-    connect(mpris, &MprisPlayer::pauseRequested,     this, [=, this] { player->pause(); });
-    connect(mpris, &MprisPlayer::playRequested,      this, [=, this] { player->start_or_resume(); });
-    connect(mpris, &MprisPlayer::playPauseRequested, this, [=, this] { player->play_pause(); });
-    connect(mpris, &MprisPlayer::stopRequested,      this, [=, this] { player->stop(); });
-    connect(mpris, &MprisPlayer::nextRequested,      this, [=, this] { player->next(); });
-    connect(mpris, &MprisPlayer::previousRequested,  this, [=, this] { player->prev(); });
-    connect(mpris, &MprisPlayer::seekRequested,      this, [=, this] (auto offset) { player->seek_relative(offset); });
-    connect(mpris, &MprisPlayer::rateRequested,      this, [=, this] (double rate) { player->set_tempo(rate); });
+    connect(mpris, &MprisPlayer::pauseRequested,     this, [=, this] { player.pause(); });
+    connect(mpris, &MprisPlayer::playRequested,      this, [=, this] { player.start_or_resume(); });
+    connect(mpris, &MprisPlayer::playPauseRequested, this, [=, this] { player.play_pause(); });
+    connect(mpris, &MprisPlayer::stopRequested,      this, [=, this] { player.stop(); });
+    connect(mpris, &MprisPlayer::nextRequested,      this, [=, this] { player.next(); });
+    connect(mpris, &MprisPlayer::previousRequested,  this, [=, this] { player.prev(); });
+    connect(mpris, &MprisPlayer::seekRequested,      this, [=, this] (auto offset) { player.seek_relative(offset); });
+    connect(mpris, &MprisPlayer::rateRequested,      this, [=, this] (double rate) { player.set_tempo(rate); });
     connect(mpris, &MprisPlayer::shuffleRequested,   this, [=, this] (bool do_shuffle) {
-        player->shuffle_files(do_shuffle);
-        player->load_file(0);
+        player.shuffle_files(do_shuffle);
+        player.load_file(0);
     });
     connect(mpris, &MprisPlayer::volumeRequested,    this, [=, this] (double vol) {
-        player->set_volume(std::lerp(0.0, get_max_volume_value(), vol < 0.0 ? 0.0 : vol));
+        player.set_volume(std::lerp(0.0, get_max_volume_value(), vol < 0.0 ? 0.0 : vol));
     });
     connect(mpris, &MprisPlayer::openUriRequested, this, [=, this] (const QUrl &url) {
         open_single_file(url.toLocalFile());
     });
     connect(mpris, &MprisPlayer::setPositionRequested, this, [=, this] (const auto &id, qlonglong pos) {
-        player->seek(pos);
+        player.seek(pos);
     });
 
     connect(mpris, &MprisPlayer::loopStatusRequested, this, [=, this] (Mpris::LoopStatus status) {
         switch (status) {
         case Mpris::LoopStatus::None:
-            player->set_autoplay(false);
-            player->set_track_repeat(false);
-            player->set_file_repeat(false);
+            player.set_autoplay(false);
+            player.set_track_repeat(false);
+            player.set_file_repeat(false);
             break;
         case Mpris::LoopStatus::Track:
-            player->set_autoplay(true);
-            player->set_track_repeat(true);
-            player->set_file_repeat(true);
+            player.set_autoplay(true);
+            player.set_track_repeat(true);
+            player.set_file_repeat(true);
             break;
         case Mpris::LoopStatus::Playlist:
-            player->set_autoplay(true);
-            player->set_track_repeat(false);
-            player->set_file_repeat(false);
+            player.set_autoplay(true);
+            player.set_track_repeat(false);
+            player.set_file_repeat(false);
             break;
         }
     });
@@ -404,19 +403,19 @@ MainWindow::MainWindow(QWidget *parent)
     auto *duration_slider = new QSlider(Qt::Horizontal);
     auto *duration_label = new QLabel("00:00 / 00:00");
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
-        was_paused = !player->is_playing();
-        player->pause();
+        was_paused = !player.is_playing();
+        player.pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
-        player->seek(duration_slider->value());
+        player.seek(duration_slider->value());
         if (!was_paused)
-            player->start_or_resume();
+            player.start_or_resume();
     });
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this] (int ms) {
         duration_label->setText(format_duration(ms, duration_slider->maximum()));
     });
 
-    player->on_position_changed([=, this](int ms) {
+    player.on_position_changed([=, this](int ms) {
         duration_slider->setValue(ms);
         duration_label->setText(format_duration(ms, duration_slider->maximum()));
         // for some reason mpris uses microseconds instead of milliseconds
@@ -431,26 +430,26 @@ MainWindow::MainWindow(QWidget *parent)
         return b;
     };
 
-    auto *play_btn  = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
-    auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { player->stop();       });
-    next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { player->next();       });
-    prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { player->prev();       });
+    auto *play_btn  = make_btn(QStyle::SP_MediaPlay,         [=, this] { player.play_pause(); });
+    auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { player.stop();       });
+    next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { player.next();       });
+    prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { player.prev();       });
 
     // volume slider and button
     auto *volume_slider = new QSlider(Qt::Horizontal);
     volume_slider->setRange(0, get_max_volume_value());
     volume_slider->setValue(options.volume);
 
-    connect(volume_slider, &QSlider::sliderMoved, this, [=, this] (int value) { player->set_volume(value); });
+    connect(volume_slider, &QSlider::sliderMoved, this, [=, this] (int value) { player.set_volume(value); });
     QToolButton *volume_btn = make_btn(
         options.volume == 0 ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume,
         [=, this, last = options.volume == 0 ? get_max_volume_value() : options.volume] () mutable {
             int vol = volume_slider->value();
-            player->set_volume(vol != 0 ? last = vol, 0 : last);
+            player.set_volume(vol != 0 ? last = vol, 0 : last);
         }
     );
 
-    player->on_volume_changed([=, this] (int value) {
+    player.on_volume_changed([=, this] (int value) {
         volume_slider->setValue(value);
         volume_btn->setIcon(style()->standardIcon(value == 0 ? QStyle::SP_MediaVolumeMuted
                                                              : QStyle::SP_MediaVolume));
@@ -465,10 +464,10 @@ MainWindow::MainWindow(QWidget *parent)
                            std::make_tuple("1x",   1.0),
                            std::make_tuple("0.5x", 0.5));
     connect(tempo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=, this] (int i) {
-        player->set_tempo(tempo->currentData().toDouble());
+        player.set_tempo(tempo->currentData().toDouble());
     });
 
-    player->on_tempo_changed([=, this] (double value) { mpris->setRate(value); });
+    player.on_tempo_changed([=, this] (double value) { mpris->setRate(value); });
 
     // track information
     auto *title   = new QLabel;
@@ -480,50 +479,50 @@ MainWindow::MainWindow(QWidget *parent)
 
     // track playlist
     auto *tracklist     = new QListWidget;
-    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { player->load_track(tracklist->currentRow()); });
-    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle_tracks(true); player->load_track(0); });
-    auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move_track_up(tracklist->currentRow())); });
-    auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move_track_down(tracklist->currentRow())); });
+    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { player.load_track(tracklist->currentRow()); });
+    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player.shuffle_tracks(true); player.load_track(0); });
+    auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player.move_track_up(tracklist->currentRow())); });
+    auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player.move_track_down(tracklist->currentRow())); });
 
     // file playlist
     auto *filelist     = new QListWidget;
-    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { player->load_file(filelist->currentRow()); });
-    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle_files(true); player->load_file(0); });
-    auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move_file_up(filelist->currentRow())); });
-    auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move_file_down(filelist->currentRow())); });
+    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { player.load_file(filelist->currentRow()); });
+    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player.shuffle_files(true); player.load_file(0); });
+    auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player.move_file_up(filelist->currentRow())); });
+    auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player.move_file_down(filelist->currentRow())); });
 
-    player->on_file_order_changed( [=, this] (const auto &names, bool shuffled) {
+    player.on_file_order_changed( [=, this] (const auto &names, bool shuffled) {
         update_list(filelist, names);
         mpris->setShuffle(shuffled);
     });
-    player->on_track_order_changed([=, this] (const auto &names, bool _) {
+    player.on_track_order_changed([=, this] (const auto &names, bool _) {
         update_list(tracklist, names);
     });
 
-    player->on_track_changed([=, this](int trackno, gme_info_t *info, int length) {
+    player.on_track_changed([=, this](int trackno, gme_info_t *info, int length) {
         title   ->setText(info->song);
         game    ->setText(info->game);
         author  ->setText(info->author);
         system  ->setText(info->system);
         comment ->setText(info->comment);
         dumper  ->setText(info->dumper);
-        auto len = player->effective_length();
+        auto len = player.effective_length();
         duration_slider->setRange(0, len);
         update_next_prev_track();
         tracklist->setCurrentRow(trackno);
         mpris->setMetadata(make_metadata(
-            std::tuple{ Mpris::Metadata::TrackId, QString("/%1%2").arg(player->current_file()).arg(trackno) },
+            std::tuple{ Mpris::Metadata::TrackId, QString("/%1%2").arg(player.current_file()).arg(trackno) },
             std::tuple{ Mpris::Metadata::Length,  len },
             std::tuple{ Mpris::Metadata::Title,   QString(info->song) },
             std::tuple{ Mpris::Metadata::Album,   QString(info->game) },
             std::tuple{ Mpris::Metadata::Artist,  QString(info->author) }
         ));
-        player->start_or_resume();
+        player.start_or_resume();
     });
 
-    player->on_file_changed([=, this] (int fileno) {
+    player.on_file_changed([=, this] (int fileno) {
         filelist->setCurrentRow(fileno);
-        player->load_track(0);
+        player.load_track(0);
     });
 
     // context menu for file playlist, which lets the user edit the playlist
@@ -534,7 +533,7 @@ MainWindow::MainWindow(QWidget *parent)
             auto filename = file_dialog(tr("Open file"), "Game music files (*.spc *.nsf)");
             if (!filename)
                 return;
-            else if (auto err = player->add_file(filename.value().toStdString()); err != std::error_code())
+            else if (auto err = player.add_file(filename.value().toStdString()); err != std::error_code())
                 msgbox(QString("Couldn't open file %1 (%2)")
                     .arg(filename.value())
                     .arg(QString::fromStdString(err.message())));
@@ -542,7 +541,7 @@ MainWindow::MainWindow(QWidget *parent)
                 update_next_prev_track();
         });
         menu.addAction("Remove from playlist", [=, this] {
-            if (!player->remove_file(filelist->currentRow()))
+            if (!player.remove_file(filelist->currentRow()))
                 msgbox("Cannot remove currently playing file!");
             else
                 update_next_prev_track();
@@ -551,7 +550,7 @@ MainWindow::MainWindow(QWidget *parent)
             auto filename = save_dialog(tr("Save playlist"), "Playlist files (*.playlist)");
             auto path = fs::path(filename.toStdString());
             if (auto f = io::File::open(path, io::Access::Write); f)
-                player->save_file_playlist(f.value());
+                player.save_file_playlist(f.value());
             else
                 msgbox(QString("Couldn't open file %1. (%2)")
                     .arg(QString::fromStdString(path.filename()))
@@ -561,11 +560,11 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     // playlist settings
-    auto *autoplay     = make_checkbox("Autoplay",     options.autoplay,     this, [=, this] (int state) { player->set_autoplay(state); });
-    auto *repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player->set_track_repeat(state); });
-    auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player->set_file_repeat(state); });
+    auto *autoplay     = make_checkbox("Autoplay",     options.autoplay,     this, [=, this] (int state) { player.set_autoplay(state); });
+    auto *repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player.set_track_repeat(state); });
+    auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player.set_file_repeat(state); });
 
-    player->on_repeat_changed([=, this] (bool autoplay, bool repeat_track, bool repeat_file) {
+    player.on_repeat_changed([=, this] (bool autoplay, bool repeat_track, bool repeat_file) {
         if (!autoplay)
             mpris->setLoopStatus(Mpris::LoopStatus::Track);
         else if (repeat_track)
@@ -575,21 +574,21 @@ MainWindow::MainWindow(QWidget *parent)
         update_next_prev_track();
     });
 
-    player->on_played([=, this] {
+    player.on_played([=, this] {
         play_btn->setEnabled(true);
         play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
         mpris->setPlaybackStatus(Mpris::PlaybackStatus::Playing);
     });
 
-    player->on_paused([=, this] {
+    player.on_paused([=, this] {
         play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
         mpris->setPlaybackStatus(Mpris::PlaybackStatus::Paused);
     });
 
-    player->on_stopped    ([=, this] { duration_slider->setValue(0); });
-    player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
+    player.on_stopped    ([=, this] { duration_slider->setValue(0); });
+    player.on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
 
-    player->on_load_file_error([=, this] (const std::string &filename,
+    player.on_load_file_error([=, this] (const std::string &filename,
                                           std::error_condition error,
                                           const char *gme_message) {
         msgbox(QString("Couldn't load file %1. (%2) (%3)")
@@ -597,10 +596,10 @@ MainWindow::MainWindow(QWidget *parent)
             .arg(QString::fromStdString(error.message()))
             .arg(gme_message));
         play_btn->setEnabled(false);
-        player->pause();
+        player.pause();
     });
 
-    player->on_load_track_error([=, this] (const std::string &filename,
+    player.on_load_track_error([=, this] (const std::string &filename,
                                            const char *trackname,
                                            int trackno,
                                            std::error_condition error,
@@ -612,15 +611,15 @@ MainWindow::MainWindow(QWidget *parent)
             .arg(QString::fromStdString(error.message()))
             .arg(gme_message));
         play_btn->setEnabled(false);
-        player->pause();
+        player.pause();
     });
 
-    player->on_seek_error([=, this] (std::error_condition error, const char *gme_message) {
+    player.on_seek_error([=, this] (std::error_condition error, const char *gme_message) {
         msgbox(QString("Got a seek error. (%2) (%3)")
             .arg(QString::fromStdString(error.message()))
             .arg(gme_message));
         play_btn->setEnabled(false);
-        player->pause();
+        player.pause();
     });
 
     // disable everything
@@ -682,8 +681,8 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::update_next_prev_track()
 {
-    next_track->setEnabled(player->get_next_track() || player->get_next_file());
-    prev_track->setEnabled(player->get_prev_track() || player->get_prev_file());
+    next_track->setEnabled(player.get_next_track() || player.get_next_file());
+    prev_track->setEnabled(player.get_prev_track() || player.get_prev_file());
 }
 
 std::optional<QString> MainWindow::file_dialog(const QString &window_name, const QString &desc)
@@ -715,20 +714,20 @@ void MainWindow::load_shortcuts()
         };
     };
     settings.beginGroup("shortcuts");
-    add_shortcut("play",  "Play/Pause",     "Ctrl+Space",   [=, this] { player->play_pause(); });
-    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();    });
-    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();    });
-    add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { player->stop(); });
-    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { player->seek_relative(1_sec); });
-    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { player->seek_relative(1_sec); });
-    add_shortcut("volup", "Volume up",      "0",            [=, this] { player->set_volume_relative( 2); });
-    add_shortcut("voldw", "Volume down",    "9",            [=, this] { player->set_volume_relative(-2); });
+    add_shortcut("play",  "Play/Pause",     "Ctrl+Space",   [=, this] { player.play_pause(); });
+    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player.next();    });
+    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player.prev();    });
+    add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { player.stop(); });
+    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { player.seek_relative(1_sec); });
+    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { player.seek_relative(1_sec); });
+    add_shortcut("volup", "Volume up",      "0",            [=, this] { player.set_volume_relative( 2); });
+    add_shortcut("voldw", "Volume down",    "9",            [=, this] { player.set_volume_relative(-2); });
     settings.endGroup();
 }
 
 void MainWindow::open_playlist(const QString &filename)
 {
-    auto res = player->open_file_playlist(filename.toUtf8().constData());
+    auto res = player.open_file_playlist(filename.toUtf8().constData());
     if (res.pl_error != std::error_code{}) {
         msgbox(QString("Couldn't open file %1 (%2).")
             .arg(filename)
@@ -747,16 +746,16 @@ void MainWindow::open_playlist(const QString &filename)
                "Check the details for the errors.", text);
     }
     recent_playlists->add(filename);
-    player->load_file(0);
+    player.load_file(0);
     for (auto &w : to_enable)
         w->setEnabled(true);
 }
 
 void MainWindow::open_single_file(const QString &filename)
 {
-    player->clear_file_playlist();
+    player.clear_file_playlist();
     auto path = fs::path(filename.toStdString());
-    auto err = player->add_file(path);
+    auto err = player.add_file(path);
     if (err != std::error_condition{}) {
         msgbox(QString("Couldn't open file %1 (%2)")
             .arg(QString::fromStdString(path.filename()))
@@ -764,20 +763,20 @@ void MainWindow::open_single_file(const QString &filename)
         return;
     }
     recent_files->add(filename);
-    player->load_file(0);
+    player.load_file(0);
     for (auto &w : to_enable)
         w->setEnabled(true);
 }
 
 void MainWindow::edit_settings()
 {
-    auto *wnd = new SettingsWindow(player, this);
+    auto *wnd = new SettingsWindow(&player, this);
     wnd->open();
     connect(wnd, &QDialog::finished, this, [=, this](int result) {
         // reset song to start position
         // (this is due to the modified fade applying to the song)
         if (result == QDialog::Accepted)
-            player->seek(0);
+            player.seek(0);
     });
 }
 
@@ -789,7 +788,7 @@ void MainWindow::edit_shortcuts()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    save_player_settings(player->get_options());
+    save_player_settings(player.get_options());
     save_recent(recent_files->filenames(), recent_playlists->filenames());
     save_shortcuts(shortcuts);
     save_last_dir(last_file);
