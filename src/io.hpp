@@ -80,15 +80,15 @@ class File {
 public:
     static Result<File> open(std::filesystem::path pathname, Access access)
     {
-        FILE *fp = [&](const char *name) -> FILE * {
+        FILE *fp = [&](const std::string &name) -> FILE * {
             switch (access) {
-            case Access::Read:   return fopen(name, "rb"); break;
-            case Access::Write:  return fopen(name, "wb"); break;
-            case Access::Modify: return fopen(name, "rb+"); break;
-            case Access::Append: return fopen(name, "ab"); break;
+            case Access::Read:   return fopen(name.c_str(), "rb"); break;
+            case Access::Write:  return fopen(name.c_str(), "wb"); break;
+            case Access::Modify: return fopen(name.c_str(), "rb+"); break;
+            case Access::Append: return fopen(name.c_str(), "ab"); break;
             default:             return nullptr;
             }
-        }(pathname.c_str());
+        }(pathname.string());
         if (!fp)
             return tl::unexpected{detail::make_error()};
         return File{fp, pathname};
@@ -120,7 +120,7 @@ public:
         return !(c == EOF);
     }
 
-    std::string filename() const noexcept            { return path.filename().c_str(); }
+    std::string filename() const noexcept            { return path.filename().string(); }
     std::filesystem::path file_path() const noexcept { return path; }
     FILE *data() const noexcept                      { return file_ptr.get(); }
     int getc()                                       { return std::fgetc(file_ptr.get()); }
@@ -193,7 +193,7 @@ public:
                 size_type size()                                   const noexcept { return len; }
             std::span<u8> slice(size_type start, size_type length)                { return { ptr + start, length}; }
       std::span<const u8> slice(size_type start, size_type length) const          { return { ptr + start, length}; }
-              std::string filename()                               const noexcept { return path.filename().c_str(); }
+              std::string filename()                               const noexcept { return path.filename().string(); }
     std::filesystem::path file_path()                              const noexcept { return path; }
 };
 
@@ -203,7 +203,7 @@ public:
  */
 inline Result<std::string> read_file(std::filesystem::path path)
 {
-    FILE *file = fopen(path.c_str(), "rb");
+    FILE *file = fopen(path.string().c_str(), "rb");
     if (!file)
         return tl::unexpected(detail::make_error());
     fseek(file, 0l, SEEK_END);
@@ -222,6 +222,8 @@ inline std::filesystem::path user_home()
 {
 #ifdef PLATFORM_LINUX
     return getenv("HOME");
+#else
+    return std::filesystem::path("/");
 #endif
 }
 

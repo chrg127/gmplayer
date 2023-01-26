@@ -3,7 +3,6 @@
 #include <tuple>
 #ifdef PLATFORM_WINDOWS
     #define WIN32_LEAN_AND_MEAN
-    #define NOMINMAX
     #include <windows.h>
 #elif defined(PLATFORM_LINUX) || defined(PLATFORM_MACOS)
     #include <fcntl.h>
@@ -27,21 +26,18 @@ std::tuple<int, int, int, int> get_flags(Access access)
     case Access::Write:  return { GENERIC_WRITE,                CREATE_ALWAYS, PAGE_READWRITE, FILE_MAP_ALL_ACCESS };
     case Access::Modify: return { GENERIC_READ | GENERIC_WRITE, OPEN_EXISTING, PAGE_READWRITE, FILE_MAP_ALL_ACCESS };
     case Access::Append: return { GENERIC_READ | GENERIC_WRITE, CREATE_NEW,    PAGE_READWRITE, FILE_MAP_ALL_ACCESS };
-    default: return {0, 0};
+    default: return {0, 0, 0, 0};
     }
 }
 
 std::pair<u8 *, std::size_t> open_mapped_file(std::filesystem::path path, Access access)
 {
     auto [desired_access, creation_disposition, protection, map_access] = get_flags(access);
-    int desired_access      = GENERIC_READ | GENERIC_WRITE;
-    int creation_disposition = OPEN_EXISTING;
-    int protection          = PAGE_READWRITE;
-    int map_access           = FILE_MAP_ALL_ACCESS;
-    HANDLE file = CreateFileW(path.c_str(), desiredAccess, FILE_SHARE_READ,
+    HANDLE file = CreateFileW(path.c_str(), desired_access, FILE_SHARE_READ,
         nullptr, creation_disposition, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE)
         return {nullptr, 0};
+    auto size = GetFileSize(file, nullptr);
     HANDLE map = CreateFileMapping(file, nullptr, protection, 0, size, nullptr);
     if (map == INVALID_HANDLE_VALUE) {
         CloseHandle(file);
@@ -94,8 +90,8 @@ void close_mapped_file(u8 *ptr, std::size_t len)
     if (ptr) ::munmap(ptr, len);
 }
 
+#endif
+
 } // namespace detail
 
 } // namespace io
-
-#endif
