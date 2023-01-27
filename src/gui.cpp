@@ -552,7 +552,7 @@ MainWindow::MainWindow(QWidget *parent)
                 player.save_file_playlist(f.value());
             else
                 msgbox(QString("Couldn't open file %1. (%2)")
-                    .arg(QString::fromStdString(path.filename()))
+                    .arg(QString::fromStdString(path.filename().string()))
                     .arg(QString::fromStdString(f.error().message())));
         });
         menu.exec(filelist->mapToGlobal(p));
@@ -757,7 +757,7 @@ void MainWindow::open_single_file(const QString &filename)
     auto err = player.add_file(path);
     if (err != std::error_condition{}) {
         msgbox(QString("Couldn't open file %1 (%2)")
-            .arg(QString::fromStdString(path.filename()))
+            .arg(QString::fromStdString(path.filename().string()))
             .arg(QString::fromStdString(err.message())));
         return;
     }

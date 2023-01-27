@@ -157,7 +157,7 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
 
     auto try_open_file = [&](std::string_view name) -> std::optional<io::MappedFile> {
         for (auto p : { fs::path(name), path.parent_path() / name }) {
-            auto f = io::MappedFile::open(p);
+            auto f = io::MappedFile::open(p, io::Access::Read);
             if (!f)
                 r.errors.push_back(f.error().default_error_condition());
             else if (auto err = validate(f.value()); err)
@@ -184,7 +184,7 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
 std::error_condition Player::add_file(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    auto file = io::MappedFile::open(path);
+    auto file = io::MappedFile::open(path, io::Access::Read);
     if (!file)
         return file.error().default_error_condition();
     if (auto err = validate(file.value()); err)
@@ -242,7 +242,7 @@ int Player::load_file(int fileno)
     if (err)
         fprintf(stderr, "warning: m3u: %s\n", err);
 #else
-    gme_load_m3u(emu, m3u_path.c_str());
+    gme_load_m3u(emu, m3u_path.string().c_str());
 #endif
     tracks.count = gme_track_count(emu);
     tracks.order.resize(tracks.count);
@@ -266,7 +266,7 @@ int Player::load_track(int trackno)
     if (track.length < options.fade_out_ms)
         options.fade_out_ms = track.length;
     if (options.fade_out_ms != 0)
-        gme_set_fade(emu, track.length - options.fade_out_ms);
+        gme_set_fade(emu, track.length - options.fade_out_ms, options.fade_out_ms);
     gme_set_tempo(emu, options.tempo);
     track_changed(trackno, track.metadata, track.length);
     return num;
@@ -348,7 +348,7 @@ void Player::seek(int ms)
         seek_error(std::error_condition(5, gme_error_category), err);
     // fade disappears on seek for some reason
     if (options.fade_out_ms != 0)
-        gme_set_fade(emu, track.length - options.fade_out_ms);
+        gme_set_fade(emu, track.length - options.fade_out_ms, options.fade_out_ms);
 }
 
 void Player::seek_relative(int off) { seek(position() + off); }
@@ -491,7 +491,7 @@ void Player::set_fade(int secs)
     int ms = secs * 1000;
     options.fade_out_ms = ms;
     if (tracks.current != -1 && options.fade_out_ms != 0)
-        gme_set_fade(emu, track.length - options.fade_out_ms);
+        gme_set_fade(emu, track.length - options.fade_out_ms, options.fade_out_ms);
 }
 
 void Player::set_tempo(double tempo)
