@@ -6,3 +6,6 @@ gme/*
 other
 external/lib
 external/features
+external/bin
+external/include/gme
+external/include/MprisQt
