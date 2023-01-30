@@ -25,6 +25,7 @@ static const QString lib_text = R"(
 gmplayer uses the following libraries:
 </p>
 <ul>
+    <li><a href="https://www.qt.io/">Qt5 (Base, GUI, Widgets, DBus)</a></li>
     <li><a href="https://bitbucket.org/mpyne/game-music-emu/wiki/Home">Game_Music_Emu</a></li>
     <li><a href="https://www.libsdl.org">SDL2</a></li>
     <li><a href="https://github.com/sailfishos/qtmpris">MprisQt</a></li>
