@@ -41,13 +41,13 @@ namespace detail {
             std::fclose(fp);
     }
 
-    inline std::error_code make_error()
+    inline std::error_code make_error(int ec = errno)
     {
-        return std::error_code(errno, std::system_category());
+        return std::error_code(ec, std::system_category());
     }
 
-    std::pair<u8 *, std::size_t> open_mapped_file(std::filesystem::path path, Access access);
-    void close_mapped_file(u8 *ptr, std::size_t len);
+    Result<std::pair<u8 *, std::size_t>> open_mapped_file(std::filesystem::path path, Access access);
+    int close_mapped_file(u8 *ptr, std::size_t len);
 } // namespace detail
 
 /*
@@ -166,11 +166,13 @@ public:
 
     static Result<MappedFile> open(std::filesystem::path path, Access access)
     {
-        auto [p, s] = detail::open_mapped_file(path, access);
-        if (!p)
-            return tl::unexpected(detail::make_error());
-        return MappedFile(p, s, path);
+        auto v = detail::open_mapped_file(path, access);
+        if (!v)
+            return tl::unexpected(v.error());
+        return MappedFile(v.value().first, v.value().second, path);
     }
+
+    int close() { auto r = detail::close_mapped_file(ptr, len); ptr = nullptr; len = 0; return r; }
 
     using value_type      = u8;
     using size_type       = std::size_t;

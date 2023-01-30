@@ -30,29 +30,28 @@ std::tuple<int, int, int, int> get_flags(Access access)
     }
 }
 
-std::pair<u8 *, std::size_t> open_mapped_file(std::filesystem::path path, Access access)
+Result<std::pair<u8 *, std::size_t>> open_mapped_file(std::filesystem::path path, Access access)
 {
     auto [desired_access, creation_disposition, protection, map_access] = get_flags(access);
     HANDLE file = CreateFileW(path.c_str(), desired_access, FILE_SHARE_READ,
         nullptr, creation_disposition, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE)
-        return {nullptr, 0};
+        return tl::unexpected(make_error(GetLastError()));
     auto size = GetFileSize(file, nullptr);
     HANDLE map = CreateFileMapping(file, nullptr, protection, 0, size, nullptr);
     if (map == INVALID_HANDLE_VALUE) {
         CloseHandle(file);
-        return {nullptr, 0};
+        return tl::unexpected(make_error(GetLastError()));
     }
     u8 *data = (u8 *) MapViewOfFile(map, map_access, 0, 0, size);
     CloseHandle(map);
     CloseHandle(file);
-    return { data, size };
+    return std::make_pair(data, size);
 }
 
-void close_mapped_file(u8 *ptr, std::size_t len)
+int close_mapped_file(u8 *ptr, std::size_t len)
 {
-    if (ptr)
-        UnmapViewOfFile(ptr);
+    return UnmapViewOfFile(ptr);
 }
 
 #else
@@ -68,26 +67,26 @@ std::pair<int, int> get_flags(Access access)
     }
 }
 
-std::pair<u8 *, std::size_t> open_mapped_file(std::filesystem::path path, Access access)
+Result<std::pair<u8 *, std::size_t>> open_mapped_file(std::filesystem::path path, Access access)
 {
     auto [open_flags, mmap_flags] = get_flags(access);
     int fd = ::open(path.c_str(), open_flags);
     if (fd < 0)
-        return {nullptr, 0};
+        return tl::unexpected(make_error());
     struct stat statbuf;
     int err = fstat(fd, &statbuf);
     if (err < 0)
-        return {nullptr, 0};
+        return tl::unexpected(make_error());
     auto *ptr = (u8 *) mmap(nullptr, statbuf.st_size, mmap_flags, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED)
-        return {nullptr, 0};
+        return tl::unexpected(make_error());
     close(fd);
-    return {ptr, static_cast<std::size_t>(statbuf.st_size)};
+    return std::make_pair(ptr, static_cast<std::size_t>(statbuf.st_size));
 }
 
-void close_mapped_file(u8 *ptr, std::size_t len)
+int close_mapped_file(u8 *ptr, std::size_t len)
 {
-    if (ptr) ::munmap(ptr, len);
+    return ::munmap(ptr, len);
 }
 
 #endif
