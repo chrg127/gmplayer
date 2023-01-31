@@ -22,6 +22,7 @@ pkg_check_modules(GME REQUIRED libgme)
 include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${MPRISQT5_INCLUDE_DIRS})
 include_directories(${GME_INCLUDE_DIRS})
+include_directories(external/include)
 
 link_directories(${SDL2_LIBRARY_DIRS})
 link_directories(${MPRISQT5_LIBRARY_DIRS})
