@@ -59,7 +59,7 @@ PlayerOptions load_player_settings()
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("player");
     PlayerOptions options = {
-        .fade_out_ms        = settings.value("fade_out_ms",                            0).toInt(),
+        .fade_out           = settings.value("fade_out",                               0).toInt(),
         .autoplay           = settings.value("autoplay",                           false).toBool(),
         .track_repeat       = settings.value("track_repeat",                       false).toBool(),
         .file_repeat        = settings.value("file_repeat",                        false).toBool(),
@@ -76,7 +76,7 @@ void save_player_settings(PlayerOptions options)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("player");
-    settings.setValue("fade_out_ms",       options.fade_out_ms);
+    settings.setValue("fade_out",          options.fade_out);
     settings.setValue("autoplay",          options.autoplay);
     settings.setValue("track_repeat",      options.track_repeat);
     settings.setValue("file_repeat",       options.file_repeat);
@@ -183,11 +183,10 @@ void RecentList::add(const QString &name)
 SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
 {
     auto options = player->get_options();
-    int length_ms = player->length() == 0 ? 10_min : player->length();
 
-    auto *fade = make_checkbox(tr("&Enable fade-out"), options.fade_out_ms != 0);
-    auto *fade_secs = make_spinbox(length_ms / 1000, options.fade_out_ms / 1000, fade->isChecked());
-    auto *default_duration = make_spinbox(10_min / 1000, options.default_duration / 1000);
+    auto *fade              = make_checkbox(tr("&Enable fade-out"), options.fade_out != 0);
+    auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), options.fade_out / 1000, fade->isChecked());
+    auto *default_duration  = make_spinbox(10_min / 1000, options.default_duration / 1000);
     auto *silence_detection = make_checkbox(tr("Do silence detection"), options.silence_detection == 1);
 
     connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
@@ -433,6 +432,8 @@ MainWindow::MainWindow(QWidget *parent)
     auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { player.stop();       });
     next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { player.next();       });
     prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { player.prev();       });
+    next_track->setEnabled(false);
+    prev_track->setEnabled(false);
 
     // volume slider and button
     auto *volume_slider = new QSlider(Qt::Horizontal);
@@ -498,7 +499,7 @@ MainWindow::MainWindow(QWidget *parent)
         update_list(tracklist, names);
     });
 
-    player.on_track_changed([=, this](int trackno, gme_info_t *info, int length) {
+    player.on_track_changed([=, this](int trackno, gme_info_t *info, int) {
         title   ->setText(info->song);
         game    ->setText(info->game);
         author  ->setText(info->author);
@@ -564,12 +565,8 @@ MainWindow::MainWindow(QWidget *parent)
     auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player.set_file_repeat(state); });
 
     player.on_repeat_changed([=, this] (bool autoplay, bool repeat_track, bool repeat_file) {
-        if (!autoplay)
-            mpris->setLoopStatus(Mpris::LoopStatus::Track);
-        else if (repeat_track)
-            mpris->setLoopStatus(Mpris::LoopStatus::Track);
-        else
-            mpris->setLoopStatus(Mpris::LoopStatus::Playlist);
+        mpris->setLoopStatus(!autoplay || repeat_track ? Mpris::LoopStatus::Track
+                                                       : Mpris::LoopStatus::Playlist);
         update_next_prev_track();
     });
 
@@ -585,7 +582,7 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     player.on_stopped    ([=, this] { duration_slider->setValue(0); });
-    player.on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
+    player.on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay)); });
 
     player.on_load_file_error([=, this] (const std::string &filename,
                                           std::error_condition error,
@@ -599,10 +596,10 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     player.on_load_track_error([=, this] (const std::string &filename,
-                                           const char *trackname,
-                                           int trackno,
-                                           std::error_condition error,
-                                           const char *gme_message) {
+                                          const char *trackname,
+                                          int trackno,
+                                          std::error_condition error,
+                                          const char *gme_message) {
         msgbox(QString("Couldn't load track %1 (%2) of file %3. (%4) (%5)")
             .arg(trackno)
             .arg(trackname)
@@ -621,9 +618,11 @@ MainWindow::MainWindow(QWidget *parent)
         player.pause();
     });
 
+    player.on_fade_set([=, this] (int len) { duration_slider->setRange(0, len); });
+
     // disable everything
     add_to_enable(
-        duration_slider, play_btn, prev_track, next_track, stop_btn, tempo,
+        duration_slider, play_btn, stop_btn, tempo,
         volume_slider, volume_btn, tracklist, track_shuffle, track_up, track_down,
         filelist, file_shuffle, file_up, file_down,
         autoplay, repeat_track, repeat_file

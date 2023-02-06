@@ -29,7 +29,7 @@ struct SDLMutex {
 };
 
 struct PlayerOptions {
-    int fade_out_ms         = 0;
+    int fade_out            = 0;
     bool autoplay           = false;
     bool track_repeat       = false;
     bool file_repeat        = false;
@@ -85,6 +85,7 @@ class Player {
 
     void audio_callback(void *unused, uint8_t *stream, int stream_length);
     friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
+    void set_track_fade();
 
 public:
     Player();
@@ -92,6 +93,8 @@ public:
 
     Player(const Player &) = delete;
     Player & operator=(const Player &) = delete;
+
+    bool no_file_loaded() const;
 
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
     std::error_condition add_file(std::filesystem::path path);
@@ -101,7 +104,6 @@ public:
 
     int load_file(int fileno);
     int load_track(int num);
-    bool can_play() const;
     bool is_playing() const;
 
     void start_or_resume();
@@ -164,6 +166,7 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(load_file_error, const std::string &, std::error_condition, const char *)
     CALLBACK(load_track_error, const std::string &, const char *, int, std::error_condition, const char *)
     CALLBACK(seek_error, std::error_condition, const char *)
+    CALLBACK(fade_set, int);
 
 #undef CALLBACK
 };
