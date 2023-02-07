@@ -31,3 +31,7 @@ link_directories(${GME_LIBRARY_DIRS})
 add_executable(gmplayer src/main.cpp src/gui.cpp src/player.cpp src/keyrecorder.cpp src/io.cpp resources/icons.qrc)
 
 target_link_libraries(gmplayer pthread Qt5::Widgets ${SDL2_LIBRARIES} ${GME_LIBRARIES} ${MPRISQT5_LIBRARIES})
+
+install(FILES resources/linux/gmplayer.desktop DESTINATION share/applications/ COMPONENT desktop)
+install(FILES resources/linux/gmplayer.png DESTINATION share/icons/hicolor/256x256/apps COMPONENT desktop)
+install(TARGETS gmplayer DESTINATION bin COMPONENT binaries)

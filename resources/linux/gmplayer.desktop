@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=gmplayer
+Comment=Music player for retro game music
+Exec=gmplayer %U
+Icon=gmplayer
+Terminal=false
+Type=Application
+Categories=Music;
+GenericName=Retro music player
