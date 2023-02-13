@@ -272,6 +272,8 @@ AboutDialog::AboutDialog(QWidget *parent)
 }
 
 
+const auto file_picker_formats =
+    QString("Game music files (*.spc *.nsf *.nsfe *.gbs *.gym *.ay *.kss *.hes *.vgm *.sap)");
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -362,7 +364,7 @@ MainWindow::MainWindow(QWidget *parent)
     // create menus
     auto *file_menu = create_menu(this, "&File",
         std::make_tuple("Open file",     [this] {
-            if (auto f = file_dialog("Open file", "Game music files (*.spc *.nsf)"); f)
+            if (auto f = file_dialog("Open file", file_picker_formats))
                 open_single_file(f.value());
         }),
         std::make_tuple("Open playlist", [this] {
@@ -530,7 +532,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(filelist, &QWidget::customContextMenuRequested, this, [=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction("Add to playlist...", [=, this] {
-            auto filename = file_dialog(tr("Open file"), "Game music files (*.spc *.nsf)");
+            auto filename = file_dialog(tr("Open file"), file_picker_formats);
             if (!filename)
                 return;
             else if (auto err = player.add_file(filename.value().toStdString()); err != std::error_code())

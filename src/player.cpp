@@ -101,7 +101,7 @@ void Player::audio_callback(void *, u8 *stream, int len)
     if (!emu)
         return;
     // some songs don't have length information, hence the need for the second check.
-    if (gme_track_ended(emu)) { // || gme_tell(emu) > track.length + 1_sec/2) {
+    if (gme_track_ended(emu) || gme_tell(emu) > effective_length()) {
         SDL_PauseAudioDevice(dev_id, 1);
         track_ended();
         if (options.autoplay)
