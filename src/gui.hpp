@@ -10,6 +10,7 @@
 #include <QDialog>
 #include <QPushButton>
 #include <QStringList>
+#include <mpris_server.hpp>
 #include "player.hpp"
 #include "keyrecorder.hpp"
 
@@ -73,7 +74,7 @@ class MainWindow : public QMainWindow {
     QString last_file = ".";
     std::map<QString, Shortcut> shortcuts;
     bool was_paused = false;
-
+    std::unique_ptr<mpris::Server> mpris;
     // widgets
     QToolButton *prev_track, *next_track;
     RecentList *recent_files, *recent_playlists;
