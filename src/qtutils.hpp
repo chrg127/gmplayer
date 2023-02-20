@@ -1,12 +1,21 @@
 #pragma once
 
 #include <tuple>
+#include <QAction>
 #include <QObject>
+#include <QLabel>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QPushButton>
 #include <QGridLayout>
 #include <QFormLayout>
+#include <QTabWidget>
 #include <QGroupBox>
 #include <QMessageBox>
 #include <QDirIterator>
+#include <QSpinBox>
+#include <QMenuBar>
+#include <QDebug>
 
 template <typename T> void add_to_layout(T *lt, QWidget *w) { lt->addWidget(w); }
 template <typename T> void add_to_layout(T *lt, QLayout *l) { lt->addLayout(l); }

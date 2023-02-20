@@ -1,35 +1,50 @@
 #include "player.hpp"
 
 #include <algorithm>
-#include <cassert>
-#include <cstdio>
-#include <cstdint>
-#include <cstdlib>
 #include <cstring>
-#include <array>
-#include <optional>
 #include <mutex>
-#include <utility>
-#include <functional>
-#include <algorithm>
-#include <filesystem>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
+#include <span>
+#include <SDL.h>
 #include <gme/gme.h>
 #include "random.hpp"
 #include "io.hpp"
 
 namespace fs = std::filesystem;
 
-const int FREQUENCY = 44100;
 const int SAMPLES   = 2048;
 const int CHANNELS  = 2;
-const int FADE_LEN  = 8_sec;
 
+
+
+struct GMEErrorCategory : public std::error_category {
+    ~GMEErrorCategory() {}
+    const char *name() const noexcept { return "gme error"; }
+    std::string message(int n) const;
+};
+
+static GMEErrorCategory errcat;
+
+enum class Error {
+    None, FileType, Header, Seek, RemoveFile,
+};
+
+std::string GMEErrorCategory::message(int n) const
+{
+    switch (static_cast<Error>(n)) {
+    case Error::None:       return "Success";
+    case Error::FileType:   return "Invalid music file type";
+    case Error::Header:     return "Invalid music file header";
+    case Error::Seek:       return "Seek error";
+    case Error::RemoveFile: return "Couldn't remove file (file is currently playing)";
+    default:                return "Unknown error";
+    }
+}
+
+std::error_condition make_err(Error e) { return std::error_condition(static_cast<int>(e), errcat); }
 
 
 namespace {
-    int get_track_length(gme_info_t *info, int default_duration = 3_min)
+    int get_track_length(gme_info_t *info, int default_duration)
     {
         if (info->length > 0)
             return info->length;
@@ -50,10 +65,10 @@ namespace {
         gme_type_t type;
         auto err = gme_identify_file(f.filename().c_str(), &type);
         if (type == nullptr)
-            return std::error_condition(1, gme_error_category);
+            return make_err(Error::FileType);
         auto header = gme_identify_header(f.data());
         if (strcmp(header, "") == 0)
-            return std::error_condition(2, gme_error_category);
+            return make_err(Error::Header);
         return std::error_condition{};
     }
 
@@ -77,69 +92,53 @@ namespace {
 }
 
 // this must be in the global scope for the friend declaration inside Player to work.
-void audio_callback(void *unused, u8 *stream, int stream_length)
+void audio_callback(void *, u8 *stream, int len)
 {
-    object_handler.get().audio_callback(unused, stream, stream_length);
+    object_handler.get().audio_callback({stream, std::size_t(len)});
 }
 
 
 
-std::string GMEErrorCategory::message(int n) const
-{
-    switch (n) {
-    case 0: return "Success";
-    case 1: return "Invalid music file type";
-    case 2: return "Invalid music file header";
-    default: return "Unknown error";
-    }
-}
-
-
-
-void Player::audio_callback(void *, u8 *stream, int len)
+void Player::audio_callback(std::span<u8> stream)
 {
     if (!emu)
         return;
+    auto pos = gme_tell(emu);
     // some songs don't have length information, hence the need for the second check.
-    if (gme_track_ended(emu)) { // || gme_tell(emu) > track.length + 1_sec/2) {
+    if (gme_track_ended(emu) || pos > effective_length()) {
         SDL_PauseAudioDevice(dev_id, 1);
         track_ended();
         if (options.autoplay)
             next();
-        return;
+    } else {
+        // fill stream with silence. this is needed for MixAudio to work how we want.
+        std::fill(stream.begin(), stream.end(), 0);
+        short buf[SAMPLES * CHANNELS];
+        gme_play(emu, SAMPLES * CHANNELS, buf);
+        std::span<const u8> buffer = { (const u8 *) buf, sizeof(buf) };
+        // we could also use memcpy here, but then we wouldn't have volume control
+        SDL_MixAudioFormat(stream.data(), buffer.data(), obtained.format, buffer.size(), options.volume);
+        mpris->set_position(pos * 1000);
+        position_changed(pos);
     }
-    // fill stream with silence. this is needed for MixAudio to work how we want.
-    std::memset(stream, 0, len);
-    short buf[SAMPLES * CHANNELS];
-    gme_play(emu, SAMPLES * CHANNELS, buf);
-    // we could also use memcpy here, but then we wouldn't have volume control
-    SDL_MixAudioFormat(stream, (const u8 *) buf, obtained.format, sizeof(buf), options.volume);
-    position_changed(gme_tell(emu));
-    mpris->set_position(gme_tell(emu) * 1000);
-}
-
-void Player::set_track_fade()
-{
-    if (options.fade_out != 0)
-        gme_set_fade(emu, track.length, options.fade_out);
 }
 
 
 
-Player::Player()
-    : options{{}}
+Player::Player(PlayerOptions &&options)
+    : options{options}
 {
     SDL_AudioSpec desired;
     std::memset(&desired, 0, sizeof(desired));
-    desired.freq       = 44100;
-    desired.format     = AUDIO_S16SYS;
-    desired.channels   = CHANNELS;
-    desired.samples    = SAMPLES;
-    desired.callback   = ::audio_callback;
-    desired.userdata   = nullptr;
-    dev_id = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
-    audio_mutex = SDLMutex(dev_id);
-    id = object_handler.add(this);
+    desired.freq     = 44100;
+    desired.format   = AUDIO_S16SYS;
+    desired.channels = CHANNELS;
+    desired.samples  = SAMPLES;
+    desired.callback = ::audio_callback;
+    desired.userdata = nullptr;
+    dev_id           = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
+    audio_mutex      = SDLMutex(dev_id);
+    id               = object_handler.add(this);
     object_handler.change_cur_to(id);
 
     // set up mpris stuff
@@ -192,8 +191,6 @@ Player::~Player()
     SDL_CloseAudioDevice(dev_id);
 }
 
-
-
 bool Player::no_file_loaded() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
@@ -208,7 +205,7 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
     if (!file)
         return { .pl_error = file.error().default_error_condition() };
 
-    OpenPlaylistResult r = { .pl_error = std::error_condition{} };
+    OpenPlaylistResult r;
 
     auto try_open_file = [&](std::string_view name) -> std::optional<io::MappedFile> {
         for (auto p : { fs::path(name), path.parent_path() / name }) {
@@ -233,7 +230,7 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
     mpris->set_shuffle(false);
-    file_order_changed(file_names(), false);
+    file_order_changed(file_names());
     return r;
 }
 
@@ -249,21 +246,21 @@ std::error_condition Player::add_file(fs::path path)
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
     mpris->set_shuffle(false);
-    file_order_changed(file_names(), false);
+    file_order_changed(file_names());
     return std::error_condition{};
 }
 
-bool Player::remove_file(int fileno)
+std::error_condition Player::remove_file(int fileno)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     if (fileno == files.current)
-        return false;
+        return make_err(Error::RemoveFile);
     files.cache.erase(files.cache.begin() + fileno);
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
     mpris->set_shuffle(false);
-    file_order_changed(file_names(), false);
-    return true;
+    file_order_changed(file_names());
+    return std::error_condition{};
 }
 
 void Player::save_file_playlist(io::File &to)
@@ -280,10 +277,10 @@ void Player::clear_file_playlist()
     files.order.clear();
     files.current = -1;
     mpris->set_shuffle(false);
-    file_order_changed(file_names(), false);
+    file_order_changed(file_names());
 }
 
-int Player::load_file(int fileno)
+void Player::load_file(int fileno)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     files.current = fileno;
@@ -291,38 +288,36 @@ int Player::load_file(int fileno)
     auto &file = files.cache[num];
     auto err = gme_open_data(file.data(), file.size(), &emu, 44100);
     if (err)
-        load_file_error(file.filename(), std::error_condition(3, gme_error_category), err);
+        return load_file_error(file.filename(), err);
     // when loading a file, try to see if there's a m3u file too
     // m3u files must have the same name as the file, but with extension m3u
     // if there are any errors, ignore them (m3u loading is not important)
     auto m3u_path = file.file_path().replace_extension("m3u");
+    auto m3u_err = gme_load_m3u(emu, m3u_path.string().c_str());
 #ifdef DEBUG
-    err = gme_load_m3u(emu, m3u_path.c_str());
-    if (err)
+    if (m3u_err)
         fprintf(stderr, "warning: m3u: %s\n", err);
-#else
-    gme_load_m3u(emu, m3u_path.string().c_str());
 #endif
     tracks.count = gme_track_count(emu);
     tracks.order.resize(tracks.count);
     generate_order(tracks.order, false);
-    track_order_changed(track_names(), false);
+    track_order_changed(track_names());
     file_changed(fileno);
-    return num;
 }
 
-int Player::load_track(int trackno)
+void Player::load_track(int trackno)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     tracks.current = trackno;
     int num = tracks.order[trackno];
     auto filename = files.cache[files.order[files.current]].filename();
     if (auto err = gme_track_info(emu, &track.metadata, num); err)
-        load_track_error(filename, "", num, std::error_condition(4, gme_error_category), err);
+        load_track_error(filename, num, "", err);
     track.length = get_track_length(track.metadata, options.default_duration);
     if (auto err = gme_start_track(emu, num); err)
-        load_track_error(filename, track.metadata->song, num, std::error_condition(4, gme_error_category), err);
-    set_track_fade();
+        load_track_error(filename, num, track.metadata->song, err);
+    if (options.fade_out != 0)
+        gme_set_fade(emu, track.length, options.fade_out);
     gme_set_tempo(emu, options.tempo);
     mpris->set_metadata({
         { mpris::Field::TrackId, std::string("/") + std::to_string(current_file()) + std::to_string(trackno) },
@@ -332,7 +327,6 @@ int Player::load_track(int trackno)
         { mpris::Field::Artist,  std::string(track.metadata->author) }
     });
     track_changed(trackno, track.metadata, track.length);
-    return num;
 }
 
 bool Player::is_playing() const
@@ -415,12 +409,11 @@ void Player::seek(int ms)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     if (no_file_loaded())
         return;
-    int len = effective_length();
-    ms = std::clamp(ms, 0, len);
-    if (auto err = gme_seek(emu, ms); err)
-        seek_error(std::error_condition(5, gme_error_category), err);
+    if (auto err = gme_seek(emu, std::clamp(ms, 0, effective_length())); err)
+        seek_error(err);
     // fade disappears on seek for some reason
-    set_track_fade();
+    if (options.fade_out != 0)
+        gme_set_fade(emu, track.length, options.fade_out);
 }
 
 void Player::seek_relative(int off) { seek(position() + off); }
@@ -513,7 +506,7 @@ void Player::shuffle_tracks(bool do_shuffle)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     generate_order(tracks.order, do_shuffle);
-    track_order_changed(track_names(), false);
+    track_order_changed(track_names());
 }
 
 void Player::shuffle_files(bool do_shuffle)
@@ -521,7 +514,7 @@ void Player::shuffle_files(bool do_shuffle)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     generate_order(files.order, do_shuffle);
     mpris->set_shuffle(do_shuffle);
-    file_order_changed(file_names(), do_shuffle);
+    file_order_changed(file_names());
 }
 
 int Player::move_track(int n, int where, int min, int max)
@@ -529,7 +522,7 @@ int Player::move_track(int n, int where, int min, int max)
     if (n < min || n > max)
         return n;
     std::swap(tracks.order[n], tracks.order[n + where]);
-    track_order_changed(track_names(), false);
+    track_order_changed(track_names());
     return n + where;
 }
 
@@ -539,7 +532,7 @@ int Player::move_file(int n, int where, int min, int max)
         return n;
     std::swap(files.order[n], files.order[n + where]);
     mpris->set_shuffle(false);
-    file_order_changed(file_names(), false);
+    file_order_changed(file_names());
     return n + where;
 }
 
@@ -550,7 +543,7 @@ int Player::move_file_down(int fileno)   { return move_file(  fileno, +1, 0, fil
 
 
 
-PlayerOptions & Player::get_options()
+const PlayerOptions & Player::get_options()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     return options;
@@ -561,7 +554,8 @@ void Player::set_fade(int secs)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.fade_out = secs * 1000;
     if (!no_file_loaded() && options.fade_out != 0) {
-        set_track_fade();
+        if (options.fade_out != 0)
+            gme_set_fade(emu, track.length, options.fade_out);
         fade_set(effective_length());
     }
 }

@@ -3,23 +3,22 @@
 #include <map>
 #include <span>
 #include <string>
+#include <optional>
 #include <QObject>
 #include <QWidget>
 #include <QMainWindow>
-#include <QToolButton>
 #include <QDialog>
 #include <QPushButton>
 #include <QStringList>
-#include <mpris_server.hpp>
 #include "keyrecorder.hpp"
 
 class Player;
 class QShortcut;
 class QMenu;
+class QToolButton;
 
 class SettingsWindow : public QDialog {
     Q_OBJECT
-    Player *player;
 public:
     explicit SettingsWindow(Player *player, QWidget *parent = nullptr);
 };
@@ -54,7 +53,7 @@ class RecentList : public QObject {
     QMenu *menu;
 public:
     RecentList(QMenu *menu, const QStringList &list);
-    QStringList &filenames() { return names; }
+    const QStringList &filenames() { return names; }
     void add(const QString &name);
 signals:
     void clicked(const QString &filename);
@@ -69,15 +68,16 @@ public:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
-    Player *player;
-    QString last_file = ".";
-    std::map<QString, Shortcut> shortcuts;
-    bool was_paused = false;
-    std::unique_ptr<mpris::Server> mpris;
-    // widgets
-    QToolButton *prev_track, *next_track;
-    RecentList *recent_files, *recent_playlists;
-    std::vector<QWidget *> to_enable;
+    Player *player                        = nullptr;
+    QString last_file                     = ".";
+    bool was_paused                       = false;
+    std::map<QString, Shortcut> shortcuts = {};
+    QToolButton *prev_track               = nullptr,
+                *next_track               = nullptr,
+                *play_btn                 = nullptr;
+    RecentList *recent_files              = nullptr,
+               *recent_playlists          = nullptr;
+    std::vector<QWidget *> to_enable      = {};
 
     void update_next_prev_track();
     std::optional<QString> file_dialog(const QString &window_name, const QString &desc);
@@ -87,12 +87,9 @@ class MainWindow : public QMainWindow {
     void open_single_file(const QString &filename);
     void edit_settings();
     void edit_shortcuts();
-
-    // listeners to events sent by qt
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);
-
     void add_to_enable(auto... objects) { (to_enable.push_back(objects), ...); }
 
 public:

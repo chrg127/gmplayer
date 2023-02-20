@@ -1,15 +1,13 @@
 #pragma once
 
-#include <cstdint>
-#include <mutex>
-#include <string_view>
-#include <vector>
-#include <optional>
-#include <functional>
 #include <filesystem>
+#include <functional>
+#include <optional>
 #include <span>
+#include <vector>
 #include <SDL_audio.h> // SDL_AudioDeviceID
 #include <mpris_server.hpp>
+#include "common.hpp"
 
 class Music_Emu;
 class gme_info_t;
@@ -41,18 +39,10 @@ struct PlayerOptions {
 };
 
 struct OpenPlaylistResult {
-    std::error_condition pl_error;
+    std::error_condition pl_error = std::error_condition{};
     std::vector<std::string> not_opened;
     std::vector<std::error_condition> errors;
 };
-
-struct GMEErrorCategory : public std::error_category {
-    ~GMEErrorCategory() {}
-    const char *name() const noexcept { return "gme error"; }
-    std::string message(int n) const;
-};
-
-inline GMEErrorCategory gme_error_category;
 
 class Player {
     // emulator and audio device objects.
@@ -62,6 +52,8 @@ class Player {
     SDL_AudioDeviceID dev_id = 0;
     mutable SDLMutex audio_mutex;
     SDL_AudioSpec obtained;
+    PlayerOptions options = {};
+    std::unique_ptr<mpris::Server> mpris = nullptr;
 
     // current track information:
     struct {
@@ -81,15 +73,11 @@ class Player {
         int count = 0;
     } tracks;
 
-    PlayerOptions options = {};
-    std::unique_ptr<mpris::Server> mpris;
-
-    void audio_callback(void *unused, uint8_t *stream, int stream_length);
-    friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
-    void set_track_fade();
+    void audio_callback(std::span<u8> stream);
+    friend void audio_callback(void *, u8 *stream, int len);
 
 public:
-    Player();
+    Player(PlayerOptions &&options);
     ~Player();
 
     Player(const Player &) = delete;
@@ -99,14 +87,13 @@ public:
 
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
     std::error_condition add_file(std::filesystem::path path);
-    bool remove_file(int fileno);
+    std::error_condition remove_file(int fileno);
     void save_file_playlist(io::File &to);
     void clear_file_playlist();
+    void load_file(int fileno);
+    void load_track(int num);
 
-    int load_file(int fileno);
-    int load_track(int num);
     bool is_playing() const;
-
     void start_or_resume();
     void pause();
     void play_pause();
@@ -136,7 +123,7 @@ public:
     int move_file_up(int fileno);
     int move_file_down(int fileno);
 
-    PlayerOptions & get_options();
+    const PlayerOptions & get_options();
     void set_fade(int secs);
     void set_tempo(double tempo);
     void set_silence_detection(bool ignore);
@@ -161,13 +148,13 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(paused, void)
     CALLBACK(played, void)
     CALLBACK(stopped, void)
-    CALLBACK(file_order_changed, const std::vector<std::string> &, bool)
-    CALLBACK(track_order_changed, const std::vector<std::string> &, bool)
+    CALLBACK(file_order_changed,  const std::vector<std::string> &)
+    CALLBACK(track_order_changed, const std::vector<std::string> &)
     CALLBACK(repeat_changed, bool, bool, bool)
     CALLBACK(tempo_changed, double)
-    CALLBACK(load_file_error, const std::string &, std::error_condition, const char *)
-    CALLBACK(load_track_error, const std::string &, const char *, int, std::error_condition, const char *)
-    CALLBACK(seek_error, std::error_condition, const char *)
+    CALLBACK(load_file_error, std::string_view, std::string_view)
+    CALLBACK(load_track_error, std::string_view, int, std::string_view, std::string_view)
+    CALLBACK(seek_error, std::string_view)
     CALLBACK(fade_set, int);
 
 #undef CALLBACK
