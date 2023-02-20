@@ -33,8 +33,6 @@
 #include <QVariant>
 #include <QVariantMap>
 #include <QStandardPaths>
-// #include <Mpris>
-// #include <MprisPlayer>
 #include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
 #include "player.hpp"
@@ -131,13 +129,6 @@ void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
         settings.setValue(name, obj.shortcut->key().toString());
     settings.endGroup();
 }
-
-// QVariantMap make_metadata(auto&&... args)
-// {
-//     QVariantMap map;
-//     (map.insert(Mpris::metadataToString(std::get<0>(args)), QVariant(std::get<1>(args))), ...);
-//     return map;
-// }
 
 void update_list(QListWidget *list, const auto &names)
 {
@@ -285,75 +276,12 @@ MainWindow::MainWindow(QWidget *parent)
     PlayerOptions options = load_player_settings();
     player.get_options() = options;
 
-    mpris = mpris::Server::make("gmplayer");
-    // mpris->setServiceName("gmplayer");
-    // mpris->setCanQuit(true);
-    // mpris->setCanRaise(false);
-    // mpris->setCanSetFullscreen(false);
-    mpris->set_fullscreen(false);
-    mpris->set_desktop_entry(
-        QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "gmplayer.desktop").toStdString()
-    );
-    mpris->set_identity("gmplayer");
-    mpris->set_supported_uri_schemes({"file"});
-    mpris->set_supported_mime_types({
-        "application/x-pkcs7-certificates", "application/octet-stream", "text/plain"
-    });
-    mpris->set_loop_status(mpris::LoopStatus::None);
-    mpris->set_maximum_rate(2.0);
-    mpris->set_minimum_rate(0.5);
-    mpris->set_metadata({});
-    mpris->set_playback_status(mpris::PlaybackStatus::Stopped);
-    mpris->set_position(0);
-    mpris->set_rate(options.tempo);
-    mpris->set_shuffle(false);
-    mpris->set_volume(options.volume);
-
-    mpris->on_quit(            [=, this]                   { QApplication::quit();         });
-    mpris->on_pause(           [=, this]                   { player.pause();               });
-    mpris->on_play(            [=, this]                   { player.start_or_resume();     });
-    mpris->on_play_pause(      [=, this]                   { player.play_pause();          });
-    mpris->on_stop(            [=, this]                   { player.stop();                });
-    mpris->on_next(            [=, this]                   { player.next();                });
-    mpris->on_previous(        [=, this]                   { player.prev();                });
-    mpris->on_seek(            [=, this] (int64_t offset)  { player.seek_relative(offset); });
-    mpris->on_rate_changed(    [=, this] (double rate)     { player.set_tempo(rate);       });
-    mpris->on_shuffle_changed( [=, this] (bool do_shuffle) {
-        player.shuffle_files(do_shuffle);
-        player.load_file(0);
-    });
-    mpris->on_volume_changed([=, this] (double vol) {
-        player.set_volume(std::lerp(0.0, get_max_volume_value(), vol < 0.0 ? 0.0 : vol));
-    });
-    mpris->on_open_uri([=, this] (std::string_view url) {
-        qDebug() << "not opening uri, sorry";
-        // open_single_file(url.toLocalFile());
-    });
-    mpris->on_set_position([=, this] (int64_t pos) {
-        player.seek(pos);
-    });
-
-    mpris->on_loop_status_changed([=, this] (mpris::LoopStatus status) {
-        switch (status) {
-        case mpris::LoopStatus::None:
-            player.set_autoplay(false);
-            player.set_track_repeat(false);
-            player.set_file_repeat(false);
-            break;
-        case mpris::LoopStatus::Track:
-            player.set_autoplay(true);
-            player.set_track_repeat(true);
-            player.set_file_repeat(true);
-            break;
-        case mpris::LoopStatus::Playlist:
-            player.set_autoplay(true);
-            player.set_track_repeat(false);
-            player.set_file_repeat(false);
-            break;
-        }
-    });
-
-    mpris->start_loop_async();
+    player.mpris_server().set_desktop_entry(QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "gmplayer.desktop").toStdString());
+    player.mpris_server().set_identity("gmplayer");
+    player.mpris_server().set_supported_uri_schemes({"file"});
+    player.mpris_server().set_supported_mime_types({"application/x-pkcs7-certificates", "application/octet-stream", "text/plain"});
+    player.mpris_server().on_quit([=, this] { QApplication::quit(); });
+    player.mpris_server().on_open_uri([=, this] (std::string_view url) { qDebug() << "not opening uri, sorry"; });
 
     // create menus
     auto *file_menu = create_menu(this, "&File",
@@ -409,11 +337,9 @@ MainWindow::MainWindow(QWidget *parent)
         duration_label->setText(format_duration(ms, duration_slider->maximum()));
     });
 
-    player.on_position_changed([=, this](int ms) {
+    player.on_position_changed([=, this] (int ms) {
         duration_slider->setValue(ms);
         duration_label->setText(format_duration(ms, duration_slider->maximum()));
-        // for some reason mpris uses microseconds instead of milliseconds
-        mpris->set_position(ms * 1000);
     });
 
     // buttons under duration slider
@@ -449,7 +375,6 @@ MainWindow::MainWindow(QWidget *parent)
         volume_slider->setValue(value);
         volume_btn->setIcon(style()->standardIcon(value == 0 ? QStyle::SP_MediaVolumeMuted
                                                              : QStyle::SP_MediaVolume));
-        mpris->set_volume(double(value) / double(get_max_volume_value()));
     });
 
     // tempo (i.e. speedup up/slowing the song)
@@ -462,8 +387,6 @@ MainWindow::MainWindow(QWidget *parent)
     connect(tempo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=, this] (int i) {
         player.set_tempo(tempo->currentData().toDouble());
     });
-
-    player.on_tempo_changed([=, this] (double value) { mpris->set_rate(value); });
 
     // track information
     auto *title   = new QLabel;
@@ -489,9 +412,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     player.on_file_order_changed( [=, this] (const auto &names, bool shuffled) {
         update_list(filelist, names);
-        mpris->set_shuffle(shuffled);
     });
-    player.on_track_order_changed([=, this] (const auto &names, bool _) {
+    player.on_track_order_changed([=, this] (const auto &names, bool) {
         update_list(tracklist, names);
     });
 
@@ -506,13 +428,6 @@ MainWindow::MainWindow(QWidget *parent)
         duration_slider->setRange(0, len);
         update_next_prev_track();
         tracklist->setCurrentRow(trackno);
-        mpris->set_metadata({
-            { mpris::Field::TrackId, std::string("/") + std::to_string(player.current_file()) + std::to_string(trackno) },
-            { mpris::Field::Length,  len },
-            { mpris::Field::Title,   std::string(info->song) },
-            { mpris::Field::Album,   std::string(info->game) },
-            { mpris::Field::Artist,  std::string(info->author) }
-        });
         player.start_or_resume();
     });
 
@@ -561,20 +476,16 @@ MainWindow::MainWindow(QWidget *parent)
     auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player.set_file_repeat(state); });
 
     player.on_repeat_changed([=, this] (bool autoplay, bool repeat_track, bool repeat_file) {
-        mpris->set_loop_status(!autoplay || repeat_track ? mpris::LoopStatus::Track
-                                                         : mpris::LoopStatus::Playlist);
         update_next_prev_track();
     });
 
     player.on_played([=, this] {
         play_btn->setEnabled(true);
         play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
-        mpris->set_playback_status(mpris::PlaybackStatus::Playing);
     });
 
     player.on_paused([=, this] {
         play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-        mpris->set_playback_status(mpris::PlaybackStatus::Paused);
     });
 
     player.on_stopped    ([=, this] { duration_slider->setValue(0); });

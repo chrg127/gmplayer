@@ -293,7 +293,7 @@ inline void Server::set_volume_external(double value)
 {
     if (!can_control())
         throw sdbus::Error(service_name + ".Error", "Cannot set volume (CanControl is false).");
-    set_volume(value);
+    set_volume(value < 0.0 ? 0.0 : value > 1.0 ? 1.0 : value);
     volume_changed_fn(volume);
 }
 

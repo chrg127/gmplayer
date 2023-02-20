@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <span>
 #include <SDL_audio.h> // SDL_AudioDeviceID
+#include <mpris_server.hpp>
 
 class Music_Emu;
 class gme_info_t;
@@ -80,8 +81,8 @@ class Player {
         int count = 0;
     } tracks;
 
-    // options
     PlayerOptions options = {};
+    std::unique_ptr<mpris::Server> mpris;
 
     void audio_callback(void *unused, uint8_t *stream, int stream_length);
     friend void audio_callback(void *unused, uint8_t *stream, int stream_length);
@@ -146,7 +147,8 @@ public:
     void set_volume(int value);
     void set_volume_relative(int offset);
 
-    // callbacks
+    mpris::Server &mpris_server() { return *mpris; }
+
 #define CALLBACK(name, ...) \
 private: std::function<void(__VA_ARGS__)> name;      \
 public:  void on_##name(auto &&fn) { name = fn; }    \

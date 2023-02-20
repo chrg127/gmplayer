@@ -114,7 +114,7 @@ void Player::audio_callback(void *, u8 *stream, int len)
     gme_play(emu, SAMPLES * CHANNELS, buf);
     // we could also use memcpy here, but then we wouldn't have volume control
     SDL_MixAudioFormat(stream, (const u8 *) buf, obtained.format, sizeof(buf), options.volume);
-    position_changed(gme_tell(emu));
+    mpris->set_position(gme_tell(emu) * 1000);
 }
 
 void Player::set_track_fade()
@@ -140,6 +140,47 @@ Player::Player()
     audio_mutex = SDLMutex(dev_id);
     id = object_handler.add(this);
     object_handler.change_cur_to(id);
+
+    // set up mpris stuff
+    mpris = mpris::Server::make("gmplayer");
+    mpris->set_maximum_rate(2.0);
+    mpris->set_minimum_rate(0.5);
+    mpris->set_rate(options.tempo);
+    mpris->set_volume(options.volume);
+    mpris->on_pause(           [=, this]                   { pause();               });
+    mpris->on_play(            [=, this]                   { start_or_resume();     });
+    mpris->on_play_pause(      [=, this]                   { play_pause();          });
+    mpris->on_stop(            [=, this]                   { stop();                });
+    mpris->on_next(            [=, this]                   { next();                });
+    mpris->on_previous(        [=, this]                   { prev();                });
+    mpris->on_seek(            [=, this] (int64_t offset)  { seek_relative(offset); });
+    mpris->on_rate_changed(    [=, this] (double rate)     { set_tempo(rate);       });
+    mpris->on_set_position(    [=, this] (int64_t pos)     { seek(pos);             });
+    mpris->on_shuffle_changed( [=, this] (bool do_shuffle) { shuffle_files(do_shuffle); load_file(0); });
+    mpris->on_volume_changed(  [=, this] (double vol) {
+        set_volume(std::lerp(0.0, get_max_volume_value(), vol));
+    });
+    mpris->on_loop_status_changed([=, this] (mpris::LoopStatus status) {
+        switch (status) {
+        case mpris::LoopStatus::None:
+            set_autoplay(false);
+            set_track_repeat(false);
+            set_file_repeat(false);
+            break;
+        case mpris::LoopStatus::Track:
+            set_autoplay(true);
+            set_track_repeat(true);
+            set_file_repeat(true);
+            break;
+        case mpris::LoopStatus::Playlist:
+            set_autoplay(true);
+            set_track_repeat(false);
+            set_file_repeat(false);
+            break;
+        }
+    });
+
+    mpris->start_loop_async();
 }
 
 Player::~Player()
@@ -190,6 +231,7 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
 
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
+    mpris->set_shuffle(false);
     file_order_changed(file_names(), false);
     return r;
 }
@@ -205,6 +247,7 @@ std::error_condition Player::add_file(fs::path path)
     files.cache.push_back(std::move(file.value()));
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
+    mpris->set_shuffle(false);
     file_order_changed(file_names(), false);
     return std::error_condition{};
 }
@@ -217,6 +260,7 @@ bool Player::remove_file(int fileno)
     files.cache.erase(files.cache.begin() + fileno);
     files.order.resize(files.cache.size());
     generate_order(files.order, false);
+    mpris->set_shuffle(false);
     file_order_changed(file_names(), false);
     return true;
 }
@@ -234,6 +278,7 @@ void Player::clear_file_playlist()
     files.cache.clear();
     files.order.clear();
     files.current = -1;
+    mpris->set_shuffle(false);
     file_order_changed(file_names(), false);
 }
 
@@ -278,6 +323,13 @@ int Player::load_track(int trackno)
         load_track_error(filename, track.metadata->song, num, std::error_condition(4, gme_error_category), err);
     set_track_fade();
     gme_set_tempo(emu, options.tempo);
+    mpris->set_metadata({
+        { mpris::Field::TrackId, std::string("/") + std::to_string(current_file()) + std::to_string(trackno) },
+        { mpris::Field::Length,  track.length },
+        { mpris::Field::Title,   std::string(track.metadata->song) },
+        { mpris::Field::Album,   std::string(track.metadata->game) },
+        { mpris::Field::Artist,  std::string(track.metadata->author) }
+    });
     track_changed(trackno, track.metadata, track.length);
     return num;
 }
@@ -297,6 +349,7 @@ void Player::start_or_resume()
     if (no_file_loaded())
         return;
     SDL_PauseAudioDevice(dev_id, 0);
+    mpris->set_playback_status(mpris::PlaybackStatus::Playing);
     played();
 }
 
@@ -306,6 +359,7 @@ void Player::pause()
     if (no_file_loaded())
         return;
     SDL_PauseAudioDevice(dev_id, 1);
+    mpris->set_playback_status(mpris::PlaybackStatus::Paused);
     paused();
 }
 
@@ -465,6 +519,7 @@ void Player::shuffle_files(bool do_shuffle)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     generate_order(files.order, do_shuffle);
+    mpris->set_shuffle(do_shuffle);
     file_order_changed(file_names(), do_shuffle);
 }
 
@@ -482,6 +537,7 @@ int Player::move_file(int n, int where, int min, int max)
     if (n < min || n > max)
         return n;
     std::swap(files.order[n], files.order[n + where]);
+    mpris->set_shuffle(false);
     file_order_changed(file_names(), false);
     return n + where;
 }
@@ -515,6 +571,7 @@ void Player::set_tempo(double tempo)
     options.tempo = tempo;
     if (!no_file_loaded())
         gme_set_tempo(emu, tempo);
+    mpris->set_rate(tempo);
     tempo_changed(tempo);
 }
 
@@ -536,6 +593,7 @@ void Player::set_autoplay(bool value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.autoplay = value;
+    mpris->set_loop_status(!options.autoplay || options.track_repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::Playlist);
     repeat_changed(options.autoplay, options.track_repeat, options.file_repeat);
 }
 
@@ -543,6 +601,7 @@ void Player::set_track_repeat(bool value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.track_repeat = value;
+    mpris->set_loop_status(!options.autoplay || options.track_repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::Playlist);
     repeat_changed(options.autoplay, options.track_repeat, options.file_repeat);
 }
 
@@ -550,6 +609,7 @@ void Player::set_file_repeat(bool value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.file_repeat = value;
+    mpris->set_loop_status(!options.autoplay || options.track_repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::Playlist);
     repeat_changed(options.autoplay, options.track_repeat, options.file_repeat);
 }
 
@@ -557,6 +617,7 @@ void Player::set_volume(int value)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     options.volume = value;
+    mpris->set_volume(double(options.volume) / double(get_max_volume_value()));
     volume_changed(options.volume);
 }
 
