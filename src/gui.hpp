@@ -11,12 +11,11 @@
 #include <QPushButton>
 #include <QStringList>
 #include <mpris_server.hpp>
-#include "player.hpp"
 #include "keyrecorder.hpp"
 
+class Player;
 class QShortcut;
 class QMenu;
-class MprisPlayer;
 
 class SettingsWindow : public QDialog {
     Q_OBJECT
@@ -70,7 +69,7 @@ public:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
-    Player player;
+    Player *player;
     QString last_file = ".";
     std::map<QString, Shortcut> shortcuts;
     bool was_paused = false;
@@ -97,5 +96,5 @@ class MainWindow : public QMainWindow {
     void add_to_enable(auto... objects) { (to_enable.push_back(objects), ...); }
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
+    MainWindow(Player *player, QWidget *parent = nullptr);
 };

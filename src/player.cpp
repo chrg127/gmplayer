@@ -114,6 +114,7 @@ void Player::audio_callback(void *, u8 *stream, int len)
     gme_play(emu, SAMPLES * CHANNELS, buf);
     // we could also use memcpy here, but then we wouldn't have volume control
     SDL_MixAudioFormat(stream, (const u8 *) buf, obtained.format, sizeof(buf), options.volume);
+    position_changed(gme_tell(emu));
     mpris->set_position(gme_tell(emu) * 1000);
 }
 
