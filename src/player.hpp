@@ -40,8 +40,52 @@ struct PlayerOptions {
 
 struct OpenPlaylistResult {
     std::error_condition pl_error = std::error_condition{};
-    std::vector<std::string> not_opened;
-    std::vector<std::error_condition> errors;
+    std::vector<std::pair<std::string, std::error_condition>> errors;
+};
+
+struct TrackMetadata {
+    int length;
+    std::string_view system;
+    std::string_view game;
+    std::string_view song;
+    std::string_view author;
+    std::string_view copyright;
+    std::string_view comment;
+    std::string_view dumper;
+};
+
+struct Playlist {
+    std::vector<int> order;
+    int current = -1;
+    bool repeat;
+
+    void regen();
+    void regen(int size);
+    void shuffle();
+    void clear() { order.clear(); current = -1; }
+    void remove(int i) { order.erase(order.begin() + i); }
+
+    int move(int i, int pos)
+    {
+        if (i + pos < 0 || i + pos > order.size() - 1)
+            return i;
+        std::swap(order[i], order[i+pos]);
+        return i+pos;
+    }
+
+    std::optional<int> next() const
+    {
+        return repeat                     ? std::optional{current}
+             : current + 1 < order.size() ? std::optional{current + 1}
+             : std::nullopt;
+    }
+
+    std::optional<int> prev() const
+    {
+        return repeat           ? std::optional{current}
+             : current - 1 >= 0 ? std::optional{current - 1}
+             : std::nullopt;
+    }
 };
 
 class Player {
@@ -52,8 +96,20 @@ class Player {
     SDL_AudioDeviceID dev_id = 0;
     mutable SDLMutex audio_mutex;
     SDL_AudioSpec obtained;
-    PlayerOptions options = {};
+
+    std::vector<io::MappedFile> cache;
     std::unique_ptr<mpris::Server> mpris = nullptr;
+    Playlist files;
+    Playlist tracks;
+
+    struct {
+        bool autoplay;
+        bool silence_detection;
+        int default_duration;
+        int fade_out;
+        int volume;
+        double tempo;
+    } opts;
 
     // current track information:
     struct {
@@ -61,22 +117,13 @@ class Player {
         int length = 0;
     } track;
 
-    struct {
-        std::vector<io::MappedFile> cache;
-        std::vector<int> order;
-        int current = -1;
-    } files;
-
-    struct {
-        std::vector<int> order;
-        int current = -1;
-        int count = 0;
-    } tracks;
-
     void audio_callback(std::span<u8> stream);
     friend void audio_callback(void *, u8 *stream, int len);
+    std::error_condition add_file_internal(std::filesystem::path path);
 
 public:
+    enum class List { Track, File };
+
     Player(PlayerOptions &&options);
     ~Player();
 
@@ -88,8 +135,9 @@ public:
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
     std::error_condition add_file(std::filesystem::path path);
     std::error_condition remove_file(int fileno);
-    void save_file_playlist(io::File &to);
-    void clear_file_playlist();
+    void save_playlist(List which, io::File &to);
+    void clear();
+    void load(List which, int n) { which == List::Track ? load_track(n) : load_file(n); }
     void load_file(int fileno);
     void load_track(int num);
 
@@ -98,32 +146,20 @@ public:
     void pause();
     void play_pause();
     void stop();
-    void next();
-    void prev();
     void seek(int ms);
     void seek_relative(int off);
-
-    int current_track() const;
-    int current_file() const;
-    std::optional<int> get_next_file() const;
-    std::optional<int> get_prev_file() const;
-    std::optional<int> get_next_track() const;
-    std::optional<int> get_prev_track() const;
     int position();
     int length() const;
-    int effective_length() const;
-    std::vector<std::string> file_names() const;
-    std::vector<std::string> track_names() const;
-    void shuffle_tracks(bool do_shuffle);
-    void shuffle_files(bool do_shuffle);
-    int move_track(int n, int where, int min, int max);
-    int move_file(int n, int where, int min, int max);
-    int move_track_up(int trackno);
-    int move_track_down(int trackno);
-    int move_file_up(int fileno);
-    int move_file_down(int fileno);
 
-    const PlayerOptions & get_options();
+    void next();
+    void prev();
+    bool has_next() const;
+    bool has_prev() const;
+    void shuffle(List which);
+    int move(List which, int n, int pos);
+    std::vector<std::string> names(List which) const;
+
+    PlayerOptions options();
     void set_fade(int secs);
     void set_tempo(double tempo);
     void set_silence_detection(bool ignore);
@@ -150,6 +186,7 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(stopped, void)
     CALLBACK(file_order_changed,  const std::vector<std::string> &)
     CALLBACK(track_order_changed, const std::vector<std::string> &)
+    CALLBACK(playlist_changed, List)
     CALLBACK(repeat_changed, bool, bool, bool)
     CALLBACK(tempo_changed, double)
     CALLBACK(load_file_error, std::string_view, std::string_view)

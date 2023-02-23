@@ -132,12 +132,12 @@ void RecentList::add(const QString &name)
 
 SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
 {
-    auto options = player->get_options();
+    auto options = player->options();
 
     auto *fade              = make_checkbox(tr("&Enable fade-out"), options.fade_out != 0);
     auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), options.fade_out / 1000, fade->isChecked());
     auto *default_duration  = make_spinbox(10_min / 1000, options.default_duration / 1000);
-    auto *silence_detection = make_checkbox(tr("Do silence detection"), options.silence_detection == 1);
+    auto *silence_detection = make_checkbox(tr("Do silence detection"), options.silence_detection);
 
     connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
         fade_secs->setEnabled(state);
@@ -230,7 +230,7 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     setWindowIcon(QIcon(":/icons/gmplayer64.png"));
     setAcceptDrops(true);
 
-    const auto &options = player->get_options();
+    auto options = player->options();
 
     // menus
     auto *file_menu = create_menu(this, "&File",
@@ -344,21 +344,22 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     auto *comment = new QLabel;
     auto *dumper  = new QLabel;
 
-    // track playlist
+    // track and file playlist
     auto *tracklist     = new QListWidget;
-    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { player->load_track(tracklist->currentRow()); });
-    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle_tracks(true); player->load_track(0); });
-    auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move_track_up(tracklist->currentRow())); });
-    auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move_track_down(tracklist->currentRow())); });
-    player->on_track_order_changed([=, this] (const auto &names) { update_list(tracklist, names); });
+    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { player->load(Player::List::Track, tracklist->currentRow()); });
+    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle(Player::List::Track); player->load_track(0); });
+    auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move(Player::List::Track, tracklist->currentRow(), -1)); });
+    auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move(Player::List::Track, tracklist->currentRow(), +1)); });
 
-    // file playlist
     auto *filelist     = new QListWidget;
-    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { player->load_file(filelist->currentRow()); });
-    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle_files(true); player->load_file(0); });
-    auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move_file_up(filelist->currentRow())); });
-    auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move_file_down(filelist->currentRow())); });
-    player->on_file_order_changed( [=, this] (const auto &names) { update_list(filelist,  names); });
+    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { player->load(Player::List::File, filelist->currentRow()); });
+    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle(Player::List::File); player->load_file(0); });
+    auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move(Player::List::File, filelist->currentRow(), -1)); });
+    auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move(Player::List::File, filelist->currentRow(), +1)); });
+
+    player->on_playlist_changed([=, this] (Player::List which) {
+        update_list(which == Player::List::Track ? tracklist : filelist, player->names(which));
+    });
 
     player->on_track_changed([=, this](int trackno, gme_info_t *info, int) {
         title   ->setText(info->song);
@@ -367,7 +368,7 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
         system  ->setText(info->system);
         comment ->setText(info->comment);
         dumper  ->setText(info->dumper);
-        duration_slider->setRange(0, player->effective_length());
+        duration_slider->setRange(0, player->length());
         update_next_prev_track();
         tracklist->setCurrentRow(trackno);
         player->start_or_resume();
@@ -405,7 +406,7 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
             auto filename = save_dialog(tr("Save playlist"), "Playlist files (*.playlist)");
             auto path = fs::path(filename.toStdString());
             if (auto f = io::File::open(path, io::Access::Write); f)
-                player->save_file_playlist(f.value());
+                player->save_playlist(Player::List::File, f.value());
             else
                 msgbox(QString("Couldn't open file %1. (%2)")
                     .arg(QString::fromStdString(path.filename().string()))
@@ -510,8 +511,8 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
 
 void MainWindow::update_next_prev_track()
 {
-    next_track->setEnabled(player->get_next_track() || player->get_next_file());
-    prev_track->setEnabled(player->get_prev_track() || player->get_prev_file());
+    next_track->setEnabled(player->has_next());
+    prev_track->setEnabled(player->has_prev());
 }
 
 std::optional<QString> MainWindow::file_dialog(const QString &window_name, const QString &desc)
@@ -563,14 +564,11 @@ void MainWindow::open_playlist(const QString &filename)
             .arg(QString::fromStdString(res.pl_error.message())));
         return;
     }
-    if (res.not_opened.size() != 0) {
+    if (res.errors.size() != 0) {
         QString text;
-        text += "Files not opened:\n";
-        for (auto &file : res.not_opened)
-            text += QString::fromStdString(file) + "\n";
-        text += "Errors found:\n";
-        for (auto &err : res.errors)
-            text += QString::fromStdString(err.message()) + "\n";
+        for (auto &e : res.errors)
+            text += QString("%1: %2\n").arg(QString::fromStdString(e.first))
+                                       .arg(QString::fromStdString(e.second.message()));
         msgbox("Errors were found while opening the playlist.",
                "Check the details for the errors.", text);
     }
@@ -582,7 +580,7 @@ void MainWindow::open_playlist(const QString &filename)
 
 void MainWindow::open_single_file(const QString &filename)
 {
-    player->clear_file_playlist();
+    player->clear();
     auto path = fs::path(filename.toStdString());
     auto err = player->add_file(path);
     if (err != std::error_condition{}) {

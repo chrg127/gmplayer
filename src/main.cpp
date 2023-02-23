@@ -17,7 +17,7 @@ PlayerOptions load_player_options()
         .track_repeat       = settings.value("track_repeat",                       false).toBool(),
         .file_repeat        = settings.value("file_repeat",                        false).toBool(),
         .default_duration   = settings.value("default_duration",              int(3_min)).toInt(),
-        .silence_detection  = settings.value("silence_detection",                      0).toInt(),
+        .silence_detection  = settings.value("silence_detection",                  false).toBool(),
         .tempo              = settings.value("tempo",                                1.0).toDouble(),
         .volume             = settings.value("volume",            get_max_volume_value()).toInt()
     };
@@ -79,6 +79,6 @@ int main(int argc, char *argv[])
     sdl_thread.join();
     SDL_Quit();
 
-    save_player_options(player.get_options());
+    save_player_options(player.options());
     return 0;
 }
