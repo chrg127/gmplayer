@@ -8,13 +8,9 @@
 #include <SDL_audio.h> // SDL_AudioDeviceID
 #include <mpris_server.hpp>
 #include "common.hpp"
+#include "io.hpp"
 
 class Music_Emu;
-
-namespace io {
-    class File;
-    class MappedFile;
-}
 
 inline constexpr std::size_t operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
 inline constexpr std::size_t operator"" _min(unsigned long long mins) { return mins * 60_sec; }
@@ -83,20 +79,16 @@ struct Playlist {
 };
 
 class Player {
-    // emulator and audio device objects.
-    // a mutex is needed because audio plays in another thread.
     Music_Emu *emu           = nullptr;
     int id                   = 0;
     SDL_AudioDeviceID dev_id = 0;
     mutable SDLMutex audio_mutex;
     SDL_AudioSpec obtained;
-
-    std::vector<io::MappedFile> cache;
-    std::unique_ptr<mpris::Server> mpris = nullptr;
+    std::vector<io::MappedFile> file_cache;
+    std::vector<Metadata> track_cache;
     Playlist files;
     Playlist tracks;
-    Metadata metadata;
-
+    std::unique_ptr<mpris::Server> mpris = nullptr;
     struct {
         bool autoplay;
         bool silence_detection;
@@ -130,6 +122,8 @@ public:
     std::error_condition load_m3u();
     void save_playlist(List which, io::File &to);
     void clear();
+    const io::MappedFile &current_file() const;
+    const       Metadata &current_track() const;
 
     bool is_playing() const;
     void start_or_resume();

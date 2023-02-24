@@ -552,7 +552,7 @@ void MainWindow::open_playlist(const QString &filename)
 {
     auto res = player->open_file_playlist(filename.toUtf8().constData());
     if (res.pl_error != std::error_code{}) {
-        msgbox(QString("Couldn't open file %1 (%2).")
+        msgbox(QString("Couldn't open playlist %1 (%2).")
             .arg(filename)
             .arg(QString::fromStdString(res.pl_error.message())));
         return;

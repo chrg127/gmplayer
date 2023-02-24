@@ -99,15 +99,16 @@ namespace {
         gme_info_t *info;
         gme_track_info(emu, &info, n);
         return {
-            .length = get_track_length(info, default_duration),
-            .system = info->system,
-            .game   = info->game,
-            .song   = info->song,
-            .author = info->author,
-            .copyright  = info->copyright,
-            .comment    = info->comment,
-            .dumper = info->dumper,
+            .length    = get_track_length(info, default_duration),
+            .system    = info->system,
+            .game      = info->game,
+            .song      = info->song,
+            .author    = info->author,
+            .copyright = info->copyright,
+            .comment   = info->comment,
+            .dumper    = info->dumper,
         };
+        gme_free_info(info);
     }
 }
 
@@ -238,7 +239,7 @@ std::error_condition Player::add_file_internal(fs::path path)
         return file.error().default_error_condition();
     if (auto err = validate(file.value()); err)
         return err;
-    cache.push_back(std::move(file.value()));
+    file_cache.push_back(std::move(file.value()));
     files.order.push_back(files.order.size());
     return std::error_condition{};
 }
@@ -246,7 +247,7 @@ std::error_condition Player::add_file_internal(fs::path path)
 OpenPlaylistResult Player::open_file_playlist(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    cache.clear();
+    file_cache.clear();
     tracks.clear();
     files.clear();
     auto file = io::File::open(path, io::Access::Read);
@@ -288,11 +289,14 @@ std::error_condition Player::load_file(int fileno)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     files.current = fileno;
-    auto &file    = cache[files.order[files.current]];
+    auto &file    = file_cache[files.order[files.current]];
     auto err      = gme_open_data(file.data(), file.size(), &emu, 44100);
     if (err)
         return make_err(Error::LoadFile);
-    tracks.regen(gme_track_count(emu));
+    track_cache.clear();
+    for (int i = 0; i < gme_track_count(emu); i++)
+        track_cache.push_back(make_metadata(emu, i, opts.default_duration));
+    tracks.regen(track_cache.size());
     playlist_changed(List::Track);
     file_changed(fileno);
     return std::error_condition{};
@@ -302,11 +306,10 @@ std::error_condition Player::load_track(int trackno)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     tracks.current = trackno;
-    auto num = tracks.order[tracks.current];
-    auto filename = cache[files.order[files.current]].filename();
-    metadata = make_metadata(emu, num, opts.default_duration);
+    auto num       = tracks.order[tracks.current];
     if (auto err = gme_start_track(emu, num); err)
         return make_err(Error::LoadTrack);
+    auto &metadata = track_cache[num];
     if (opts.fade_out != 0)
         gme_set_fade(emu, metadata.length, opts.fade_out);
     gme_set_tempo(emu, opts.tempo);
@@ -325,29 +328,31 @@ std::error_condition Player::load_track(int trackno)
 std::error_condition Player::load_m3u()
 {
     auto err = gme_load_m3u(emu,
-        cache[files.order[files.current]].file_path()
+        file_cache[files.order[files.current]].file_path()
             .replace_extension("m3u").string().c_str());
-    if (err)
-        return make_err(Error::LoadM3U);
+    return err ?  make_err(Error::LoadM3U) : std::error_condition{};
 }
 
 void Player::save_playlist(List which, io::File &to)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     for (auto i : (which == List::Track ? tracks.order : files.order))
-        fprintf(to.data(), "%s\n", cache[i].file_path().c_str());
+        fprintf(to.data(), "%s\n", file_cache[i].file_path().c_str());
 }
 
 void Player::clear()
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    cache.clear();
+    file_cache.clear();
     tracks.clear();
     files.clear();
     mpris->set_shuffle(false);
     playlist_changed(List::Track);
     playlist_changed(List::File);
 }
+
+const io::MappedFile &Player::current_file()  const { std::lock_guard<SDLMutex> lock(audio_mutex); return  file_cache[ files.order[ files.current]]; }
+const       Metadata &Player::current_track() const { std::lock_guard<SDLMutex> lock(audio_mutex); return track_cache[tracks.order[tracks.current]]; }
 
 bool Player::is_playing() const
 {
@@ -406,7 +411,7 @@ std::error_condition Player::seek(int ms)
         return make_err(Error::Seek);
     // fade disappears on seek for some reason
     if (opts.fade_out != 0)
-        gme_set_fade(emu, metadata.length, opts.fade_out);
+        gme_set_fade(emu, current_track().length, opts.fade_out);
     return std::error_condition{};
 }
 
@@ -421,7 +426,7 @@ int Player::position()
 int Player::length() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return no_file_loaded() ? 0 : metadata.length + opts.fade_out;
+    return no_file_loaded() ? 0 : current_track().length + opts.fade_out;
 }
 
 
@@ -487,12 +492,12 @@ std::vector<std::string> Player::names(List which) const
     std::vector<std::string> names;
     if (which == List::File)
         for (auto i : files.order)
-            names.push_back(cache[i].file_path().stem().string());
+            names.push_back(file_cache[i].file_path().stem().string());
     else {
-        for (auto i : tracks.order) {
-            gme_info_t *info;
-            gme_track_info(emu, &info, i);
-            names.push_back(info->song[0] ? info->song : std::string("Track ") + std::to_string(i));
+        for (int i = 0; i < track_cache.size(); i++) {
+            auto &track = track_cache[i];
+            names.push_back(!track.song.empty() ? std::string(track.song)
+                                                : std::string("Track ") + std::to_string(i));
         }
     }
     return names;
@@ -521,7 +526,7 @@ void Player::set_fade(int secs)
     opts.fade_out = secs * 1000;
     if (!no_file_loaded() && opts.fade_out != 0) {
         if (opts.fade_out != 0)
-            gme_set_fade(emu, metadata.length, opts.fade_out);
+            gme_set_fade(emu, current_track().length, opts.fade_out);
         fade_changed(length());
     }
 }
