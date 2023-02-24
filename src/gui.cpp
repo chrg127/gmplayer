@@ -25,7 +25,6 @@
 #include <QToolButton>
 #include "qtutils.hpp"
 #include <QVBoxLayout>
-#include <gme/gme.h>    // gme_info_t
 #include "qtutils.hpp"
 #include "player.hpp"
 #include "io.hpp"
@@ -287,8 +286,8 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
         duration_label->setText(format_duration(ms, duration_slider->maximum()));
     });
 
-    player->on_fade_set([=, this] (int len) { duration_slider->setRange(0, len); });
-    player->on_stopped( [=, this]           { duration_slider->setValue(0);      });
+    player->on_fade_changed([=, this] (int len) { duration_slider->setRange(0, len); });
+    player->on_stopped(     [=, this]           { duration_slider->setValue(0);      });
 
     // buttons under duration slider
     auto make_btn = [&](auto icon, auto &&fn) {
@@ -361,13 +360,13 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
         update_list(which == Player::List::Track ? tracklist : filelist, player->names(which));
     });
 
-    player->on_track_changed([=, this](int trackno, gme_info_t *info, int) {
-        title   ->setText(info->song);
-        game    ->setText(info->game);
-        author  ->setText(info->author);
-        system  ->setText(info->system);
-        comment ->setText(info->comment);
-        dumper  ->setText(info->dumper);
+    player->on_track_changed([=, this](int trackno, const Metadata &metadata) {
+        title   ->setText(metadata.song.data());
+        game    ->setText(metadata.game.data());
+        author  ->setText(metadata.author.data());
+        system  ->setText(metadata.system.data());
+        comment ->setText(metadata.comment.data());
+        dumper  ->setText(metadata.dumper.data());
         duration_slider->setRange(0, player->length());
         update_next_prev_track();
         tracklist->setCurrentRow(trackno);
@@ -420,35 +419,29 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     auto *repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player->set_track_repeat(state); });
     auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player->set_file_repeat(state); });
 
-    player->on_repeat_changed([=, this] (bool, bool, bool) { update_next_prev_track(); });
+    player->on_repeat_changed([=, this] (bool, bool) { update_next_prev_track(); });
 
-    player->on_played([=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
-    player->on_paused([=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
-    player->on_track_ended([=, this] {                        play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
+    player->on_played(     [=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
+    player->on_paused(     [=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
+    player->on_track_ended([=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
 
-    player->on_load_file_error([=, this] (std::string_view filename, std::string_view details) {
-        msgbox(QString("Couldn't load file %1. (%2)")
-            .arg(QString(filename.data()))
-            .arg(QString(details.data())));
-        play_btn->setEnabled(false);
-        player->pause();
-    });
+    // player->on_load_file_error([=, this] (std::string_view filename, std::string_view details) {
+    //     msgbox(QString("Couldn't load file %1. (%2)")
+    //         .arg(QString(filename.data()))
+    //         .arg(QString(details.data())));
+    //     play_btn->setEnabled(false);
+    //     player->pause();
+    // });
 
-    player->on_load_track_error([=, this] (std::string_view filename, int trackno, std::string_view trackname, std::string_view details) {
-        msgbox(QString("Couldn't load track %1 (%2) of file %3. (%4)")
-            .arg(trackno)
-            .arg(QString(trackname.data()))
-            .arg(QString(filename.data()))
-            .arg(QString(details.data())));
-        play_btn->setEnabled(false);
-        player->pause();
-    });
-
-    player->on_seek_error([=, this] (std::string_view details) {
-        msgbox(QString("Got a seek error. (%1)").arg(details.data()));
-        play_btn->setEnabled(false);
-        player->pause();
-    });
+    // player->on_load_track_error([=, this] (std::string_view filename, int trackno, std::string_view trackname, std::string_view details) {
+    //     msgbox(QString("Couldn't load track %1 (%2) of file %3. (%4)")
+    //         .arg(trackno)
+    //         .arg(QString(trackname.data()))
+    //         .arg(QString(filename.data()))
+    //         .arg(QString(details.data())));
+    //     play_btn->setEnabled(false);
+    //     player->pause();
+    // });
 
     // disable everything
     add_to_enable(

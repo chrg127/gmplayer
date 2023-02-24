@@ -10,7 +10,7 @@
 #include "common.hpp"
 
 class Music_Emu;
-class gme_info_t;
+
 namespace io {
     class File;
     class MappedFile;
@@ -43,15 +43,9 @@ struct OpenPlaylistResult {
     std::vector<std::pair<std::string, std::error_condition>> errors;
 };
 
-struct TrackMetadata {
+struct Metadata {
     int length;
-    std::string_view system;
-    std::string_view game;
-    std::string_view song;
-    std::string_view author;
-    std::string_view copyright;
-    std::string_view comment;
-    std::string_view dumper;
+    std::string_view system, game, song, author, copyright, comment, dumper;
 };
 
 struct Playlist {
@@ -101,6 +95,7 @@ class Player {
     std::unique_ptr<mpris::Server> mpris = nullptr;
     Playlist files;
     Playlist tracks;
+    Metadata metadata;
 
     struct {
         bool autoplay;
@@ -110,12 +105,6 @@ class Player {
         int volume;
         double tempo;
     } opts;
-
-    // current track information:
-    struct {
-        gme_info_t *metadata = nullptr;
-        int length = 0;
-    } track;
 
     void audio_callback(std::span<u8> stream);
     friend void audio_callback(void *, u8 *stream, int len);
@@ -135,18 +124,19 @@ public:
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
     std::error_condition add_file(std::filesystem::path path);
     std::error_condition remove_file(int fileno);
+    std::error_condition load_file(int fileno);
+    std::error_condition load_track(int num);
+    std::error_condition load(List which, int n) { return which == List::Track ? load_track(n) : load_file(n); }
+    std::error_condition load_m3u();
     void save_playlist(List which, io::File &to);
     void clear();
-    void load(List which, int n) { which == List::Track ? load_track(n) : load_file(n); }
-    void load_file(int fileno);
-    void load_track(int num);
 
     bool is_playing() const;
     void start_or_resume();
     void pause();
     void play_pause();
     void stop();
-    void seek(int ms);
+    std::error_condition seek(int ms);
     void seek_relative(int off);
     int position();
     int length() const;
@@ -176,23 +166,18 @@ public:
 private: std::function<void(__VA_ARGS__)> name;      \
 public:  void on_##name(auto &&fn) { name = fn; }    \
 
-    CALLBACK(track_changed, int, gme_info_t *, int)
+    CALLBACK(file_changed, int)
+    CALLBACK(track_changed, int, const Metadata &)
     CALLBACK(position_changed, int)
     CALLBACK(track_ended, void)
-    CALLBACK(file_changed, int)
-    CALLBACK(volume_changed, int)
     CALLBACK(paused, void)
     CALLBACK(played, void)
     CALLBACK(stopped, void)
-    CALLBACK(file_order_changed,  const std::vector<std::string> &)
-    CALLBACK(track_order_changed, const std::vector<std::string> &)
-    CALLBACK(playlist_changed, List)
-    CALLBACK(repeat_changed, bool, bool, bool)
+    CALLBACK(volume_changed, int)
     CALLBACK(tempo_changed, double)
-    CALLBACK(load_file_error, std::string_view, std::string_view)
-    CALLBACK(load_track_error, std::string_view, int, std::string_view, std::string_view)
-    CALLBACK(seek_error, std::string_view)
-    CALLBACK(fade_set, int);
+    CALLBACK(fade_changed, int);
+    CALLBACK(playlist_changed, List)
+    CALLBACK(repeat_changed, bool, bool)
 
 #undef CALLBACK
 };

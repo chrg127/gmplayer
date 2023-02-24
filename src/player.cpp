@@ -25,18 +25,22 @@ struct GMEErrorCategory : public std::error_category {
 static GMEErrorCategory errcat;
 
 enum class Error {
-    None, FileType, Header, Seek, RemoveFile,
+    None, NoFileLoaded, FileType, Header, Seek, RemoveFile, LoadFile, LoadTrack, LoadM3U,
 };
 
 std::string GMEErrorCategory::message(int n) const
 {
     switch (static_cast<Error>(n)) {
-    case Error::None:       return "Success";
-    case Error::FileType:   return "Invalid music file type";
-    case Error::Header:     return "Invalid music file header";
-    case Error::Seek:       return "Seek error";
-    case Error::RemoveFile: return "Couldn't remove file (file is currently playing)";
-    default:                return "Unknown error";
+    case Error::None:           return "Success";
+    case Error::NoFileLoaded:   return "Nothing loaded yet";
+    case Error::FileType:       return "Invalid music file type";
+    case Error::Header:         return "Invalid music file header";
+    case Error::Seek:           return "Seek error";
+    case Error::RemoveFile:     return "Couldn't remove file (file is currently playing)";
+    case Error::LoadFile:       return "Couldn't load file";
+    case Error::LoadTrack:      return "Couldn't load track";
+    case Error::LoadM3U:        return "Couldn't load m3u file";
+    default:                    return "Unknown error";
     }
 }
 
@@ -89,6 +93,22 @@ namespace {
         Player & get()              { return *players[cur]; }
         void change_cur_to(int id)  { cur = id; }
     } object_handler;
+
+    Metadata make_metadata(Music_Emu *emu, int n, int default_duration)
+    {
+        gme_info_t *info;
+        gme_track_info(emu, &info, n);
+        return {
+            .length = get_track_length(info, default_duration),
+            .system = info->system,
+            .game   = info->game,
+            .song   = info->song,
+            .author = info->author,
+            .copyright  = info->copyright,
+            .comment    = info->comment,
+            .dumper = info->dumper,
+        };
+    }
 }
 
 // this must be in the global scope for the friend declaration inside Player to work.
@@ -242,7 +262,6 @@ OpenPlaylistResult Player::open_file_playlist(fs::path path)
     }
     mpris->set_shuffle(false);
     playlist_changed(List::File);
-    // file_order_changed(file_names());
     return r;
 }
 
@@ -252,7 +271,6 @@ std::error_condition Player::add_file(fs::path path)
     if (auto err = add_file_internal(path); err)
         return err;
     playlist_changed(List::File);
-    // file_order_changed(file_names());
     return std::error_condition{};
 }
 
@@ -263,8 +281,54 @@ std::error_condition Player::remove_file(int fileno)
         return make_err(Error::RemoveFile);
     files.remove(fileno);
     playlist_changed(List::File);
-    // file_order_changed(file_names());
     return std::error_condition{};
+}
+
+std::error_condition Player::load_file(int fileno)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    files.current = fileno;
+    auto &file    = cache[files.order[files.current]];
+    auto err      = gme_open_data(file.data(), file.size(), &emu, 44100);
+    if (err)
+        return make_err(Error::LoadFile);
+    tracks.regen(gme_track_count(emu));
+    playlist_changed(List::Track);
+    file_changed(fileno);
+    return std::error_condition{};
+}
+
+std::error_condition Player::load_track(int trackno)
+{
+    std::lock_guard<SDLMutex> lock(audio_mutex);
+    tracks.current = trackno;
+    auto num = tracks.order[tracks.current];
+    auto filename = cache[files.order[files.current]].filename();
+    metadata = make_metadata(emu, num, opts.default_duration);
+    if (auto err = gme_start_track(emu, num); err)
+        return make_err(Error::LoadTrack);
+    if (opts.fade_out != 0)
+        gme_set_fade(emu, metadata.length, opts.fade_out);
+    gme_set_tempo(emu, opts.tempo);
+    mpris->set_metadata({
+        { mpris::Field::TrackId, std::string("/") + std::to_string(files.current)
+                                                  + std::to_string(tracks.current) },
+        { mpris::Field::Length,              metadata.length                       },
+        { mpris::Field::Title,   std::string(metadata.song)                        },
+        { mpris::Field::Album,   std::string(metadata.game)                        },
+        { mpris::Field::Artist,  std::string(metadata.author)                      }
+    });
+    track_changed(trackno, metadata);
+    return std::error_condition{};
+}
+
+std::error_condition Player::load_m3u()
+{
+    auto err = gme_load_m3u(emu,
+        cache[files.order[files.current]].file_path()
+            .replace_extension("m3u").string().c_str());
+    if (err)
+        return make_err(Error::LoadM3U);
 }
 
 void Player::save_playlist(List which, io::File &to)
@@ -283,55 +347,6 @@ void Player::clear()
     mpris->set_shuffle(false);
     playlist_changed(List::Track);
     playlist_changed(List::File);
-}
-
-void Player::load_file(int fileno)
-{
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    files.current = fileno;
-    auto &file    = cache[files.order[files.current]];
-    auto err = gme_open_data(file.data(), file.size(), &emu, 44100);
-    if (err) {
-        load_file_error(file.filename(), err);
-        return;
-    }
-    // when loading a file, try to see if there's a m3u file too
-    // m3u files must have the same name as the file, but with extension m3u
-    // if there are any errors, ignore them (m3u loading is not important)
-    auto m3u_path = file.file_path().replace_extension("m3u");
-    auto m3u_err = gme_load_m3u(emu, m3u_path.string().c_str());
-#ifdef DEBUG
-    if (m3u_err)
-        fprintf(stderr, "warning: m3u: %s\n", err);
-#endif
-    tracks.regen(gme_track_count(emu));
-    playlist_changed(List::Track);
-    file_changed(fileno);
-}
-
-void Player::load_track(int trackno)
-{
-    std::lock_guard<SDLMutex> lock(audio_mutex);
-    tracks.current = trackno;
-    auto num = tracks.order[tracks.current];
-    auto filename = cache[files.order[files.current]].filename();
-    if (auto err = gme_track_info(emu, &track.metadata, num); err)
-        load_track_error(filename, num, "", err);
-    track.length = get_track_length(track.metadata, opts.default_duration);
-    if (auto err = gme_start_track(emu, num); err)
-        load_track_error(filename, num, track.metadata->song, err);
-    if (opts.fade_out != 0)
-        gme_set_fade(emu, track.length, opts.fade_out);
-    gme_set_tempo(emu, opts.tempo);
-    mpris->set_metadata({
-        { mpris::Field::TrackId, std::string("/") + std::to_string(files.current)
-                                                  + std::to_string(tracks.current) },
-        { mpris::Field::Length,  track.length },
-        { mpris::Field::Title,   std::string(track.metadata->song) },
-        { mpris::Field::Album,   std::string(track.metadata->game) },
-        { mpris::Field::Artist,  std::string(track.metadata->author) }
-    });
-    track_changed(trackno, track.metadata, track.length);
 }
 
 bool Player::is_playing() const
@@ -382,16 +397,17 @@ void Player::stop()
     stopped();
 }
 
-void Player::seek(int ms)
+std::error_condition Player::seek(int ms)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
     if (no_file_loaded())
-        return;
+        return make_err(Error::NoFileLoaded);
     if (auto err = gme_seek(emu, std::clamp(ms, 0, length())); err)
-        seek_error(err);
+        return make_err(Error::Seek);
     // fade disappears on seek for some reason
     if (opts.fade_out != 0)
-        gme_set_fade(emu, track.length, opts.fade_out);
+        gme_set_fade(emu, metadata.length, opts.fade_out);
+    return std::error_condition{};
 }
 
 void Player::seek_relative(int off) { seek(position() + off); }
@@ -405,7 +421,7 @@ int Player::position()
 int Player::length() const
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    return no_file_loaded() ? 0 : track.length + opts.fade_out;
+    return no_file_loaded() ? 0 : metadata.length + opts.fade_out;
 }
 
 
@@ -505,8 +521,8 @@ void Player::set_fade(int secs)
     opts.fade_out = secs * 1000;
     if (!no_file_loaded() && opts.fade_out != 0) {
         if (opts.fade_out != 0)
-            gme_set_fade(emu, track.length, opts.fade_out);
-        fade_set(length());
+            gme_set_fade(emu, metadata.length, opts.fade_out);
+        fade_changed(length());
     }
 }
 
@@ -545,7 +561,7 @@ void Player::set_track_repeat(bool value)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     tracks.repeat = value;
     mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
-    repeat_changed(opts.autoplay, tracks.repeat, files.repeat);
+    repeat_changed(tracks.repeat, files.repeat);
 }
 
 void Player::set_file_repeat(bool value)
@@ -553,7 +569,7 @@ void Player::set_file_repeat(bool value)
     std::lock_guard<SDLMutex> lock(audio_mutex);
     files.repeat = value;
     mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
-    repeat_changed(opts.autoplay, tracks.repeat, files.repeat);
+    repeat_changed(tracks.repeat, files.repeat);
 }
 
 void Player::set_volume(int value)
