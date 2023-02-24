@@ -247,12 +247,13 @@ std::error_condition Player::add_file_internal(fs::path path)
 OpenPlaylistResult Player::open_file_playlist(fs::path path)
 {
     std::lock_guard<SDLMutex> lock(audio_mutex);
-    file_cache.clear();
-    tracks.clear();
-    files.clear();
     auto file = io::File::open(path, io::Access::Read);
     if (!file)
         return { .pl_error = file.error().default_error_condition() };
+    track_cache.clear();
+    file_cache.clear();
+    tracks.clear();
+    files.clear();
     OpenPlaylistResult r;
     for (std::string line; file.value().get_line(line); ) {
         auto p = fs::path(line);
