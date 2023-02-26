@@ -386,20 +386,16 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
             auto filename = file_dialog(tr("Open file"), "Game music files (*.spc *.nsf)");
             if (!filename)
                 return;
-            else if (auto err = player->add_file(filename.value().toStdString()); err != std::error_code())
+            else if (auto err = player->add_file(filename.value().toStdString()); err)
                 msgbox(QString("Couldn't open file %1 (%2)")
                     .arg(filename.value())
-                    .arg(QString::fromStdString(err.message())));
+                    .arg(QString::fromStdString(err.code.message())));
             else
                 update_next_prev_track();
         });
         menu.addAction("Remove from playlist", [=, this] {
-            if (auto err = player->remove_file(filelist->currentRow()); err != std::error_code())
-                msgbox(QString::fromStdString(err.message()));
-            if (!player->remove_file(filelist->currentRow()))
-                msgbox("Cannot remove currently playing file!");
-            else
-                update_next_prev_track();
+            player->remove_file(filelist->currentRow());
+            update_next_prev_track();
         });
         menu.addAction("Save playlist", [=, this]() {
             auto filename = save_dialog(tr("Save playlist"), "Playlist files (*.playlist)");
@@ -561,7 +557,7 @@ void MainWindow::open_playlist(const QString &filename)
         QString text;
         for (auto &e : res.errors)
             text += QString("%1: %2\n").arg(QString::fromStdString(e.first))
-                                       .arg(QString::fromStdString(e.second.message()));
+                                       .arg(QString::fromStdString(e.second.code.message()));
         msgbox("Errors were found while opening the playlist.",
                "Check the details for the errors.", text);
     }
@@ -576,10 +572,10 @@ void MainWindow::open_single_file(const QString &filename)
     player->clear();
     auto path = fs::path(filename.toStdString());
     auto err = player->add_file(path);
-    if (err != std::error_condition{}) {
+    if (err) {
         msgbox(QString("Couldn't open file %1 (%2)")
             .arg(QString::fromStdString(path.filename().string()))
-            .arg(QString::fromStdString(err.message())));
+            .arg(QString::fromStdString(err.code.message())));
         return;
     }
     recent_files->add(filename);

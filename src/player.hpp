@@ -9,8 +9,7 @@
 #include <mpris_server.hpp>
 #include "common.hpp"
 #include "io.hpp"
-
-class Music_Emu;
+#include "format.hpp"
 
 inline constexpr std::size_t operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
 inline constexpr std::size_t operator"" _min(unsigned long long mins) { return mins * 60_sec; }
@@ -36,12 +35,7 @@ struct PlayerOptions {
 
 struct OpenPlaylistResult {
     std::error_condition pl_error = std::error_condition{};
-    std::vector<std::pair<std::string, std::error_condition>> errors;
-};
-
-struct Metadata {
-    int length;
-    std::string_view system, game, song, author, copyright, comment, dumper;
+    std::vector<std::pair<std::string, Error>> errors;
 };
 
 struct Playlist {
@@ -79,16 +73,20 @@ struct Playlist {
 };
 
 class Player {
-    Music_Emu *emu           = nullptr;
-    int id                   = 0;
-    SDL_AudioDeviceID dev_id = 0;
-    mutable SDLMutex audio_mutex;
-    SDL_AudioSpec obtained;
+    std::unique_ptr<Interface> format = nullptr;
     std::vector<io::MappedFile> file_cache;
     std::vector<Metadata> track_cache;
     Playlist files;
     Playlist tracks;
     std::unique_ptr<mpris::Server> mpris = nullptr;
+
+    struct {
+        int id                   = 0;
+        SDL_AudioDeviceID dev_id = 0;
+        mutable SDLMutex mutex;
+        SDL_AudioSpec spec;
+    } audio;
+
     struct {
         bool autoplay;
         bool silence_detection;
@@ -100,7 +98,7 @@ class Player {
 
     void audio_callback(std::span<u8> stream);
     friend void audio_callback(void *, u8 *stream, int len);
-    std::error_condition add_file_internal(std::filesystem::path path);
+    Error add_file_internal(std::filesystem::path path);
 
 public:
     enum class List { Track, File };
@@ -114,12 +112,11 @@ public:
     bool no_file_loaded() const;
 
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
-    std::error_condition add_file(std::filesystem::path path);
-    std::error_condition remove_file(int fileno);
-    std::error_condition load_file(int fileno);
-    std::error_condition load_track(int num);
-    std::error_condition load(List which, int n) { return which == List::Track ? load_track(n) : load_file(n); }
-    std::error_condition load_m3u();
+    Error add_file(std::filesystem::path path);
+    void remove_file(int fileno);
+    Error load_file(int fileno);
+    Error load_track(int num);
+    Error load(List which, int n) { return which == List::Track ? load_track(n) : load_file(n); }
     void save_playlist(List which, io::File &to);
     void clear();
     const io::MappedFile &current_file() const;
@@ -130,7 +127,7 @@ public:
     void pause();
     void play_pause();
     void stop();
-    std::error_condition seek(int ms);
+    Error seek(int ms);
     void seek_relative(int off);
     int position();
     int length() const;

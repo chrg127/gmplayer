@@ -195,6 +195,8 @@ public:
                 size_type size()                                   const noexcept { return len; }
             std::span<u8> slice(size_type start, size_type length)                { return { ptr + start, length}; }
       std::span<const u8> slice(size_type start, size_type length) const          { return { ptr + start, length}; }
+            std::span<u8> bytes()                                                 { return { ptr, len }; }
+      std::span<const u8> bytes()                                  const          { return { ptr, len }; }
               std::string filename()                               const noexcept { return path.filename().string(); }
     std::filesystem::path file_path()                              const noexcept { return path; }
 };
