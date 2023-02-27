@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QStringList>
 #include "keyrecorder.hpp"
+#include "error.hpp"
 
 class Player;
 class QShortcut;
@@ -87,6 +88,7 @@ class MainWindow : public QMainWindow {
     void open_single_file(const QString &filename);
     void edit_settings();
     void edit_shortcuts();
+    void handle_error(Error error);
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);

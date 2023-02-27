@@ -11,8 +11,8 @@
 #include "io.hpp"
 #include "format.hpp"
 
-inline constexpr std::size_t operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
-inline constexpr std::size_t operator"" _min(unsigned long long mins) { return mins * 60_sec; }
+inline constexpr long long operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
+inline constexpr long long operator"" _min(unsigned long long mins) { return mins * 60_sec; }
 
 struct SDLMutex {
     SDL_AudioDeviceID id;
@@ -126,14 +126,14 @@ public:
     void start_or_resume();
     void pause();
     void play_pause();
-    void stop();
+    Error stop();
     Error seek(int ms);
-    void seek_relative(int off);
+    Error seek_relative(int off);
     int position();
     int length() const;
 
-    void next();
-    void prev();
+    Error next();
+    Error prev();
     bool has_next() const;
     bool has_prev() const;
     void shuffle(List which);
@@ -169,6 +169,8 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(fade_changed, int);
     CALLBACK(playlist_changed, List)
     CALLBACK(repeat_changed, bool, bool)
+    CALLBACK(shuffled, List)
+    CALLBACK(play_error, Error)
 
 #undef CALLBACK
 };

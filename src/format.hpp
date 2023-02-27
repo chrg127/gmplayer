@@ -1,34 +1,21 @@
 #pragma once
 
 #include <filesystem>
-#include <system_error>
 #include <string>
 #include <expected.hpp>
 #include "io.hpp"
+#include "error.hpp"
 
 const int SAMPLES   = 2048;
 const int CHANNELS  = 2;
-const int NUM_SAMPLES = SAMPLES * CHANNELS * 2;
+const int SAMPLES_SIZE = SAMPLES * CHANNELS * 2;
 
 struct Metadata {
     int length;
     std::string system, game, song, author, copyright, comment, dumper;
 };
 
-enum class ErrType {
-    None, FileType, Header, Play, Seek, LoadFile, LoadTrack, LoadM3U,
-};
-
-struct Error {
-    std::error_condition code;
-    std::string_view details;
-    operator bool() const { return static_cast<bool>(code); }
-    Error() = default;
-    Error(std::error_condition e) : code{e}, details{""} { }
-    Error(ErrType e, std::string_view s);
-};
-
-using PlayResult = tl::expected<std::array<u8, NUM_SAMPLES>, Error>;
+using PlayResult = tl::expected<std::array<u8, SAMPLES_SIZE>, Error>;
 
 struct Interface {
     virtual ~Interface() = default;

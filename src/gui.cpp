@@ -273,7 +273,7 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
         player->pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
-        player->seek(duration_slider->value());
+        handle_error(player->seek(duration_slider->value()));
         if (!was_paused)
             player->start_or_resume();
     });
@@ -297,10 +297,10 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
         return b;
     };
 
-    auto *play_btn  = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
-    auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { player->stop();       });
-    next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { player->next();       });
-    prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { player->prev();       });
+    play_btn        = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause();         });
+    auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { handle_error(player->stop()); });
+    next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { handle_error(player->next()); });
+    prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { handle_error(player->prev()); });
     next_track->setEnabled(false);
     prev_track->setEnabled(false);
 
@@ -345,14 +345,14 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
 
     // track and file playlist
     auto *tracklist     = new QListWidget;
-    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { player->load(Player::List::Track, tracklist->currentRow()); });
-    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle(Player::List::Track); player->load_track(0); });
+    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { handle_error(player->load(Player::List::Track, tracklist->currentRow())); });
+    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle(Player::List::Track); });
     auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move(Player::List::Track, tracklist->currentRow(), -1)); });
     auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move(Player::List::Track, tracklist->currentRow(), +1)); });
 
     auto *filelist     = new QListWidget;
-    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { player->load(Player::List::File, filelist->currentRow()); });
-    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle(Player::List::File); player->load_file(0); });
+    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { handle_error(player->load(Player::List::File, filelist->currentRow())); });
+    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle(Player::List::File); });
     auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move(Player::List::File, filelist->currentRow(), -1)); });
     auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move(Player::List::File, filelist->currentRow(), +1)); });
 
@@ -375,7 +375,7 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
 
     player->on_file_changed([=, this] (int fileno) {
         filelist->setCurrentRow(fileno);
-        player->load_track(0);
+        handle_error(player->load_track(0));
     });
 
     // context menu for file playlist, which lets the user edit the playlist
@@ -420,24 +420,7 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     player->on_played(     [=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
     player->on_paused(     [=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
     player->on_track_ended([=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
-
-    // player->on_load_file_error([=, this] (std::string_view filename, std::string_view details) {
-    //     msgbox(QString("Couldn't load file %1. (%2)")
-    //         .arg(QString(filename.data()))
-    //         .arg(QString(details.data())));
-    //     play_btn->setEnabled(false);
-    //     player->pause();
-    // });
-
-    // player->on_load_track_error([=, this] (std::string_view filename, int trackno, std::string_view trackname, std::string_view details) {
-    //     msgbox(QString("Couldn't load track %1 (%2) of file %3. (%4)")
-    //         .arg(trackno)
-    //         .arg(QString(trackname.data()))
-    //         .arg(QString(filename.data()))
-    //         .arg(QString(details.data())));
-    //     play_btn->setEnabled(false);
-    //     player->pause();
-    // });
+    player->on_shuffled(   [=, this] (Player::List l) { handle_error(player->load(l, 0)); });
 
     // disable everything
     add_to_enable(
@@ -534,11 +517,11 @@ void MainWindow::load_shortcuts()
     };
     settings.beginGroup("shortcuts");
     add_shortcut("play",  "Play/Pause",     "Ctrl+Space",   [=, this] { player->play_pause(); });
-    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();    });
-    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();    });
-    add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { player->stop(); });
-    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { player->seek_relative(1_sec); });
-    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { player->seek_relative(1_sec); });
+    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { handle_error(player->next());    });
+    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { handle_error(player->prev());    });
+    add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { handle_error(player->stop()); });
+    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { handle_error(player->seek_relative(1_sec)); });
+    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { handle_error(player->seek_relative(-1_sec)); });
     add_shortcut("volup", "Volume up",      "0",            [=, this] { player->set_volume_relative( 2); });
     add_shortcut("voldw", "Volume down",    "9",            [=, this] { player->set_volume_relative(-2); });
     settings.endGroup();
@@ -562,9 +545,9 @@ void MainWindow::open_playlist(const QString &filename)
                "Check the details for the errors.", text);
     }
     recent_playlists->add(filename);
-    player->load_file(0);
     for (auto &w : to_enable)
         w->setEnabled(true);
+    handle_error(player->load_file(0));
 }
 
 void MainWindow::open_single_file(const QString &filename)
@@ -579,9 +562,9 @@ void MainWindow::open_single_file(const QString &filename)
         return;
     }
     recent_files->add(filename);
-    player->load_file(0);
     for (auto &w : to_enable)
         w->setEnabled(true);
+    handle_error(player->load_file(0));
 }
 
 void MainWindow::edit_settings()
@@ -592,7 +575,7 @@ void MainWindow::edit_settings()
         // reset song to start position
         // (this is due to the modified fade applying to the song)
         if (result == QDialog::Accepted)
-            player->seek(0);
+            handle_error(player->seek(0));
     });
 }
 
@@ -600,6 +583,32 @@ void MainWindow::edit_shortcuts()
 {
     auto *wnd = new ShortcutsWindow(shortcuts);
     wnd->open();
+}
+
+void MainWindow::handle_error(Error error)
+{
+    if (!error)
+        return;
+    auto format_error = [&]() {
+        switch (static_cast<ErrType>(error.code.value())) {
+        case ErrType::Seek:      return tr("Got an error while seeking.");
+        case ErrType::LoadFile:  return tr("Got an error while loading file '%1'")
+                                            .arg(QString::fromStdString(player->current_file().filename()));
+        case ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'")
+                                            .arg(QString::fromStdString(player->current_track().song));
+        case ErrType::Play:      return tr("Got an error while playing.");
+        case ErrType::Header:    return tr("Header of file %1 is invalid.")
+                                            .arg(QString::fromStdString(player->current_file().filename()));
+        case ErrType::FileType:  return tr("File %1 has an invalid file type.")
+                                            .arg(QString::fromStdString(player->current_file().filename()));
+        }
+        return QString("");
+    };
+    msgbox(format_error(), tr("Check the details for the error."),
+        QString::fromStdString(error.details.data()));
+    play_btn->setEnabled(false);
+    play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    player->pause();
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
