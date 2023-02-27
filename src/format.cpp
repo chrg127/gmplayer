@@ -59,13 +59,10 @@ Error GME::start_track(int n)
 
 PlayResult GME::play()
 {
-    std::array<short, SAMPLES * CHANNELS> buf;
-    auto err = gme_play(emu, SAMPLES * CHANNELS, buf.data());
-    if (err)
-        return tl::unexpected(Error(ErrType::Play, err));
-    std::array<u8, NUM_SAMPLES> bytes;
-    std::memcpy(bytes.data(), buf.data(), bytes.size());
-    return bytes;
+    std::array<u8, SAMPLES_SIZE> buf;
+    auto err = gme_play(emu, SAMPLES * CHANNELS, (short *) buf.data());
+    return err ? tl::unexpected(Error(ErrType::Play, err))
+               : PlayResult(buf);
 }
 
 Error GME::seek(int n)
@@ -138,8 +135,9 @@ auto read_file(const io::MappedFile &file, int frequency)
     if (auto err = gme_identify_file(file.filename().c_str(), &type); type == nullptr)
         return tl::unexpected(Error(ErrType::FileType, err));
     if (auto header = gme_identify_header(file.data()); header[0] == '\0')
-        return tl::unexpected(Error(ErrType::Header, ""));
+        return tl::unexpected(Error(ErrType::Header, "invalid header"));
     auto ptr = std::make_unique<GME>();
-    ptr->open(file.bytes(), frequency);
+    if (auto err = ptr->open(file.bytes(), frequency); err)
+        return tl::unexpected(err);
     return ptr;
 }
