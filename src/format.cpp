@@ -2,6 +2,8 @@
 #include <cstring>
 #include "gme/gme.h"
 
+namespace gmplayer {
+
 namespace {
 
 struct GMEErrorCategory : public std::error_category {
@@ -143,3 +145,5 @@ auto read_file(const io::MappedFile &file, int frequency)
         return tl::unexpected(err);
     return ptr;
 }
+
+} // namespace gmplayer

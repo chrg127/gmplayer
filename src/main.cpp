@@ -7,11 +7,13 @@
 #include "gui.hpp"
 #include "player.hpp"
 
-PlayerOptions load_player_options()
+using namespace gmplayer::literals;
+
+gmplayer::PlayerOptions load_player_options()
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("player");
-    PlayerOptions options = {
+    gmplayer::PlayerOptions options = {
         .fade_out           = settings.value("fade_out",                               0).toInt(),
         .autoplay           = settings.value("autoplay",                           false).toBool(),
         .track_repeat       = settings.value("track_repeat",                       false).toBool(),
@@ -19,13 +21,13 @@ PlayerOptions load_player_options()
         .default_duration   = settings.value("default_duration",              int(3_min)).toInt(),
         .silence_detection  = settings.value("silence_detection",                  false).toBool(),
         .tempo              = settings.value("tempo",                                1.0).toDouble(),
-        .volume             = settings.value("volume",            get_max_volume_value()).toInt()
+        .volume             = settings.value("volume",  gmplayer::get_max_volume_value()).toInt()
     };
     settings.endGroup();
     return options;
 }
 
-void save_player_options(const PlayerOptions &options)
+void save_player_options(const gmplayer::PlayerOptions &options)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("player");
@@ -45,7 +47,7 @@ int main(int argc, char *argv[])
     QApplication a(argc, argv);
     SDL_Init(SDL_INIT_AUDIO);
 
-    Player player{load_player_options()};
+    gmplayer::Player player{load_player_options()};
 
     player.mpris_server().set_desktop_entry(QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "gmplayer.desktop").toStdString());
     player.mpris_server().set_identity("gmplayer");
@@ -53,7 +55,7 @@ int main(int argc, char *argv[])
     player.mpris_server().set_supported_mime_types({"application/x-pkcs7-certificates", "application/octet-stream", "text/plain"});
     player.mpris_server().on_quit([] { QApplication::quit(); });
 
-    MainWindow mw{&player};
+    gui::MainWindow mw{&player};
 
     bool sdl_running = true;
     bool got_sigint = false;

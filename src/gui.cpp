@@ -31,6 +31,9 @@
 #include "appinfo.hpp"
 
 namespace fs = std::filesystem;
+using namespace gmplayer::literals;
+
+namespace gui {
 
 namespace {
 
@@ -129,7 +132,7 @@ void RecentList::add(const QString &name)
 
 
 
-SettingsWindow::SettingsWindow(Player *player, QWidget *parent)
+SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
 {
     auto options = player->options();
 
@@ -207,9 +210,9 @@ AboutDialog::AboutDialog(QWidget *parent)
 {
     auto *icon = new QLabel;
     icon->setPixmap(QPixmap((":/icons/gmplayer32.png")));
-    auto *label = new QLabel(QString("<h2><b>gmplayer %1</b></h2>").arg(version));
-    auto *about_label = new QLabel(about_text); about_label->setOpenExternalLinks(true);
-    auto *lib_label   = new QLabel(lib_text);   lib_label->setOpenExternalLinks(true);
+    auto *label = new QLabel(QString("<h2><b>gmplayer %1</b></h2>").arg(gmplayer::version));
+    auto *about_label = new QLabel(gmplayer::about_text); about_label->setOpenExternalLinks(true);
+    auto *lib_label   = new QLabel(gmplayer::lib_text);   lib_label->setOpenExternalLinks(true);
     auto *tabs = make_tabs(
         std::make_tuple(about_label, "About"),
         std::make_tuple(lib_label, "Libraries")
@@ -222,7 +225,7 @@ AboutDialog::AboutDialog(QWidget *parent)
 
 
 
-MainWindow::MainWindow(Player *player, QWidget *parent)
+MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     : QMainWindow(parent), player{player}
 {
     setWindowTitle("gmplayer");
@@ -308,13 +311,13 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
 
     // volume slider and button
     auto *volume_slider = new QSlider(Qt::Horizontal);
-    volume_slider->setRange(0, get_max_volume_value());
+    volume_slider->setRange(0, gmplayer::get_max_volume_value());
     volume_slider->setValue(options.volume);
 
     connect(volume_slider, &QSlider::sliderMoved, this, [=, this] (int value) { player->set_volume(value); });
     QToolButton *volume_btn = make_btn(
         options.volume == 0 ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume,
-        [=, this, last = options.volume == 0 ? get_max_volume_value() : options.volume] () mutable {
+        [=, this, last = options.volume == 0 ? gmplayer::get_max_volume_value() : options.volume] () mutable {
             int vol = volume_slider->value();
             player->set_volume(vol != 0 ? last = vol, 0 : last);
         }
@@ -348,21 +351,21 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     // track and file playlist
     auto *tracklist     = new QListWidget;
     connect(tracklist, &QListWidget::itemActivated, this, [=, this] { handle_error(player->load_track(tracklist->currentRow())); });
-    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle(Player::List::Track); });
-    auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move(Player::List::Track, tracklist->currentRow(), -1)); });
-    auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move(Player::List::Track, tracklist->currentRow(), +1)); });
+    auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle(gmplayer::Player::List::Track); });
+    auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move(gmplayer::Player::List::Track, tracklist->currentRow(), -1)); });
+    auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move(gmplayer::Player::List::Track, tracklist->currentRow(), +1)); });
 
     auto *filelist     = new QListWidget;
     connect(filelist, &QListWidget::itemActivated,  this, [=, this] { handle_error(player->load_pair(filelist->currentRow(), 0)); });
-    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle(Player::List::File); });
-    auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move(Player::List::File, filelist->currentRow(), -1)); });
-    auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move(Player::List::File, filelist->currentRow(), +1)); });
+    auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle(gmplayer::Player::List::File); });
+    auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move(gmplayer::Player::List::File, filelist->currentRow(), -1)); });
+    auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move(gmplayer::Player::List::File, filelist->currentRow(), +1)); });
 
-    player->on_playlist_changed([=, this] (Player::List which) {
-        update_list(which == Player::List::Track ? tracklist : filelist, player->names(which));
+    player->on_playlist_changed([=, this] (gmplayer::Player::List which) {
+        update_list(which == gmplayer::Player::List::Track ? tracklist : filelist, player->names(which));
     });
 
-    player->on_track_changed([=, this](int trackno, const Metadata &metadata) {
+    player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
         title   ->setText(metadata.song.data());
         game    ->setText(metadata.game.data());
         author  ->setText(metadata.author.data());
@@ -405,7 +408,7 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
             auto filename = save_dialog(tr("Save playlist"), "Playlist files (*.playlist)");
             auto path = fs::path(filename.toStdString());
             if (auto f = io::File::open(path, io::Access::Write); f)
-                player->save_playlist(Player::List::File, f.value());
+                player->save_playlist(gmplayer::Player::List::File, f.value());
             else
                 msgbox(QString("Couldn't open file %1. (%2)")
                     .arg(QString::fromStdString(path.filename().string()))
@@ -424,8 +427,8 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     player->on_played(     [=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
     player->on_paused(     [=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
     player->on_track_ended([=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
-    player->on_shuffled(   [=, this] (Player::List l) {
-        if (l == Player::List::Track)
+    player->on_shuffled(   [=, this] (gmplayer::Player::List l) {
+        if (l == gmplayer::Player::List::Track)
             player->load_track(0);
         else
             player->load_pair(0, 0);
@@ -592,30 +595,30 @@ void MainWindow::edit_shortcuts()
     wnd->open();
 }
 
-void MainWindow::handle_error(Error error)
+void MainWindow::handle_error(gmplayer::Error error)
 {
     if (!error)
         return;
     auto format_error = [&]() {
-        switch (static_cast<ErrType>(error.code.value())) {
-        case ErrType::Seek:      return tr("Got an error while seeking.");
-        case ErrType::LoadFile:  return tr("Got an error while loading file '%1'")
+        switch (static_cast<gmplayer::ErrType>(error.code.value())) {
+        case gmplayer::ErrType::Seek:      return tr("Got an error while seeking.");
+        case gmplayer::ErrType::LoadFile:  return tr("Got an error while loading file '%1'")
                                             .arg(QString::fromStdString(player->current_file().filename()));
-        case ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'")
+        case gmplayer::ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'")
                                             .arg(QString::fromStdString(player->current_track().song));
-        case ErrType::Play:      return tr("Got an error while playing.");
-        case ErrType::Header:    return tr("Header of file %1 is invalid.")
+        case gmplayer::ErrType::Play:      return tr("Got an error while playing.");
+        case gmplayer::ErrType::Header:    return tr("Header of file %1 is invalid.")
                                             .arg(QString::fromStdString(player->current_file().filename()));
-        case ErrType::FileType:  return tr("File %1 has an invalid file type.")
+        case gmplayer::ErrType::FileType:  return tr("File %1 has an invalid file type.")
                                             .arg(QString::fromStdString(player->current_file().filename()));
         }
         return QString("");
     };
     msgbox(format_error(), tr("Check the details for the error."), QString::fromStdString(error.details.data()));
-    switch (static_cast<ErrType>(error.code.value())) {
-    case ErrType::LoadFile:
-    case ErrType::Header:
-    case ErrType::FileType:
+    switch (static_cast<gmplayer::ErrType>(error.code.value())) {
+    case gmplayer::ErrType::LoadFile:
+    case gmplayer::ErrType::Header:
+    case gmplayer::ErrType::FileType:
         duration_slider->setRange(0, 0);
         duration_label->setText("00:00 / 00:00");
         title   ->setText("");
@@ -625,9 +628,9 @@ void MainWindow::handle_error(Error error)
         comment ->setText("");
         dumper  ->setText("");
         update_next_prev_track();
-    case ErrType::LoadTrack:
-    case ErrType::Seek:
-    case ErrType::Play:
+    case gmplayer::ErrType::LoadTrack:
+    case gmplayer::ErrType::Seek:
+    case gmplayer::ErrType::Play:
         play_btn->setEnabled(false);
         play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
         player->pause();
@@ -664,3 +667,5 @@ void MainWindow::dropEvent(QDropEvent *event)
     open_single_file(url.toLocalFile());
     event->acceptProposedAction();
 }
+
+} // namespace gui

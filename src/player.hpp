@@ -11,8 +11,12 @@
 #include "io.hpp"
 #include "format.hpp"
 
-inline constexpr long long operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
-inline constexpr long long operator"" _min(unsigned long long mins) { return mins * 60_sec; }
+namespace gmplayer {
+
+namespace literals {
+    inline constexpr long long operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
+    inline constexpr long long operator"" _min(unsigned long long mins) { return mins * 60_sec; }
+}
 
 struct SDLMutex {
     SDL_AudioDeviceID id;
@@ -27,7 +31,7 @@ struct PlayerOptions {
     bool autoplay           = false;
     bool track_repeat       = false;
     bool file_repeat        = false;
-    int default_duration    = 3_min;
+    int default_duration    = 3 * 60 * 1000ull;
     int silence_detection   = 0;
     double tempo            = 1.0;
     int volume              = SDL_MIX_MAXVOLUME;
@@ -176,3 +180,5 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
 
 // this is here for portability
 inline constexpr int get_max_volume_value() { return SDL_MIX_MAXVOLUME; }
+
+} // namespace gmplayer

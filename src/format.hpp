@@ -6,6 +6,10 @@
 #include "io.hpp"
 #include "error.hpp"
 
+class Music_Emu;
+
+namespace gmplayer {
+
 const int SAMPLES   = 2048;
 const int CHANNELS  = 2;
 const int SAMPLES_SIZE = SAMPLES * CHANNELS * 2;
@@ -49,8 +53,6 @@ struct Default : public Interface {
           void ignore_silence(bool ignore)                         override { }
 };
 
-class Music_Emu;
-
 class GME : public Interface {
     Music_Emu *emu = nullptr;
     int fade_from, fade_len, track_len;
@@ -71,3 +73,5 @@ public:
 };
 
 auto read_file(const io::MappedFile &file, int frequency) -> tl::expected<std::unique_ptr<Interface>, Error>;
+
+} // namespace gmplayer

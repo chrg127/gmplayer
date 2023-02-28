@@ -11,6 +11,8 @@
 
 namespace fs = std::filesystem;
 
+namespace gmplayer {
+
 namespace {
     /*
      * problem: we have one single player and we'd like to make it into a class to use
@@ -87,7 +89,7 @@ Player::Player(PlayerOptions &&options)
     desired.format   = AUDIO_S16SYS;
     desired.channels = CHANNELS;
     desired.samples  = SAMPLES;
-    desired.callback = ::audio_callback;
+    desired.callback = gmplayer::audio_callback;
     desired.userdata = nullptr;
     audio.dev_id     = SDL_OpenAudioDevice(nullptr, 0, &desired, &audio.spec, 0);
     audio.mutex      = SDLMutex(audio.dev_id);
@@ -497,3 +499,5 @@ void Player::set_volume_relative(int offset)
     opts.volume += offset;
     volume_changed(opts.volume);
 }
+
+} // namespace gmplayer

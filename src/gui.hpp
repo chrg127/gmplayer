@@ -13,17 +13,19 @@
 #include "keyrecorder.hpp"
 #include "error.hpp"
 
-class Player;
+namespace gmplayer { class Player; }
 class QShortcut;
 class QMenu;
 class QToolButton;
 class QSlider;
 class QLabel;
 
+namespace gui {
+
 class SettingsWindow : public QDialog {
     Q_OBJECT
 public:
-    explicit SettingsWindow(Player *player, QWidget *parent = nullptr);
+    explicit SettingsWindow(gmplayer::Player *player, QWidget *parent = nullptr);
 };
 
 struct Shortcut {
@@ -71,7 +73,7 @@ public:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
-    Player *player                        = nullptr;
+    gmplayer::Player *player              = nullptr;
     QString last_file                     = ".";
     bool was_paused                       = false;
     std::map<QString, Shortcut> shortcuts = {};
@@ -98,12 +100,14 @@ class MainWindow : public QMainWindow {
     void open_single_file(const QString &filename);
     void edit_settings();
     void edit_shortcuts();
-    void handle_error(Error error);
+    void handle_error(gmplayer::Error error);
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);
     void add_to_enable(auto... objects) { (to_enable.push_back(objects), ...); }
 
 public:
-    MainWindow(Player *player, QWidget *parent = nullptr);
+    MainWindow(gmplayer::Player *player, QWidget *parent = nullptr);
 };
+
+} // namespace gui

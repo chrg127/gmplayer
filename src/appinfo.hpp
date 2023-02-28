@@ -2,6 +2,8 @@
 
 #include <QString>
 
+namespace gmplayer {
+
 static const QString application_name = "gmplayer";
 
 static const QString version = "v0.1";
@@ -35,3 +37,5 @@ gmplayer uses the following libraries:
 
 </p>
 )";
+
+} // namespace gmplayer
