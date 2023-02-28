@@ -96,7 +96,8 @@ Metadata GME::track_metadata(int which, int default_length)
         .length    = track_len,
         .system    = info->system,
         .game      = info->game,
-        .song      = info->song,
+        .song      = info->song[0] ? std::string(info->song)
+                                   : std::string("Track ") + std::to_string(which + 1),
         .author    = info->author,
         .copyright = info->copyright,
         .comment   = info->comment,

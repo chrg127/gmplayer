@@ -17,6 +17,8 @@ class Player;
 class QShortcut;
 class QMenu;
 class QToolButton;
+class QSlider;
+class QLabel;
 
 class SettingsWindow : public QDialog {
     Q_OBJECT
@@ -78,6 +80,14 @@ class MainWindow : public QMainWindow {
                 *play_btn                 = nullptr;
     RecentList *recent_files              = nullptr,
                *recent_playlists          = nullptr;
+    QLabel *title                         = nullptr,
+           *game                          = nullptr,
+           *system                        = nullptr,
+           *author                        = nullptr,
+           *comment                       = nullptr,
+           *dumper                        = nullptr,
+           *duration_label                = nullptr;
+    QSlider *duration_slider              = nullptr;
     std::vector<QWidget *> to_enable      = {};
 
     void update_next_prev_track();

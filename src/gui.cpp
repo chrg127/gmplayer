@@ -266,8 +266,8 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     last_file = load_last_dir();
 
     // duration slider
-    auto *duration_slider = new QSlider(Qt::Horizontal);
-    auto *duration_label = new QLabel("00:00 / 00:00");
+    duration_slider = new QSlider(Qt::Horizontal);
+    duration_label = new QLabel("00:00 / 00:00");
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
         was_paused = !player->is_playing();
         player->pause();
@@ -301,6 +301,8 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { handle_error(player->stop()); });
     next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { handle_error(player->next()); });
     prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { handle_error(player->prev()); });
+    play_btn->setEnabled(false);
+    stop_btn->setEnabled(false);
     next_track->setEnabled(false);
     prev_track->setEnabled(false);
 
@@ -336,22 +338,22 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     });
 
     // track information
-    auto *title   = new QLabel;
-    auto *game    = new QLabel;
-    auto *system  = new QLabel;
-    auto *author  = new QLabel;
-    auto *comment = new QLabel;
-    auto *dumper  = new QLabel;
+    title   = new QLabel;
+    game    = new QLabel;
+    system  = new QLabel;
+    author  = new QLabel;
+    comment = new QLabel;
+    dumper  = new QLabel;
 
     // track and file playlist
     auto *tracklist     = new QListWidget;
-    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { handle_error(player->load(Player::List::Track, tracklist->currentRow())); });
+    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { handle_error(player->load_track(tracklist->currentRow())); });
     auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle(Player::List::Track); });
     auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move(Player::List::Track, tracklist->currentRow(), -1)); });
     auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move(Player::List::Track, tracklist->currentRow(), +1)); });
 
     auto *filelist     = new QListWidget;
-    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { handle_error(player->load(Player::List::File, filelist->currentRow())); });
+    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { handle_error(player->load_pair(filelist->currentRow(), 0)); });
     auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle(Player::List::File); });
     auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move(Player::List::File, filelist->currentRow(), -1)); });
     auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move(Player::List::File, filelist->currentRow(), +1)); });
@@ -367,6 +369,8 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
         system  ->setText(metadata.system.data());
         comment ->setText(metadata.comment.data());
         dumper  ->setText(metadata.dumper.data());
+        play_btn->setEnabled(true);
+        duration_slider->setEnabled(true);
         duration_slider->setRange(0, player->length());
         update_next_prev_track();
         tracklist->setCurrentRow(trackno);
@@ -374,8 +378,8 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     });
 
     player->on_file_changed([=, this] (int fileno) {
+        stop_btn->setEnabled(true);
         filelist->setCurrentRow(fileno);
-        handle_error(player->load_track(0));
     });
 
     // context menu for file playlist, which lets the user edit the playlist
@@ -420,14 +424,17 @@ MainWindow::MainWindow(Player *player, QWidget *parent)
     player->on_played(     [=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
     player->on_paused(     [=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
     player->on_track_ended([=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
-    player->on_shuffled(   [=, this] (Player::List l) { handle_error(player->load(l, 0)); });
+    player->on_shuffled(   [=, this] (Player::List l) {
+        if (l == Player::List::Track)
+            player->load_track(0);
+        else
+            player->load_pair(0, 0);
+    });
 
     // disable everything
     add_to_enable(
-        duration_slider, play_btn, stop_btn, tempo,
-        volume_slider, volume_btn, tracklist, track_shuffle, track_up, track_down,
-        filelist, file_shuffle, file_up, file_down,
-        autoplay, repeat_track, repeat_file
+        tracklist, track_shuffle, track_up, track_down,
+        filelist, file_shuffle, file_up, file_down
     );
     for (auto &w : to_enable)
         w->setEnabled(false);
@@ -547,7 +554,7 @@ void MainWindow::open_playlist(const QString &filename)
     recent_playlists->add(filename);
     for (auto &w : to_enable)
         w->setEnabled(true);
-    handle_error(player->load_file(0));
+    handle_error(player->load_pair(0, 0));
 }
 
 void MainWindow::open_single_file(const QString &filename)
@@ -564,7 +571,7 @@ void MainWindow::open_single_file(const QString &filename)
     recent_files->add(filename);
     for (auto &w : to_enable)
         w->setEnabled(true);
-    handle_error(player->load_file(0));
+    handle_error(player->load_pair(0, 0));
 }
 
 void MainWindow::edit_settings()
@@ -604,11 +611,28 @@ void MainWindow::handle_error(Error error)
         }
         return QString("");
     };
-    msgbox(format_error(), tr("Check the details for the error."),
-        QString::fromStdString(error.details.data()));
-    play_btn->setEnabled(false);
-    play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-    player->pause();
+    msgbox(format_error(), tr("Check the details for the error."), QString::fromStdString(error.details.data()));
+    switch (static_cast<ErrType>(error.code.value())) {
+    case ErrType::LoadFile:
+    case ErrType::Header:
+    case ErrType::FileType:
+        duration_slider->setRange(0, 0);
+        duration_label->setText("00:00 / 00:00");
+        title   ->setText("");
+        game    ->setText("");
+        author  ->setText("");
+        system  ->setText("");
+        comment ->setText("");
+        dumper  ->setText("");
+        update_next_prev_track();
+    case ErrType::LoadTrack:
+    case ErrType::Seek:
+    case ErrType::Play:
+        play_btn->setEnabled(false);
+        play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+        player->pause();
+        duration_slider->setEnabled(false);
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)

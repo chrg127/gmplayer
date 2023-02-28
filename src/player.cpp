@@ -202,13 +202,17 @@ Error Player::load_file(int fileno)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     pause();
-    format = nullptr;
-    files.current = fileno;
-    auto res      = read_file(current_file(), 44100);
-    if (!res)
-        return res.error();
-    format = std::move(res.value());
     track_cache.clear();
+    files.current = fileno;
+    auto res = read_file(current_file(), 44100);
+    if (!res) {
+        format = std::make_unique<Default>();
+        tracks.regen(0);
+        playlist_changed(List::Track);
+        file_changed(fileno);
+        return res.error();
+    }
+    format = std::move(res.value());
     for (int i = 0; i < format->track_count(); i++)
         track_cache.push_back(format->track_metadata(i, opts.default_duration));
     tracks.regen(track_cache.size());
@@ -237,6 +241,13 @@ Error Player::load_track(int trackno)
     });
     track_changed(trackno, metadata);
     return Error{};
+}
+
+Error Player::load_pair(int file, int track)
+{
+    if (auto err = load_file(file); err)
+        return err;
+    return load_track(track);
 }
 
 void Player::save_playlist(List which, io::File &to)
@@ -338,7 +349,7 @@ Error Player::next()
         if (auto err = load_track(next.value()); err)
             return err;
     } else if (auto next = files.next(); next) {
-        if (auto err = load_file(next.value()); err)
+        if (auto err = load_pair(next.value(), 0); err)
             return err;
     }
     return Error{};
@@ -351,9 +362,7 @@ Error Player::prev()
         if (auto err = load_track(prev.value()); err)
             return err;
     } else if (auto prev = files.prev(); prev) {
-        if (auto err = load_file (prev.value()); err)
-            return err;
-        if (auto err = load_track(tracks.order.size() - 1); err)
+        if (auto err = load_pair(prev.value(), tracks.order.size() - 1); err)
             return err;
     }
     return Error{};
@@ -398,13 +407,9 @@ std::vector<std::string> Player::names(List which) const
     if (which == List::File)
         for (auto i : files.order)
             names.push_back(file_cache[i].file_path().stem().string());
-    else {
-        for (int i = 0; i < track_cache.size(); i++) {
-            auto &track = track_cache[i];
-            names.push_back(!track.song.empty() ? std::string(track.song)
-                                                : std::string("Track ") + std::to_string(i));
-        }
-    }
+    else
+        for (auto i : tracks.order)
+            names.push_back(track_cache[i].song);
     return names;
 }
 
@@ -440,7 +445,7 @@ void Player::set_tempo(double tempo)
     opts.tempo = tempo;
     format->set_tempo(tempo);
     mpris->set_rate(tempo);
-    tempo_changed(tempo);
+    // tempo_changed(tempo);
 }
 
 void Player::set_silence_detection(bool value)

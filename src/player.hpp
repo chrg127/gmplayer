@@ -59,15 +59,15 @@ struct Playlist {
 
     std::optional<int> next() const
     {
-        return repeat                     ? std::optional{current}
+        return repeat && current != -1    ? std::optional{current}
              : current + 1 < order.size() ? std::optional{current + 1}
              : std::nullopt;
     }
 
     std::optional<int> prev() const
     {
-        return repeat           ? std::optional{current}
-             : current - 1 >= 0 ? std::optional{current - 1}
+        return repeat && current != -1 ? std::optional{current}
+             : current - 1 >= 0        ? std::optional{current - 1}
              : std::nullopt;
     }
 };
@@ -115,6 +115,7 @@ public:
     Error load_file(int fileno);
     Error load_track(int num);
     Error load(List which, int n) { return which == List::Track ? load_track(n) : load_file(n); }
+    Error load_pair(int file, int track);
     void save_playlist(List which, io::File &to);
     void clear();
     const io::MappedFile &current_file() const;
