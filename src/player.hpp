@@ -109,8 +109,6 @@ public:
     Player(const Player &) = delete;
     Player & operator=(const Player &) = delete;
 
-    bool no_file_loaded() const;
-
     OpenPlaylistResult open_file_playlist(std::filesystem::path path);
     Error add_file(std::filesystem::path path);
     void remove_file(int fileno);

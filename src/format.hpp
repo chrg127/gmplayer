@@ -26,20 +26,36 @@ struct Interface {
     virtual      Error seek(int n)                                         = 0;
     virtual        int position()                                    const = 0;
     virtual        int track_count()                                 const = 0;
-    virtual   Metadata track_metadata(int which)                     const = 0;
+    virtual   Metadata track_metadata(int which, int default_length)       = 0;
     virtual       bool track_ended()                                 const = 0;
     virtual       void set_fade(int from, int length)                      = 0;
     virtual       void set_tempo(double tempo)                             = 0;
     virtual       void ignore_silence(bool ignore)                         = 0;
 };
 
+struct Default : public Interface {
+              ~Default()                                                    { }
+         Error open(std::span<const u8>, int)                      override { return Error{}; }
+         Error load_m3u(std::filesystem::path path)                override { return Error{}; }
+         Error start_track(int)                                    override { return Error{}; }
+    PlayResult play()                                              override { return PlayResult{}; }
+         Error seek(int)                                           override { return Error{}; }
+           int position()                                    const override { return 0; }
+           int track_count()                                 const override { return 0; }
+      Metadata track_metadata(int, int)                            override { return Metadata{}; }
+          bool track_ended()                                 const override { return true; }
+          void set_fade(int, int)                                  override { }
+          void set_tempo(double)                                   override { }
+          void ignore_silence(bool ignore)                         override { }
+};
+
 class Music_Emu;
 
 class GME : public Interface {
     Music_Emu *emu = nullptr;
-    int fade_from, fade_len;
+    int fade_from, fade_len, track_len;
 public:
-    ~GME();
+              ~GME();
          Error open(std::span<const u8> data, int frequency)       override;
          Error load_m3u(std::filesystem::path path)                override;
          Error start_track(int n)                                  override;
@@ -47,7 +63,7 @@ public:
          Error seek(int n)                                         override;
            int position()                                    const override;
            int track_count()                                 const override;
-      Metadata track_metadata(int which)                     const override;
+      Metadata track_metadata(int which, int default_length)       override;
           bool track_ended()                                 const override;
           void set_fade(int from, int length)                      override;
           void set_tempo(double tempo)                             override;
