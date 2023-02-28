@@ -85,14 +85,15 @@ int GME::track_count() const
     return gme_track_count(emu);
 }
 
-Metadata GME::track_metadata(int which) const
+Metadata GME::track_metadata(int which, int default_length)
 {
     gme_info_t *info;
     gme_track_info(emu, &info, which);
+    track_len = info->length      > 0 ? info->length
+              : info->loop_length > 0 ? info->intro_length + info->loop_length * 2
+              : default_length;
     auto data = Metadata {
-        .length    = info->length      > 0 ? info->length
-                   : info->loop_length > 0 ? info->intro_length + info->loop_length * 2
-                   : -1,
+        .length    = track_len,
         .system    = info->system,
         .game      = info->game,
         .song      = info->song,
@@ -107,7 +108,7 @@ Metadata GME::track_metadata(int which) const
 
 bool GME::track_ended() const
 {
-    return gme_track_ended(emu);
+    return gme_track_ended(emu) || gme_tell(emu) > track_len + fade_len;
 }
 
 void GME::set_fade(int from, int length)
