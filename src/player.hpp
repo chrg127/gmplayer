@@ -162,6 +162,7 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(paused, void)
     CALLBACK(played, void)
     CALLBACK(stopped, void)
+    CALLBACK(seeked, void)
     CALLBACK(volume_changed, int)
     CALLBACK(tempo_changed, double)
     CALLBACK(fade_changed, int);

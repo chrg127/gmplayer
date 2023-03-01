@@ -314,6 +314,8 @@ Error Player::seek(int ms)
     std::lock_guard<SDLMutex> lock(audio.mutex);
     if (auto err = format->seek(std::clamp(ms, 0, length())); err)
         return err;
+    seeked();
+    position_changed(position());
     return Error{};
 }
 

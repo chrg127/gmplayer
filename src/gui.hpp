@@ -70,12 +70,18 @@ public:
     explicit AboutDialog(QWidget *parent = nullptr);
 };
 
+enum class SliderHistory {
+    DontKnow,
+    WasPaused,
+    WasPlaying,
+};
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
     gmplayer::Player *player              = nullptr;
     QString last_file                     = ".";
-    bool was_paused                       = false;
+    SliderHistory history                 = SliderHistory::DontKnow;
     std::map<QString, Shortcut> shortcuts = {};
     QToolButton *prev_track               = nullptr,
                 *next_track               = nullptr,

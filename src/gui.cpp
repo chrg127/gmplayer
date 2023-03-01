@@ -272,16 +272,20 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     duration_slider = new QSlider(Qt::Horizontal);
     duration_label = new QLabel("00:00 / 00:00");
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
-        was_paused = !player->is_playing();
+        history = player->is_playing() ? SliderHistory::WasPlaying : SliderHistory::WasPaused;
         player->pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
         handle_error(player->seek(duration_slider->value()));
-        if (!was_paused)
-            player->start_or_resume();
     });
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this] (int ms) {
         duration_label->setText(format_duration(ms, duration_slider->maximum()));
+    });
+
+    player->on_seeked([=, this] {
+        if (history == SliderHistory::WasPlaying)
+            player->start_or_resume();
+        history = SliderHistory::DontKnow;
     });
 
     player->on_position_changed([=, this] (int ms) {
