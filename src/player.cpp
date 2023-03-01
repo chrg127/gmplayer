@@ -153,33 +153,10 @@ Error Player::add_file_internal(fs::path path)
 {
     auto file = io::MappedFile::open(path, io::Access::Read);
     if (!file)
-        return file.error().default_error_condition();
+        return Error(file.error().default_error_condition(), path.filename().string());
     file_cache.push_back(std::move(file.value()));
     files.order.push_back(files.order.size());
     return Error{};
-}
-
-OpenPlaylistResult Player::open_file_playlist(fs::path path)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    auto file = io::File::open(path, io::Access::Read);
-    if (!file)
-        return { .pl_error = file.error().default_error_condition() };
-    track_cache.clear();
-    file_cache.clear();
-    tracks.clear();
-    files.clear();
-    OpenPlaylistResult r;
-    for (std::string line; file.value().get_line(line); ) {
-        auto p = fs::path(line);
-        if (p.is_relative())
-            p = path.parent_path() / p;
-        if (auto err = add_file_internal(p); err)
-            r.errors.push_back({line, Error{err}});
-    }
-    mpris->set_shuffle(false);
-    playlist_changed(List::File);
-    return r;
 }
 
 Error Player::add_file(fs::path path)
@@ -189,6 +166,17 @@ Error Player::add_file(fs::path path)
         return err;
     playlist_changed(List::File);
     return Error{};
+}
+
+std::vector<Error> Player::add_files(std::span<std::filesystem::path> paths)
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    std::vector<Error> errors;
+    for (auto path : paths)
+        if (auto err = add_file_internal(path); err)
+            errors.push_back(err);
+    playlist_changed(List::File);
+    return errors;
 }
 
 void Player::remove_file(int fileno)
@@ -262,6 +250,7 @@ void Player::save_playlist(List which, io::File &to)
 void Player::clear()
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
+    track_cache.clear();
     file_cache.clear();
     tracks.clear();
     files.clear();

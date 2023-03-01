@@ -10,10 +10,10 @@ enum class ErrType {
 
 struct Error {
     std::error_condition code;
-    std::string_view details;
+    std::string details;
     operator bool() const { return static_cast<bool>(code); }
     Error() = default;
-    Error(std::error_condition e) : code{e}, details{""} { }
+    Error(std::error_condition e, std::string_view s) : code{e}, details{s} { }
     Error(ErrType e, std::string_view s);
 };
 

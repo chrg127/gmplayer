@@ -539,21 +539,34 @@ void MainWindow::load_shortcuts()
 
 void MainWindow::open_playlist(const QString &filename)
 {
-    auto res = player->open_file_playlist(filename.toUtf8().constData());
-    if (res.pl_error != std::error_code{}) {
+    auto file_path = fs::path(filename.toUtf8().constData());
+    auto file = io::File::open(file_path, io::Access::Read);
+    if (!file) {
         msgbox(QString("Couldn't open playlist %1 (%2).")
-            .arg(filename)
-            .arg(QString::fromStdString(res.pl_error.message())));
+                   .arg(filename)
+                   .arg(QString::fromStdString(file.error().message())));
         return;
     }
-    if (res.errors.size() != 0) {
-        QString text;
-        for (auto &e : res.errors)
-            text += QString("%1: %2\n").arg(QString::fromStdString(e.first))
-                                       .arg(QString::fromStdString(e.second.code.message()));
-        msgbox("Errors were found while opening the playlist.",
-               "Check the details for the errors.", text);
+
+    std::vector<fs::path> paths;
+    for (std::string line; file.value().get_line(line); ) {
+        auto p = fs::path(line);
+        if (p.is_relative())
+            p = file_path.parent_path() / p;
+        paths.push_back(p);
     }
+
+    player->clear();
+    auto errors = player->add_files(paths);
+    if (errors.size() > 0) {
+        QString text;
+        for (auto &e : errors)
+            text += QString("%1: %2\n")
+                        .arg(QString::fromStdString(e.code.message()))
+                        .arg(QString::fromStdString(e.details));
+        msgbox("Errors were found while opening the playlist.", "Check the details for the errors.", text);
+    }
+
     recent_playlists->add(filename);
     for (auto &w : to_enable)
         w->setEnabled(true);

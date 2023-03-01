@@ -37,11 +37,6 @@ struct PlayerOptions {
     int volume              = SDL_MIX_MAXVOLUME;
 };
 
-struct OpenPlaylistResult {
-    std::error_condition pl_error = std::error_condition{};
-    std::vector<std::pair<std::string, Error>> errors;
-};
-
 struct Playlist {
     std::vector<int> order;
     int current = -1;
@@ -113,8 +108,8 @@ public:
     Player(const Player &) = delete;
     Player & operator=(const Player &) = delete;
 
-    OpenPlaylistResult open_file_playlist(std::filesystem::path path);
     Error add_file(std::filesystem::path path);
+    std::vector<Error> add_files(std::span<std::filesystem::path> path);
     void remove_file(int fileno);
     Error load_file(int fileno);
     Error load_track(int num);
