@@ -84,18 +84,9 @@ class MainWindow : public QMainWindow {
     SliderHistory history                 = SliderHistory::DontKnow;
     std::map<QString, Shortcut> shortcuts = {};
     QToolButton *prev_track               = nullptr,
-                *next_track               = nullptr,
-                *play_btn                 = nullptr;
+                *next_track               = nullptr;
     RecentList *recent_files              = nullptr,
                *recent_playlists          = nullptr;
-    QLabel *title                         = nullptr,
-           *game                          = nullptr,
-           *system                        = nullptr,
-           *author                        = nullptr,
-           *comment                       = nullptr,
-           *dumper                        = nullptr,
-           *duration_label                = nullptr;
-    QSlider *duration_slider              = nullptr;
     std::vector<QWidget *> to_enable      = {};
 
     void update_next_prev_track();
@@ -106,7 +97,7 @@ class MainWindow : public QMainWindow {
     void open_single_file(const QString &filename);
     void edit_settings();
     void edit_shortcuts();
-    void handle_error(gmplayer::Error error);
+    QString format_error(gmplayer::ErrType type);
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);

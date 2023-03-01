@@ -269,14 +269,14 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     last_file = load_last_dir();
 
     // duration slider
-    duration_slider = new QSlider(Qt::Horizontal);
-    duration_label = new QLabel("00:00 / 00:00");
+    auto *duration_slider = new QSlider(Qt::Horizontal);
+    auto *duration_label = new QLabel("00:00 / 00:00");
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
         history = player->is_playing() ? SliderHistory::WasPlaying : SliderHistory::WasPaused;
         player->pause();
     });
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
-        handle_error(player->seek(duration_slider->value()));
+        player->seek(duration_slider->value());
     });
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this] (int ms) {
         duration_label->setText(format_duration(ms, duration_slider->maximum()));
@@ -294,7 +294,6 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     });
 
     player->on_fade_changed([=, this] (int len) { duration_slider->setRange(0, len); });
-    player->on_stopped(     [=, this]           { duration_slider->setValue(0);      });
 
     // buttons under duration slider
     auto make_btn = [&](auto icon, auto &&fn) {
@@ -304,10 +303,10 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         return b;
     };
 
-    play_btn        = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause();         });
-    auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { handle_error(player->stop()); });
-    next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { handle_error(player->next()); });
-    prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { handle_error(player->prev()); });
+    auto *play_btn        = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
+    auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { player->stop();       });
+    next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { player->next();       });
+    prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { player->prev();       });
     play_btn->setEnabled(false);
     stop_btn->setEnabled(false);
     next_track->setEnabled(false);
@@ -345,22 +344,22 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     });
 
     // track information
-    title   = new QLabel;
-    game    = new QLabel;
-    system  = new QLabel;
-    author  = new QLabel;
-    comment = new QLabel;
-    dumper  = new QLabel;
+    auto *title   = new QLabel;
+    auto *game    = new QLabel;
+    auto *system  = new QLabel;
+    auto *author  = new QLabel;
+    auto *comment = new QLabel;
+    auto *dumper  = new QLabel;
 
     // track and file playlist
     auto *tracklist     = new QListWidget;
-    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { handle_error(player->load_track(tracklist->currentRow())); });
+    connect(tracklist, &QListWidget::itemActivated, this, [=, this] { player->load_track(tracklist->currentRow()); });
     auto *track_shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle(gmplayer::Player::List::Track); });
     auto *track_up      = make_button("Up",         this, [=, this] { tracklist->setCurrentRow(player->move(gmplayer::Player::List::Track, tracklist->currentRow(), -1)); });
     auto *track_down    = make_button("Down",       this, [=, this] { tracklist->setCurrentRow(player->move(gmplayer::Player::List::Track, tracklist->currentRow(), +1)); });
 
     auto *filelist     = new QListWidget;
-    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { handle_error(player->load_pair(filelist->currentRow(), 0)); });
+    connect(filelist, &QListWidget::itemActivated,  this, [=, this] { player->load_pair(filelist->currentRow(), 0); });
     auto *file_shuffle = make_button("Shuffle",     this, [=, this] { player->shuffle(gmplayer::Player::List::File); });
     auto *file_up      = make_button("Up",          this, [=, this] { filelist->setCurrentRow(player->move(gmplayer::Player::List::File, filelist->currentRow(), -1)); });
     auto *file_down    = make_button("Down",        this, [=, this] { filelist->setCurrentRow(player->move(gmplayer::Player::List::File, filelist->currentRow(), +1)); });
@@ -436,6 +435,35 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
             player->load_track(0);
         else
             player->load_pair(0, 0);
+    });
+
+    player->on_error([=, this] (gmplayer::Error error) {
+        if (!error)
+            return;
+        msgbox(format_error(static_cast<gmplayer::ErrType>(error.code.value())),
+                            tr("Check the details for the error."),
+                            QString::fromStdString(error.details.data()));
+        switch (static_cast<gmplayer::ErrType>(error.code.value())) {
+        case gmplayer::ErrType::LoadFile:
+        case gmplayer::ErrType::Header:
+        case gmplayer::ErrType::FileType:
+            duration_slider->setRange(0, 0);
+            duration_label->setText("00:00 / 00:00");
+            title   ->setText("");
+            game    ->setText("");
+            author  ->setText("");
+            system  ->setText("");
+            comment ->setText("");
+            dumper  ->setText("");
+            update_next_prev_track();
+        case gmplayer::ErrType::LoadTrack:
+        case gmplayer::ErrType::Seek:
+        case gmplayer::ErrType::Play:
+            play_btn->setEnabled(false);
+            play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+            player->pause();
+            duration_slider->setEnabled(false);
+        }
     });
 
     // disable everything
@@ -530,12 +558,12 @@ void MainWindow::load_shortcuts()
         };
     };
     settings.beginGroup("shortcuts");
-    add_shortcut("play",  "Play/Pause",     "Ctrl+Space",   [=, this] { player->play_pause(); });
-    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { handle_error(player->next());    });
-    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { handle_error(player->prev());    });
-    add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { handle_error(player->stop()); });
-    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { handle_error(player->seek_relative(1_sec)); });
-    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { handle_error(player->seek_relative(-1_sec)); });
+    add_shortcut("play",  "Play/Pause",     "Ctrl+Space",   [=, this] { player->play_pause();            });
+    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();                  });
+    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();                  });
+    add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { player->stop();                  });
+    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { player->seek_relative(1_sec);    });
+    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { player->seek_relative(-1_sec);   });
     add_shortcut("volup", "Volume up",      "0",            [=, this] { player->set_volume_relative( 2); });
     add_shortcut("voldw", "Volume down",    "9",            [=, this] { player->set_volume_relative(-2); });
     settings.endGroup();
@@ -574,7 +602,7 @@ void MainWindow::open_playlist(const QString &filename)
     recent_playlists->add(filename);
     for (auto &w : to_enable)
         w->setEnabled(true);
-    handle_error(player->load_pair(0, 0));
+    player->load_pair(0, 0);
 }
 
 void MainWindow::open_single_file(const QString &filename)
@@ -591,7 +619,7 @@ void MainWindow::open_single_file(const QString &filename)
     recent_files->add(filename);
     for (auto &w : to_enable)
         w->setEnabled(true);
-    handle_error(player->load_pair(0, 0));
+    player->load_pair(0, 0);
 }
 
 void MainWindow::edit_settings()
@@ -602,7 +630,7 @@ void MainWindow::edit_settings()
         // reset song to start position
         // (this is due to the modified fade applying to the song)
         if (result == QDialog::Accepted)
-            handle_error(player->seek(0));
+            player->seek(0);
     });
 }
 
@@ -612,46 +640,16 @@ void MainWindow::edit_shortcuts()
     wnd->open();
 }
 
-void MainWindow::handle_error(gmplayer::Error error)
+QString MainWindow::format_error(gmplayer::ErrType type)
 {
-    if (!error)
-        return;
-    auto format_error = [&]() {
-        switch (static_cast<gmplayer::ErrType>(error.code.value())) {
-        case gmplayer::ErrType::Seek:      return tr("Got an error while seeking.");
-        case gmplayer::ErrType::LoadFile:  return tr("Got an error while loading file '%1'")
-                                            .arg(QString::fromStdString(player->current_file().filename()));
-        case gmplayer::ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'")
-                                            .arg(QString::fromStdString(player->current_track().song));
-        case gmplayer::ErrType::Play:      return tr("Got an error while playing.");
-        case gmplayer::ErrType::Header:    return tr("Header of file %1 is invalid.")
-                                            .arg(QString::fromStdString(player->current_file().filename()));
-        case gmplayer::ErrType::FileType:  return tr("File %1 has an invalid file type.")
-                                            .arg(QString::fromStdString(player->current_file().filename()));
-        }
-        return QString("");
-    };
-    msgbox(format_error(), tr("Check the details for the error."), QString::fromStdString(error.details.data()));
-    switch (static_cast<gmplayer::ErrType>(error.code.value())) {
-    case gmplayer::ErrType::LoadFile:
-    case gmplayer::ErrType::Header:
-    case gmplayer::ErrType::FileType:
-        duration_slider->setRange(0, 0);
-        duration_label->setText("00:00 / 00:00");
-        title   ->setText("");
-        game    ->setText("");
-        author  ->setText("");
-        system  ->setText("");
-        comment ->setText("");
-        dumper  ->setText("");
-        update_next_prev_track();
-    case gmplayer::ErrType::LoadTrack:
-    case gmplayer::ErrType::Seek:
-    case gmplayer::ErrType::Play:
-        play_btn->setEnabled(false);
-        play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-        player->pause();
-        duration_slider->setEnabled(false);
+    switch (type) {
+    case gmplayer::ErrType::Seek:      return tr("Got an error while seeking.");
+    case gmplayer::ErrType::LoadFile:  return tr("Got an error while loading file '%1'").arg(QString::fromStdString(player->current_file().filename()));
+    case gmplayer::ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'").arg(QString::fromStdString(player->current_track().song));
+    case gmplayer::ErrType::Play:      return tr("Got an error while playing.");
+    case gmplayer::ErrType::Header:    return tr("Header of file '%1' is invalid.").arg(QString::fromStdString(player->current_file().filename()));
+    case gmplayer::ErrType::FileType:  return tr("File %1 has an invalid file type.").arg(QString::fromStdString(player->current_file().filename()));
+    default:                           return "";
     }
 }
 

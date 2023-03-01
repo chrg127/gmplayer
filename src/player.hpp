@@ -111,10 +111,9 @@ public:
     Error add_file(std::filesystem::path path);
     std::vector<Error> add_files(std::span<std::filesystem::path> path);
     void remove_file(int fileno);
-    Error load_file(int fileno);
-    Error load_track(int num);
-    Error load(List which, int n) { return which == List::Track ? load_track(n) : load_file(n); }
-    Error load_pair(int file, int track);
+    bool load_file(int fileno);
+    bool load_track(int num);
+    void load_pair(int file, int track);
     void save_playlist(List which, io::File &to);
     void clear();
     const io::MappedFile &current_file() const;
@@ -124,14 +123,14 @@ public:
     void start_or_resume();
     void pause();
     void play_pause();
-    Error stop();
-    Error seek(int ms);
-    Error seek_relative(int off);
+    void stop();
+    void seek(int ms);
+    void seek_relative(int off);
     int position();
     int length() const;
 
-    Error next();
-    Error prev();
+    void next();
+    void prev();
     bool has_next() const;
     bool has_prev() const;
     void shuffle(List which);
@@ -161,7 +160,6 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(track_ended, void)
     CALLBACK(paused, void)
     CALLBACK(played, void)
-    CALLBACK(stopped, void)
     CALLBACK(seeked, void)
     CALLBACK(volume_changed, int)
     CALLBACK(tempo_changed, double)
@@ -169,7 +167,7 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(playlist_changed, List)
     CALLBACK(repeat_changed, bool, bool)
     CALLBACK(shuffled, List)
-    CALLBACK(play_error, Error)
+    CALLBACK(error, Error)
 
 #undef CALLBACK
 };
