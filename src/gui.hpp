@@ -12,6 +12,7 @@
 #include <QStringList>
 #include "keyrecorder.hpp"
 #include "error.hpp"
+#include "player.hpp"
 
 namespace gmplayer { class Player; }
 class QShortcut;
@@ -19,6 +20,7 @@ class QMenu;
 class QToolButton;
 class QSlider;
 class QLabel;
+class QListWidget;
 
 namespace gui {
 
@@ -70,14 +72,27 @@ public:
     explicit AboutDialog(QWidget *parent = nullptr);
 };
 
-enum class SliderHistory {
-    DontKnow,
-    WasPaused,
-    WasPlaying,
+struct Playlist : public QWidget {
+    Q_OBJECT
+    QListWidget *list;
+public:
+    explicit Playlist(gmplayer::Player::List type, gmplayer::Player *player, QWidget *parent = nullptr);
+    QListWidget *get_list() { return list; }
+    void set_current(int n);
+    int current() const;
+    void setup_context_menu(auto &&fn);
+signals:
+    void context_menu(const QPoint &p);
 };
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
+
+    enum class SliderHistory {
+        DontKnow,
+        WasPaused,
+        WasPlaying,
+    };
 
     gmplayer::Player *player              = nullptr;
     QString last_file                     = ".";

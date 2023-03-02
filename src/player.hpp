@@ -164,12 +164,17 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(volume_changed, int)
     CALLBACK(tempo_changed, double)
     CALLBACK(fade_changed, int);
-    CALLBACK(playlist_changed, List)
+    // CALLBACK(playlist_changed, List)
     CALLBACK(repeat_changed, bool, bool)
     CALLBACK(shuffled, List)
     CALLBACK(error, Error)
 
 #undef CALLBACK
+
+    std::array<std::function<void(void)>, 2> playlist_changed_callbacks;
+
+    void on_playlist_changed(List list, auto &&fn) { playlist_changed_callbacks[static_cast<int>(list)] = fn; }
+    void playlist_changed(List list) { playlist_changed_callbacks[static_cast<int>(list)](); }
 };
 
 // this is here for portability
