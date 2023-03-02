@@ -273,12 +273,12 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     // menus
     auto *file_menu = create_menu(this, "&File",
         std::make_tuple("Open file",     [this] {
-            if (auto f = file_dialog("Open file", "Game music files (*.spc *.nsf)"); f)
-                open_single_file(f.value());
+            if (auto f = file_dialog("Open file", "Game music files (*.spc *.nsf)"); !f.isEmpty())
+                open_single_file(f);
         }),
         std::make_tuple("Open playlist", [this] {
-            if (auto f = file_dialog("Open playlist", "Playlist files (*.playlist)"); f)
-                open_playlist(f.value());
+            if (auto f = file_dialog("Open playlist", "Playlist files (*.playlist)"); !f.isEmpty())
+                open_playlist(f);
         })
     );
 
@@ -415,22 +415,26 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     filelist->setup_context_menu([=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction("Add to playlist...", [=, this] {
-            auto filename = file_dialog(tr("Open file"), "Game music files (*.spc *.nsf)");
-            if (!filename)
+            auto files = multiple_file_dialog(tr("Open file"), "Game music files (*.spc *.nsf)");
+            if (files.isEmpty())
                 return;
-            else if (auto err = player->add_file(filename.value().toStdString()); err)
-                msgbox(QString("Couldn't open file %1 (%2)")
-                    .arg(filename.value())
-                    .arg(QString::fromStdString(err.code.message())));
-            else
-                update_next_prev_track();
+            std::vector<fs::path> paths;
+            for (auto file : files)
+                paths.push_back(fs::path(file.toStdString()));
+            add_files(paths, "Errors were found while adding files.");
         });
         menu.addAction("Remove from playlist", [=, this] {
-            player->remove_file(filelist->current());
-            update_next_prev_track();
+            if (filelist->current() == -1)
+                msgbox("An item must be selected first.");
+            else {
+                player->remove_file(filelist->current());
+                update_next_prev_track();
+            }
         });
         menu.addAction("Save playlist", [=, this]() {
             auto filename = save_dialog(tr("Save playlist"), "Playlist files (*.playlist)");
+            if (filename.isEmpty())
+                return;
             auto path = fs::path(filename.toStdString());
             if (auto f = io::File::open(path, io::Access::Write); f)
                 player->save_playlist(gmplayer::Player::List::File, f.value());
@@ -535,13 +539,20 @@ void MainWindow::update_next_prev_track()
     prev_track->setEnabled(player->has_prev());
 }
 
-std::optional<QString> MainWindow::file_dialog(const QString &window_name, const QString &desc)
+QString MainWindow::file_dialog(const QString &window_name, const QString &filter)
 {
-    auto filename = QFileDialog::getOpenFileName(this, window_name, last_file, desc);
-    if (filename.isEmpty())
-        return std::nullopt;
-    last_file = filename;
+    auto filename = QFileDialog::getOpenFileName(this, window_name, last_file, filter);
+    if (!filename.isEmpty())
+        last_file = filename;
     return filename;
+}
+
+QStringList MainWindow::multiple_file_dialog(const QString &window_name, const QString &filter)
+{
+    auto files = QFileDialog::getOpenFileNames(this, window_name, last_file, filter);
+    if (!files.isEmpty())
+        last_file = files[0];
+    return files;
 }
 
 QString MainWindow::save_dialog(const QString &window_name, const QString &desc)
@@ -575,6 +586,19 @@ void MainWindow::load_shortcuts()
     settings.endGroup();
 }
 
+void MainWindow::add_files(std::span<fs::path> paths, const QString &error_message)
+{
+    auto errors = player->add_files(paths);
+    if (errors.size() > 0) {
+        QString text;
+        for (auto &e : errors)
+            text += QString("%1: %2\n")
+                        .arg(QString::fromStdString(e.code.message()))
+                        .arg(QString::fromStdString(e.details));
+        msgbox(error_message, "Check the details for the errors.", text);
+    }
+}
+
 void MainWindow::open_playlist(const QString &filename)
 {
     auto file_path = fs::path(filename.toUtf8().constData());
@@ -595,36 +619,17 @@ void MainWindow::open_playlist(const QString &filename)
     }
 
     player->clear();
-    auto errors = player->add_files(paths);
-    if (errors.size() > 0) {
-        QString text;
-        for (auto &e : errors)
-            text += QString("%1: %2\n")
-                        .arg(QString::fromStdString(e.code.message()))
-                        .arg(QString::fromStdString(e.details));
-        msgbox("Errors were found while opening the playlist.", "Check the details for the errors.", text);
-    }
-
+    add_files(paths, "Errors were found while opening the playlist.");
     recent_playlists->add(filename);
-    for (auto &w : to_enable)
-        w->setEnabled(true);
     player->load_pair(0, 0);
 }
 
 void MainWindow::open_single_file(const QString &filename)
 {
     player->clear();
-    auto path = fs::path(filename.toStdString());
-    auto err = player->add_file(path);
-    if (err) {
-        msgbox(QString("Couldn't open file %1 (%2)")
-            .arg(QString::fromStdString(path.filename().string()))
-            .arg(QString::fromStdString(err.code.message())));
-        return;
-    }
+    auto v = std::array{fs::path(filename.toStdString())};
+    add_files(v, "Errors were found while opening file.");
     recent_files->add(filename);
-    for (auto &w : to_enable)
-        w->setEnabled(true);
     player->load_pair(0, 0);
 }
 

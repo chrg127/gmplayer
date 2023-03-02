@@ -105,9 +105,11 @@ class MainWindow : public QMainWindow {
     std::vector<QWidget *> to_enable      = {};
 
     void update_next_prev_track();
-    std::optional<QString> file_dialog(const QString &window_name, const QString &desc);
-    QString save_dialog(const QString &window_name, const QString &desc);
+    QString file_dialog(const QString &window_name, const QString &filter);
+    QStringList multiple_file_dialog(const QString &window_name, const QString &filter);
+    QString save_dialog(const QString &window_name, const QString &filter);
     void load_shortcuts();
+    void add_files(std::span<std::filesystem::path> paths, const QString &error_message);
     void open_playlist(const QString &filename);
     void open_single_file(const QString &filename);
     void edit_settings();

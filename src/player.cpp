@@ -182,8 +182,6 @@ std::vector<Error> Player::add_files(std::span<std::filesystem::path> paths)
 void Player::remove_file(int fileno)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    // if (fileno == files.current)
-    //     return make_err(Error::RemoveFile);
     files.remove(fileno);
     playlist_changed(List::File);
 }
