@@ -155,7 +155,7 @@ Error Player::add_file_internal(fs::path path)
     if (!file)
         return Error(file.error().default_error_condition(), path.filename().string());
     file_cache.push_back(std::move(file.value()));
-    files.order.push_back(files.order.size());
+    files.order.push_back(file_cache.size() - 1);
     return Error{};
 }
 
