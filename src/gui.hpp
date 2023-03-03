@@ -109,9 +109,10 @@ class MainWindow : public QMainWindow {
     QStringList multiple_file_dialog(const QString &window_name, const QString &filter);
     QString save_dialog(const QString &window_name, const QString &filter);
     void load_shortcuts();
-    void add_files(std::span<std::filesystem::path> paths, const QString &error_message);
+    std::optional<QString> add_files(std::span<std::filesystem::path> paths);
     void open_playlist(const QString &filename);
     void open_single_file(const QString &filename);
+    void open_files(std::span<std::filesystem::path> filenames, bool clear_and_play = false);
     void edit_settings();
     void edit_shortcuts();
     QString format_error(gmplayer::ErrType type);

@@ -111,6 +111,14 @@ void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
     settings.endGroup();
 }
 
+auto stringlist_to_path_vector(const QStringList &files)
+{
+    std::vector<fs::path> paths;
+    for (auto file : files)
+        paths.push_back(fs::path(file.toStdString()));
+    return paths;
+}
+
 } // namespace
 
 
@@ -293,11 +301,13 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     // menus
     auto *file_menu = create_menu(this, "&File",
         std::make_tuple("Open file",     [this] {
-            if (auto f = file_dialog("Open file", tr(MUSIC_FILE_FILTER)); !f.isEmpty())
-                open_single_file(f);
+            if (auto files = multiple_file_dialog(tr("Open file"), tr(MUSIC_FILE_FILTER)); !files.isEmpty()) {
+                auto v = stringlist_to_path_vector(files);
+                open_files(v, true);
+            }
         }),
         std::make_tuple("Open playlist", [this] {
-            if (auto f = file_dialog("Open playlist", tr(PLAYLIST_FILTER)); !f.isEmpty())
+            if (auto f = file_dialog(tr("Open playlist"), tr(PLAYLIST_FILTER)); !f.isEmpty())
                 open_playlist(f);
         })
     );
@@ -435,13 +445,10 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     filelist->setup_context_menu([=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction("Add to playlist...", [=, this] {
-            auto files = multiple_file_dialog(tr("Open file"), tr(MUSIC_FILE_FILTER));
-            if (files.isEmpty())
-                return;
-            std::vector<fs::path> paths;
-            for (auto file : files)
-                paths.push_back(fs::path(file.toStdString()));
-            add_files(paths, "Errors were found while adding files.");
+            if (auto files = multiple_file_dialog(tr("Open file"), tr(MUSIC_FILE_FILTER)); !files.isEmpty()) {
+                auto v = stringlist_to_path_vector(files);
+                open_files(v);
+            }
         });
         menu.addAction("Remove from playlist", [=, this] {
             if (filelist->current() == -1)
@@ -486,9 +493,10 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     player->on_error([=, this] (gmplayer::Error error) {
         if (!error)
             return;
-        msgbox(format_error(static_cast<gmplayer::ErrType>(error.code.value())),
-                            tr("Check the details for the error."),
-                            QString::fromStdString(error.details.data()));
+        msgbox(
+            format_error(static_cast<gmplayer::ErrType>(error.code.value())),
+            QString::fromStdString(error.details.data())
+        );
         switch (static_cast<gmplayer::ErrType>(error.code.value())) {
         case gmplayer::ErrType::LoadFile:
         case gmplayer::ErrType::Header:
@@ -606,7 +614,7 @@ void MainWindow::load_shortcuts()
     settings.endGroup();
 }
 
-void MainWindow::add_files(std::span<fs::path> paths, const QString &error_message)
+std::optional<QString> MainWindow::add_files(std::span<fs::path> paths)
 {
     auto errors = player->add_files(paths);
     if (errors.size() > 0) {
@@ -615,8 +623,9 @@ void MainWindow::add_files(std::span<fs::path> paths, const QString &error_messa
             text += QString("%1: %2\n")
                         .arg(QString::fromStdString(e.code.message()))
                         .arg(QString::fromStdString(e.details));
-        msgbox(error_message, "Check the details for the errors.", text);
+        return text;
     }
+    return std::nullopt;
 }
 
 void MainWindow::open_playlist(const QString &filename)
@@ -624,11 +633,11 @@ void MainWindow::open_playlist(const QString &filename)
     auto file_path = fs::path(filename.toUtf8().constData());
     auto file = io::File::open(file_path, io::Access::Read);
     if (!file) {
-        msgbox(QString("Couldn't open playlist %1 (%2).")
-                   .arg(filename)
-                   .arg(QString::fromStdString(file.error().message())));
+        msgbox(QString("Couldn't open playlist %1 (%2).").arg(filename),
+               QString::fromStdString(file.error().message()));
         return;
     }
+    recent_playlists->add(filename);
 
     std::vector<fs::path> paths;
     for (std::string line; file.value().get_line(line); ) {
@@ -639,18 +648,29 @@ void MainWindow::open_playlist(const QString &filename)
     }
 
     player->clear();
-    add_files(paths, "Errors were found while opening the playlist.");
-    recent_playlists->add(filename);
+    auto errors = add_files(paths);
+    if (errors)
+        msgbox("Errors were found while the playlist.", errors.value());
     player->load_pair(0, 0);
 }
 
 void MainWindow::open_single_file(const QString &filename)
 {
-    player->clear();
-    auto v = std::array{fs::path(filename.toStdString())};
-    add_files(v, "Errors were found while opening file.");
-    recent_files->add(filename);
-    player->load_pair(0, 0);
+    auto paths = std::array{fs::path(filename.toStdString())};
+    open_files(paths, true);
+}
+
+void MainWindow::open_files(std::span<fs::path> paths, bool clear_and_play)
+{
+    for (auto &p : paths)
+        recent_files->add(QString::fromStdString(p.string()));
+    if (clear_and_play)
+        player->clear();
+    auto errors = add_files(paths);
+    if (errors)
+        msgbox("Errors were found while opening files.", errors.value());
+    if (clear_and_play)
+        player->load_pair(0, 0);
 }
 
 void MainWindow::edit_settings()
@@ -702,15 +722,19 @@ void MainWindow::dropEvent(QDropEvent *event)
 {
     auto mime = event->mimeData();
     if (!mime->hasUrls()) {
-        msgbox("Invalid file: The dropped file may not be a music file");
+        msgbox("No file paths/urls dropped (this should never happen)");
         return;
     }
-    auto url = mime->urls()[0];
-    if (!url.isLocalFile()) {
-        msgbox("Invalid file: The dropped file may not be a music file");
-        return;
-    }
-    open_single_file(url.toLocalFile());
+    std::vector<fs::path> files;
+    QString errors = "";
+    for (auto url : mime->urls())
+        if (url.isLocalFile())
+            files.push_back(fs::path(url.toLocalFile().toStdString()));
+        else
+            errors += QString("%1: not a local file").arg(url.toString());
+    if (!errors.isEmpty())
+        msgbox("Errors were found while inspecting dropped files.", errors);
+    open_files(files);
     event->acceptProposedAction();
 }
 

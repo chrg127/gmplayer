@@ -53,7 +53,7 @@ QFormLayout *label_pair(const char *text, T *widget)
     });
 }
 
-inline void msgbox(const QString &msg, const QString &info = "", const QString &details = "")
+inline void msgbox(const QString &msg, const QString &details = "", const QString &info = "")
 {
     QMessageBox box;
     box.setText(msg);
