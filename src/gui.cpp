@@ -20,10 +20,11 @@
 #include <QMimeData>
 #include <QPushButton>
 #include <QSettings>
+#include <QString>
+#include <QStringLiteral>
 #include <QShortcut>
 #include <QSlider>
 #include <QToolButton>
-#include "qtutils.hpp"
 #include <QVBoxLayout>
 #include "qtutils.hpp"
 #include "player.hpp"
@@ -36,6 +37,25 @@ using namespace gmplayer::literals;
 namespace gui {
 
 namespace {
+
+constexpr auto MUSIC_FILE_FILTER =
+    "All supported formats (*.spc *.nsf *.nsfe *.gbs *.gym *.ay *.kss *.hes *.vgm *.sap);;"
+    "All files (*.*)"
+    "SPC - SNES SPC700 Files (*.spc);;"
+    "NSF - Nintendo Sound Format (*.nsf);;"
+    "NSFE - Nintendo Sound Format Extended (*.nsfe);;"
+    "GBS - Game Boy Sound System (*.gbs);;"
+    "GYM - Genesis YM2612 Files (*.gym);;"
+    "AY - AY-3-8910 (*.ay);;"
+    "KSS - Konami Sound System (*.kss);;"
+    "HES - NEC Home Entertainment System (*.hes);;"
+    "VGM - Video Game Music (*.vgm);;"
+    "SAP - Slight Atari Player (*.sap);;";
+
+constexpr auto PLAYLIST_FILTER =
+    "Playlist files (*.playlist);;"
+    "Text files (*.txt);;"
+    "All files (*.*)";
 
 QString format_duration(int ms, int max)
 {
@@ -273,11 +293,11 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     // menus
     auto *file_menu = create_menu(this, "&File",
         std::make_tuple("Open file",     [this] {
-            if (auto f = file_dialog("Open file", "Game music files (*.spc *.nsf)"); !f.isEmpty())
+            if (auto f = file_dialog("Open file", tr(MUSIC_FILE_FILTER)); !f.isEmpty())
                 open_single_file(f);
         }),
         std::make_tuple("Open playlist", [this] {
-            if (auto f = file_dialog("Open playlist", "Playlist files (*.playlist)"); !f.isEmpty())
+            if (auto f = file_dialog("Open playlist", tr(PLAYLIST_FILTER)); !f.isEmpty())
                 open_playlist(f);
         })
     );
@@ -415,7 +435,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     filelist->setup_context_menu([=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction("Add to playlist...", [=, this] {
-            auto files = multiple_file_dialog(tr("Open file"), "Game music files (*.spc *.nsf)");
+            auto files = multiple_file_dialog(tr("Open file"), tr(MUSIC_FILE_FILTER));
             if (files.isEmpty())
                 return;
             std::vector<fs::path> paths;
