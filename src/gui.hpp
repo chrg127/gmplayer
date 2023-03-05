@@ -112,7 +112,6 @@ class MainWindow : public QMainWindow {
     std::optional<QString> add_files(std::span<std::filesystem::path> paths);
     void open_playlist(const QString &filename);
     void open_single_file(const QString &filename);
-    void open_files(std::span<std::filesystem::path> filenames, bool clear_and_play = false);
     void edit_settings();
     void edit_shortcuts();
     QString format_error(gmplayer::ErrType type);
@@ -123,6 +122,7 @@ class MainWindow : public QMainWindow {
 
 public:
     MainWindow(gmplayer::Player *player, QWidget *parent = nullptr);
+    void open_files(std::span<std::filesystem::path> filenames, bool clear_and_play = false);
 };
 
 } // namespace gui

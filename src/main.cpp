@@ -58,29 +58,32 @@ int main(int argc, char *argv[])
     gui::MainWindow mw{&player};
 
     bool sdl_running = true;
-    bool got_sigint = false;
     std::thread sdl_thread([&]() {
         while (sdl_running) {
             for (SDL_Event ev; SDL_PollEvent(&ev); ) {
                 switch (ev.type) {
                 case SDL_QUIT:
-                    got_sigint = true;
+                    mw.close();
                     sdl_running = false;
                 }
             }
             SDL_Delay(16);
         }
-        if (got_sigint)
-            mw.close();
     });
 
     mw.show();
+    if (argc > 1) {
+        std::vector<std::filesystem::path> filenames;
+        for (int i = 1; i < argc; i++)
+            filenames.push_back(std::filesystem::path(argv[i]));
+        mw.open_files(filenames, true);
+    }
+
     a.exec();
 
     sdl_running = false;
     sdl_thread.join();
-    SDL_Quit();
-
     save_player_options(player.options());
+    SDL_Quit();
     return 0;
 }
