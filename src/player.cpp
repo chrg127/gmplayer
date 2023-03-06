@@ -223,6 +223,7 @@ bool Player::load_track(int trackno)
     auto &metadata = track_cache[num];
     format->set_fade(metadata.length, opts.fade_out);
     format->set_tempo(opts.tempo);
+    format->ignore_silence(opts.silence_detection);
     mpris->set_metadata({
         { mpris::Field::TrackId, std::string("/") + std::to_string(files.current)
                                                   + std::to_string(tracks.current) },

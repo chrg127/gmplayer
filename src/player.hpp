@@ -164,7 +164,6 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(volume_changed, int)
     CALLBACK(tempo_changed, double)
     CALLBACK(fade_changed, int);
-    // CALLBACK(playlist_changed, List)
     CALLBACK(repeat_changed, bool, bool)
     CALLBACK(shuffled, List)
     CALLBACK(error, Error)
