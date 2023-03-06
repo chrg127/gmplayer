@@ -609,20 +609,6 @@ void MainWindow::load_shortcuts()
     settings.endGroup();
 }
 
-std::optional<QString> MainWindow::add_files(std::span<fs::path> paths)
-{
-    auto errors = player->add_files(paths);
-    if (errors.size() > 0) {
-        QString text;
-        for (auto &e : errors)
-            text += QString("%1: %2\n")
-                        .arg(QString::fromStdString(e.code.message()))
-                        .arg(QString::fromStdString(e.details));
-        return text;
-    }
-    return std::nullopt;
-}
-
 void MainWindow::open_playlist(fs::path file_path)
 {
     auto file = io::File::open(file_path, io::Access::Read);
@@ -657,11 +643,17 @@ void MainWindow::open_files(std::span<fs::path> paths, OpenFilesFlags flags)
             recent_files->add(p);
     if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None)
         player->clear();
-    auto errors = add_files(paths);
-    if (errors)
-        msgbox("Errors were found while opening files.", errors.value());
-    if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None)
-        player->load_pair(0, 0);
+    auto errors = player->add_files(paths);
+    if (errors.size() > 0) {
+        QString text;
+        for (auto &e : errors)
+            text += QString("%1: %2\n")
+                        .arg(QString::fromStdString(e.code.message()))
+                        .arg(QString::fromStdString(e.details));
+        msgbox("Errors were found while opening files.", text);
+    } else
+        if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None)
+            player->load_pair(0, 0);
 }
 
 void MainWindow::edit_settings()
