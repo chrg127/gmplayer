@@ -62,3 +62,24 @@ enum class Platform : uint { Windows, MacOS, Linux, Unknown };
 #endif
 
 #define FWD(x) std::forward<decltype(x)>(x)
+
+#define DEFINE_OPTION_ENUM(name, ...)       \
+enum class name : std::uint32_t {           \
+    None = 0x0,                             \
+    __VA_ARGS__                             \
+};                                          \
+                                            \
+inline name operator|(name a, name b) {     \
+    return static_cast<name>(               \
+        static_cast<u32>(a)                 \
+      | static_cast<u32>(b)                 \
+    );                                      \
+}                                           \
+                                            \
+inline name operator&(name a, name b) {     \
+    return static_cast<name>(               \
+        static_cast<u32>(a)                 \
+      & static_cast<u32>(b)                 \
+    );                                      \
+}                                           \
+

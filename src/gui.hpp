@@ -13,6 +13,7 @@
 #include "keyrecorder.hpp"
 #include "error.hpp"
 #include "player.hpp"
+#include "common.hpp"
 
 namespace gmplayer { class Player; }
 class QShortcut;
@@ -56,14 +57,15 @@ signals:
 // keeps track of recently opened files
 class RecentList : public QObject {
     Q_OBJECT
-    QStringList names;
+    std::vector<std::filesystem::path> paths;
     QMenu *menu;
 public:
-    RecentList(QMenu *menu, const QStringList &list);
-    const QStringList &filenames() { return names; }
-    void add(const QString &name);
+    RecentList(QMenu *menu, std::vector<std::filesystem::path> &&paths);
+    std::span<std::filesystem::path> filenames() { return paths; }
+    void add(std::filesystem::path path);
+    void regen();
 signals:
-    void clicked(const QString &filename);
+    void clicked(std::filesystem::path path);
 };
 
 struct AboutDialog : public QDialog {
@@ -85,6 +87,11 @@ signals:
     void context_menu(const QPoint &p);
 };
 
+DEFINE_OPTION_ENUM(OpenFilesFlags,
+    AddToRecent = 1 << 1,
+    ClearAndPlay = 1 << 2,
+)
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -102,27 +109,25 @@ class MainWindow : public QMainWindow {
                 *next_track               = nullptr;
     RecentList *recent_files              = nullptr,
                *recent_playlists          = nullptr;
-    std::vector<QWidget *> to_enable      = {};
 
     void update_next_prev_track();
-    QString file_dialog(const QString &window_name, const QString &filter);
-    QStringList multiple_file_dialog(const QString &window_name, const QString &filter);
+    std::optional<std::filesystem::path> file_dialog(const QString &window_name, const QString &filter);
+    std::vector<std::filesystem::path> multiple_file_dialog(const QString &window_name, const QString &filter);
     QString save_dialog(const QString &window_name, const QString &filter);
     void load_shortcuts();
     std::optional<QString> add_files(std::span<std::filesystem::path> paths);
-    void open_playlist(const QString &filename);
-    void open_single_file(const QString &filename);
+    void open_playlist(std::filesystem::path file_path);
+    void open_file(std::filesystem::path filename);
     void edit_settings();
     void edit_shortcuts();
     QString format_error(gmplayer::ErrType type);
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);
-    void add_to_enable(auto... objects) { (to_enable.push_back(objects), ...); }
 
 public:
     MainWindow(gmplayer::Player *player, QWidget *parent = nullptr);
-    void open_files(std::span<std::filesystem::path> filenames, bool clear_and_play = false);
+    void open_files(std::span<std::filesystem::path> paths, OpenFilesFlags flags = OpenFilesFlags::None);
 };
 
 } // namespace gui

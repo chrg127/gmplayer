@@ -66,22 +66,26 @@ QString format_duration(int ms, int max)
         .arg(max / 1000 % 60, 2, 10, QChar('0'));
 };
 
-std::pair<QStringList, QStringList> load_recent()
+std::vector<fs::path> load_recent(const QString &name)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("recent");
-    QStringList files     = settings.value("recent_files").toStringList();
-    QStringList playlists = settings.value("recent_playlists").toStringList();
+    auto files = settings.value(name).toStringList();
+    std::vector<fs::path> paths;
+    for (auto &file : files)
+        paths.push_back(fs::path(file.toStdString()));
     settings.endGroup();
-    return {files, playlists};
+    return paths;
 }
 
-void save_recent(const QStringList &files, const QStringList &playlists)
+void save_recent(std::span<fs::path> paths, const QString &name)
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     settings.beginGroup("recent");
-    settings.setValue("recent_files", files);
-    settings.setValue("recent_playlists", playlists);
+    QStringList list;
+    for (auto &p : paths)
+        list.append(QString::fromStdString(p.string()));
+    settings.setValue(name, list);
     settings.endGroup();
 }
 
@@ -111,44 +115,36 @@ void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
     settings.endGroup();
 }
 
-auto stringlist_to_path_vector(const QStringList &files)
-{
-    std::vector<fs::path> paths;
-    for (auto file : files)
-        paths.push_back(fs::path(file.toStdString()));
-    return paths;
-}
-
 } // namespace
 
 
 
-RecentList::RecentList(QMenu *menu, const QStringList &list)
-    : menu(menu), names(std::move(list))
+RecentList::RecentList(QMenu *menu, std::vector<std::filesystem::path> &&ps)
+    : menu{menu}, paths{std::move(ps)}
 {
-    for (auto &path : names) {
-        auto filename = QFileInfo(path).fileName();
-        auto *act = new QAction(filename, this);
-        connect(act, &QAction::triggered, this, [=, this]() { emit clicked(path); });
+    regen();
+}
+
+void RecentList::regen()
+{
+    menu->clear();
+    for (auto &p : paths) {
+        auto filename = p.filename();
+        auto *act     = new QAction(QString::fromStdString(filename), this);
+        connect(act, &QAction::triggered, this, [=, this] { emit clicked(p); });
         menu->addAction(act);
     }
 }
 
-void RecentList::add(const QString &name)
+void RecentList::add(fs::path path)
 {
-    auto it = std::remove(names.begin(), names.end(), name);
-    if (it != names.end())
-        names.erase(it);
-    names.prepend(name);
-    while (names.size() > 10)
-        names.removeLast();
-    menu->clear();
-    for (auto &path : names) {
-        auto filename = QFileInfo(path).fileName();
-        auto *act = new QAction(filename, this);
-        connect(act, &QAction::triggered, this, [=, this]() { emit clicked(path); });
-        menu->addAction(act);
-    }
+    auto it = std::remove(paths.begin(), paths.end(), path);
+    if (it != paths.end())
+        paths.erase(it);
+    paths.insert(paths.begin(), path);
+    if (paths.size() > 10)
+        paths.erase(paths.begin() + 10, paths.end());
+    regen();
 }
 
 
@@ -301,14 +297,12 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     // menus
     auto *file_menu = create_menu(this, "&File",
         std::make_tuple("Open file",     [this] {
-            if (auto files = multiple_file_dialog(tr("Open file"), tr(MUSIC_FILE_FILTER)); !files.isEmpty()) {
-                auto v = stringlist_to_path_vector(files);
-                open_files(v, true);
-            }
+            if (auto files = multiple_file_dialog(tr("Open file"), tr(MUSIC_FILE_FILTER)); !files.empty())
+                open_files(files, OpenFilesFlags::AddToRecent | OpenFilesFlags::ClearAndPlay);
         }),
         std::make_tuple("Open playlist", [this] {
-            if (auto f = file_dialog(tr("Open playlist"), tr(PLAYLIST_FILTER)); !f.isEmpty())
-                open_playlist(f);
+            if (auto f = file_dialog(tr("Open playlist"), tr(PLAYLIST_FILTER)); !f)
+                open_playlist(f.value());
         })
     );
 
@@ -326,10 +320,9 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     );
 
     // recent files, shortcuts, open dialog position
-    auto [files, playlists] = load_recent();
-    recent_files     = new RecentList(file_menu->addMenu(tr("&Recent files")), files);
-    recent_playlists = new RecentList(file_menu->addMenu(tr("R&ecent playlists")), playlists);
-    connect(recent_files,     &RecentList::clicked, this, &MainWindow::open_single_file);
+    recent_files     = new RecentList(file_menu->addMenu(tr("&Recent files")),     load_recent("recent_files"));
+    recent_playlists = new RecentList(file_menu->addMenu(tr("R&ecent playlists")), load_recent("recent_playlists"));
+    connect(recent_files,     &RecentList::clicked, this, &MainWindow::open_file);
     connect(recent_playlists, &RecentList::clicked, this, &MainWindow::open_playlist);
     load_shortcuts();
     last_file = load_last_dir();
@@ -445,10 +438,8 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     filelist->setup_context_menu([=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction("Add to playlist...", [=, this] {
-            if (auto files = multiple_file_dialog(tr("Open file"), tr(MUSIC_FILE_FILTER)); !files.isEmpty()) {
-                auto v = stringlist_to_path_vector(files);
-                open_files(v);
-            }
+            if (auto files = multiple_file_dialog(tr("Open file"), tr(MUSIC_FILE_FILTER)); !files.empty())
+                open_files(files);
         });
         menu.addAction("Remove from playlist", [=, this] {
             if (filelist->current() == -1)
@@ -567,20 +558,24 @@ void MainWindow::update_next_prev_track()
     prev_track->setEnabled(player->has_prev());
 }
 
-QString MainWindow::file_dialog(const QString &window_name, const QString &filter)
+std::optional<fs::path> MainWindow::file_dialog(const QString &window_name, const QString &filter)
 {
     auto filename = QFileDialog::getOpenFileName(this, window_name, last_file, filter);
-    if (!filename.isEmpty())
-        last_file = filename;
-    return filename;
+    if (filename.isEmpty())
+        return std::nullopt;
+    last_file = filename;
+    return fs::path{filename.toUtf8().constData()};
 }
 
-QStringList MainWindow::multiple_file_dialog(const QString &window_name, const QString &filter)
+std::vector<fs::path> MainWindow::multiple_file_dialog(const QString &window_name, const QString &filter)
 {
     auto files = QFileDialog::getOpenFileNames(this, window_name, last_file, filter);
     if (!files.isEmpty())
         last_file = files[0];
-    return files;
+    std::vector<fs::path> paths;
+    for (auto file : files)
+        paths.push_back(fs::path(file.toStdString()));
+    return paths;
 }
 
 QString MainWindow::save_dialog(const QString &window_name, const QString &desc)
@@ -628,16 +623,15 @@ std::optional<QString> MainWindow::add_files(std::span<fs::path> paths)
     return std::nullopt;
 }
 
-void MainWindow::open_playlist(const QString &filename)
+void MainWindow::open_playlist(fs::path file_path)
 {
-    auto file_path = fs::path(filename.toUtf8().constData());
     auto file = io::File::open(file_path, io::Access::Read);
     if (!file) {
-        msgbox(QString("Couldn't open playlist %1 (%2).").arg(filename),
+        msgbox(QString("Couldn't open playlist %1 (%2).").arg(QString::fromStdString(file_path.string())),
                QString::fromStdString(file.error().message()));
         return;
     }
-    recent_playlists->add(filename);
+    recent_playlists->add(file_path);
 
     std::vector<fs::path> paths;
     for (std::string line; file.value().get_line(line); ) {
@@ -647,29 +641,26 @@ void MainWindow::open_playlist(const QString &filename)
         paths.push_back(p);
     }
 
-    player->clear();
-    auto errors = add_files(paths);
-    if (errors)
-        msgbox("Errors were found while the playlist.", errors.value());
-    player->load_pair(0, 0);
+    open_files(paths, OpenFilesFlags::ClearAndPlay);
 }
 
-void MainWindow::open_single_file(const QString &filename)
+void MainWindow::open_file(fs::path filename)
 {
-    auto paths = std::array{fs::path(filename.toStdString())};
-    open_files(paths, true);
+    auto paths = std::array{filename};
+    open_files(paths, OpenFilesFlags::AddToRecent | OpenFilesFlags::ClearAndPlay);
 }
 
-void MainWindow::open_files(std::span<fs::path> paths, bool clear_and_play)
+void MainWindow::open_files(std::span<fs::path> paths, OpenFilesFlags flags)
 {
-    for (auto &p : paths)
-        recent_files->add(QString::fromStdString(p.string()));
-    if (clear_and_play)
+    if ((flags & OpenFilesFlags::AddToRecent) != OpenFilesFlags::None)
+        for (auto &p : paths)
+            recent_files->add(p);
+    if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None)
         player->clear();
     auto errors = add_files(paths);
     if (errors)
         msgbox("Errors were found while opening files.", errors.value());
-    if (clear_and_play)
+    if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None)
         player->load_pair(0, 0);
 }
 
@@ -706,7 +697,8 @@ QString MainWindow::format_error(gmplayer::ErrType type)
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    save_recent(recent_files->filenames(), recent_playlists->filenames());
+    save_recent(recent_files->filenames(), "recent_files");
+    save_recent(recent_playlists->filenames(), "recent_playlists");
     save_shortcuts(shortcuts);
     save_last_dir(last_file);
     event->accept();
