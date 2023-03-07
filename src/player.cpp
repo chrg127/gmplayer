@@ -253,6 +253,8 @@ void Player::save_playlist(List which, io::File &to)
 void Player::clear()
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
+    pause();
+    format.reset();
     track_cache.clear();
     file_cache.clear();
     tracks.clear();
@@ -260,6 +262,7 @@ void Player::clear()
     mpris->set_shuffle(false);
     playlist_changed(List::Track);
     playlist_changed(List::File);
+    cleared();
 }
 
 const io::MappedFile &Player::current_file()  const { std::lock_guard<SDLMutex> lock(audio.mutex); return  file_cache[ files.order[ files.current]]; }

@@ -331,15 +331,22 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     // duration slider
     auto *duration_slider = new QSlider(Qt::Horizontal);
     auto *duration_label = new QLabel("00:00 / 00:00");
+    duration_slider->setEnabled(false);
+
+    connect(duration_slider, &QSlider::valueChanged, this, [=, this] (int ms) {
+        duration_label->setText(format_duration(ms, duration_slider->maximum()));
+    });
+
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {
         history = player->is_playing() ? SliderHistory::WasPlaying : SliderHistory::WasPaused;
         player->pause();
     });
+
     connect(duration_slider, &QSlider::sliderReleased, this, [=, this]() {
         player->seek(duration_slider->value());
     });
+
     connect(duration_slider, &QSlider::sliderMoved, this, [=, this] (int ms) {
-        duration_label->setText(format_duration(ms, duration_slider->maximum()));
     });
 
     player->on_seeked([=, this] {
@@ -363,7 +370,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         return b;
     };
 
-    auto *play_btn        = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
+    auto *play_btn  = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
     auto *stop_btn  = make_btn(QStyle::SP_MediaStop,         [=, this] { player->stop();       });
     next_track      = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { player->next();       });
     prev_track      = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { player->prev();       });
@@ -498,6 +505,13 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
             player->load_track(0);
         else
             player->load_pair(0, 0);
+    });
+
+    player->on_cleared([=, this] {
+        duration_slider->setEnabled(false);
+        duration_slider->setRange(0, 0);
+        duration_slider->setValue(0);
+        play_btn->setEnabled(false);
     });
 
     player->on_error([=, this] (gmplayer::Error error) {
@@ -660,8 +674,9 @@ void MainWindow::open_files(std::span<fs::path> paths, OpenFilesFlags flags)
     if ((flags & OpenFilesFlags::AddToRecent) != OpenFilesFlags::None)
         for (auto &p : paths)
             recent_files->add(p);
-    if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None)
+    if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None) {
         player->clear();
+    }
     auto errors = player->add_files(paths);
     if (errors.size() > 0) {
         QString text;

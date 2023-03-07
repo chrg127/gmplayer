@@ -171,6 +171,7 @@ public:  void on_##name(auto &&fn) { name = fn; }    \
     CALLBACK(repeat_changed, bool, bool)
     CALLBACK(shuffled, List)
     CALLBACK(error, Error)
+    CALLBACK(cleared, void)
 
 #undef CALLBACK
 
