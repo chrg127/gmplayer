@@ -99,8 +99,8 @@ Player::Player(PlayerOptions &&options)
     format = std::make_unique<Default>();
 
     mpris = mpris::Server::make("gmplayer");
-    mpris->set_maximum_rate(2.0);
-    mpris->set_minimum_rate(0.5);
+    mpris->set_maximum_rate(4.0);
+    mpris->set_minimum_rate(0.25);
     mpris->set_rate(opts.tempo);
     mpris->set_volume(opts.volume);
     mpris->on_pause(           [=, this]                   { pause();               });
@@ -431,7 +431,7 @@ void Player::set_tempo(double tempo)
     opts.tempo = tempo;
     format->set_tempo(tempo);
     mpris->set_rate(tempo);
-    // tempo_changed(tempo);
+    tempo_changed(tempo);
 }
 
 void Player::set_silence_detection(bool value)

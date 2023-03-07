@@ -30,6 +30,7 @@
 #include "player.hpp"
 #include "io.hpp"
 #include "appinfo.hpp"
+#include "math.hpp"
 
 namespace fs = std::filesystem;
 using namespace gmplayer::literals;
@@ -392,14 +393,32 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     });
 
     // tempo (i.e. speedup up/slowing the song)
-    auto *tempo = make_combo(options.tempo == 0.5 ? 0
-                           : options.tempo == 1.0 ? 1
-                           : options.tempo == 2.0 ? 2 : 1,
-                           std::make_tuple("2x",   2.0),
-                           std::make_tuple("1x",   1.0),
-                           std::make_tuple("0.5x", 0.5));
-    connect(tempo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=, this] (int i) {
-        player->set_tempo(tempo->currentData().toDouble());
+    auto *tempo = new QSlider(Qt::Horizontal);
+    auto *tempo_label = new QLabel(QString("%1x").arg(options.tempo, 4, 'f', 2));
+    tempo->setMinimum(0);
+    tempo->setMaximum(100);
+    tempo->setTickInterval(25);
+    tempo->setTickPosition(QSlider::TicksBelow);
+    tempo->setValue(math::map(std::log2(options.tempo), -2.0, 2.0, 0.0, 100.0));
+
+    auto get_tempo_value = [tempo_label] (int v) {
+        auto r = std::exp2(math::map(double(v), 0.0, 100.0, -2.0, 2.0));
+        tempo_label->setText(QString("%1x").arg(r, 4, 'f', 2));
+        return r;
+    };
+
+    connect(tempo, &QSlider::valueChanged, this, [=, this] (int value) {
+        auto r = get_tempo_value(value);
+        if (tempo->hasTracking())
+            player->set_tempo(r);
+    });
+
+    connect(tempo, &QSlider::sliderMoved, this, [=, this] {
+        get_tempo_value(tempo->value());
+    });
+
+    player->on_tempo_changed([=, this] (double value) {
+        tempo->setValue(math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0));
     });
 
     // track information
@@ -542,8 +561,8 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
                 play_btn,
                 next_track,
                 stop_btn,
-                new QLabel(tr("Tempo:")),
                 tempo,
+                tempo_label,
                 volume_btn,
                 volume_slider
             ),

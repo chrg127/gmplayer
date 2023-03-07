@@ -37,6 +37,10 @@ struct PlayerOptions {
     int volume              = SDL_MIX_MAXVOLUME;
 };
 
+constexpr double TEMPO_CONSTS[] = {
+    0.25, 0.5, 1.0, 2.0, 4.0
+};
+
 struct Playlist {
     std::vector<int> order;
     int current = -1;
