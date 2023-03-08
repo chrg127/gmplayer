@@ -98,7 +98,7 @@ Player::Player(PlayerOptions &&options)
     object_handler.change_cur_to(audio.id);
     format = std::make_unique<Default>();
 
-    mpris = mpris::Server::make("gmplayer");
+    mpris = mpris::make_server("gmplayer");
     mpris->set_maximum_rate(4.0);
     mpris->set_minimum_rate(0.25);
     mpris->set_rate(opts.tempo);

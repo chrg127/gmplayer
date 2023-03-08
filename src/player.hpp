@@ -6,7 +6,7 @@
 #include <span>
 #include <vector>
 #include <SDL_audio.h> // SDL_AudioDeviceID
-#include <mpris_server.hpp>
+#include "mpris_server.hpp"
 #include "common.hpp"
 #include "io.hpp"
 #include "format.hpp"
