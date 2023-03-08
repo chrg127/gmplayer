@@ -240,14 +240,16 @@ Playlist::Playlist(gmplayer::Player::List type, gmplayer::Player *player, QWidge
     shuffle->setEnabled(false);
     up     ->setEnabled(false);
     down   ->setEnabled(false);
-    player->on_playlist_changed(type, [=, this] {
-        list->clear();
-        auto names = player->names(type);
-        for (auto &name : names)
-            new QListWidgetItem(QString::fromStdString(name), list);
-        shuffle->setEnabled(names.size() != 0);
-        up     ->setEnabled(names.size() != 0);
-        down   ->setEnabled(names.size() != 0);
+    player->on_playlist_changed([=, this] (gmplayer::Player::List list_type) {
+        if (list_type == type) {
+            list->clear();
+            auto names = player->names(type);
+            for (auto &name : names)
+                new QListWidgetItem(QString::fromStdString(name), list);
+            shuffle->setEnabled(names.size() != 0);
+            up     ->setEnabled(names.size() != 0);
+            down   ->setEnabled(names.size() != 0);
+        }
     });
     setLayout(
         make_layout<QVBoxLayout>(

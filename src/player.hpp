@@ -37,10 +37,6 @@ struct PlayerOptions {
     int volume              = SDL_MIX_MAXVOLUME;
 };
 
-constexpr double TEMPO_CONSTS[] = {
-    0.25, 0.5, 1.0, 2.0, 4.0
-};
-
 struct Playlist {
     std::vector<int> order;
     int current = -1;
@@ -73,6 +69,21 @@ struct Playlist {
              : current - 1 >= 0        ? std::optional{current - 1}
              : std::nullopt;
     }
+};
+
+template <typename T> class Signal;
+
+template <typename R, typename... P>
+class Signal<R(P...)> {
+    std::vector<std::function<R(P...)>> callbacks;
+public:
+    void add(auto &&fn) { callbacks.push_back(fn); }
+    void call(auto&&... args)
+    {
+        for (auto &f : callbacks)
+            f(std::forward<decltype(args)>(args)...);
+    }
+    void operator()(auto&&... args) { call(std::forward<decltype(args)>(args)...); }
 };
 
 class Player {
@@ -154,31 +165,49 @@ public:
 
     mpris::Server &mpris_server() { return *mpris; }
 
-#define CALLBACK(name, ...) \
-private: std::function<void(__VA_ARGS__)> name;      \
-public:  void on_##name(auto &&fn) { name = fn; }    \
+    // Signal<int> file_changed;
+    // Signal<int, const Metadata &> track_changed;
+    // Signal<int> position_changed;
+    // Signal<void> track_ended;
+    // Signal<void> paused;
+    // Signal<void> played;
+    // Signal<void> seeked;
+    // Signal<int> volume_changed;
+    // Signal<double> tempo_changed;
+    // Signal<int;> fade_changed;
+    // Signal<bool, bool> repeat_changed;
+    // Signal<List> shuffled;
+    // Signal<Error> error;
+    // Signal<void> cleared;
 
-    CALLBACK(file_changed, int)
-    CALLBACK(track_changed, int, const Metadata &)
-    CALLBACK(position_changed, int)
-    CALLBACK(track_ended, void)
-    CALLBACK(paused, void)
-    CALLBACK(played, void)
-    CALLBACK(seeked, void)
-    CALLBACK(volume_changed, int)
-    CALLBACK(tempo_changed, double)
-    CALLBACK(fade_changed, int);
-    CALLBACK(repeat_changed, bool, bool)
-    CALLBACK(shuffled, List)
-    CALLBACK(error, Error)
-    CALLBACK(cleared, void)
+#define MAKE_SIGNAL(name, ...) \
+private:                                            \
+    Signal<void(__VA_ARGS__)> name;                 \
+public:                                             \
+    void on_##name(auto &&fn) { name.add(fn); }     \
 
-#undef CALLBACK
+    MAKE_SIGNAL(file_changed, int)
+    MAKE_SIGNAL(track_changed, int, const Metadata &)
+    MAKE_SIGNAL(position_changed, int)
+    MAKE_SIGNAL(track_ended, void)
+    MAKE_SIGNAL(paused, void)
+    MAKE_SIGNAL(played, void)
+    MAKE_SIGNAL(seeked, void)
+    MAKE_SIGNAL(volume_changed, int)
+    MAKE_SIGNAL(tempo_changed, double)
+    MAKE_SIGNAL(fade_changed, int);
+    MAKE_SIGNAL(repeat_changed, bool, bool)
+    MAKE_SIGNAL(shuffled, List)
+    MAKE_SIGNAL(error, Error)
+    MAKE_SIGNAL(cleared, void)
+    MAKE_SIGNAL(playlist_changed, List)
 
-    std::array<std::function<void(void)>, 2> playlist_changed_callbacks;
+#undef MAKE_SIGNAL
 
-    void on_playlist_changed(List list, auto &&fn) { playlist_changed_callbacks[static_cast<int>(list)] = fn; }
-    void playlist_changed(List list) { playlist_changed_callbacks[static_cast<int>(list)](); }
+    // std::array<std::function<void(void)>, 2> playlist_changed_callbacks;
+
+    // void on_playlist_changed(List list, auto &&fn) { playlist_changed_callbacks[static_cast<int>(list)] = fn; }
+    // void playlist_changed(List list) { playlist_changed_callbacks[static_cast<int>(list)](); }
 };
 
 // this is here for portability
