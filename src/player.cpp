@@ -168,7 +168,7 @@ Error Player::add_file(fs::path path)
     return Error{};
 }
 
-std::vector<Error> Player::add_files(std::span<std::filesystem::path> paths)
+std::pair<std::vector<Error>, int> Player::add_files(std::span<std::filesystem::path> paths)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     std::vector<Error> errors;
@@ -176,13 +176,14 @@ std::vector<Error> Player::add_files(std::span<std::filesystem::path> paths)
         if (auto err = add_file_internal(path); err)
             errors.push_back(err);
     playlist_changed(List::File);
-    return errors;
+    return std::make_pair(errors, files.order.size());
 }
 
 void Player::remove_file(int fileno)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     files.remove(fileno);
+    file_removed(fileno);
     playlist_changed(List::File);
 }
 
@@ -314,6 +315,7 @@ void Player::seek(int ms)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     if (auto err = format->seek(std::clamp(ms, 0, length())); err) {
+        pause();
         error(err);
         return;
     }

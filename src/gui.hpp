@@ -15,7 +15,10 @@
 #include "player.hpp"
 #include "common.hpp"
 
-namespace gmplayer { class Player; }
+namespace gmplayer {
+    class Player;
+    class PlayerOptions;
+}
 class QShortcut;
 class QMenu;
 class QToolButton;
@@ -74,7 +77,7 @@ public:
     explicit AboutDialog(QWidget *parent = nullptr);
 };
 
-struct Playlist : public QWidget {
+class Playlist : public QWidget {
     Q_OBJECT
     QListWidget *list;
 public:
@@ -87,6 +90,34 @@ signals:
     void context_menu(const QPoint &p);
 };
 
+class PlaylistTab : public QWidget {
+    Q_OBJECT
+    Playlist *filelist;
+public:
+    PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent = nullptr);
+    int current_file() const { return filelist->current(); }
+    void setup_context_menu(auto &&fn) { filelist->setup_context_menu(fn); }
+};
+
+class CurrentlyPlayingTab : public QWidget {
+    Q_OBJECT
+public:
+    CurrentlyPlayingTab(gmplayer::Player *player, QWidget *parent = nullptr);
+};
+
+class Controls : public QWidget {
+    Q_OBJECT
+
+    enum class SliderHistory {
+        DontKnow,
+        WasPaused,
+        WasPlaying,
+    } history = SliderHistory::DontKnow;
+
+public:
+    Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent = nullptr);
+};
+
 DEFINE_OPTION_ENUM(OpenFilesFlags,
     AddToRecent = 1 << 1,
     ClearAndPlay = 1 << 2,
@@ -95,18 +126,9 @@ DEFINE_OPTION_ENUM(OpenFilesFlags,
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
-    enum class SliderHistory {
-        DontKnow,
-        WasPaused,
-        WasPlaying,
-    };
-
     gmplayer::Player *player              = nullptr;
     QString last_file                     = ".";
-    SliderHistory history                 = SliderHistory::DontKnow;
     std::map<QString, Shortcut> shortcuts = {};
-    QToolButton *prev_track               = nullptr,
-                *next_track               = nullptr;
     RecentList *recent_files              = nullptr,
                *recent_playlists          = nullptr;
 

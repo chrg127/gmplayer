@@ -124,7 +124,7 @@ public:
     Player & operator=(const Player &) = delete;
 
     Error add_file(std::filesystem::path path);
-    std::vector<Error> add_files(std::span<std::filesystem::path> path);
+    std::pair<std::vector<Error>, int> add_files(std::span<std::filesystem::path> path);
     void remove_file(int fileno);
     bool load_file(int fileno);
     bool load_track(int num);
@@ -165,21 +165,6 @@ public:
 
     mpris::Server &mpris_server() { return *mpris; }
 
-    // Signal<int> file_changed;
-    // Signal<int, const Metadata &> track_changed;
-    // Signal<int> position_changed;
-    // Signal<void> track_ended;
-    // Signal<void> paused;
-    // Signal<void> played;
-    // Signal<void> seeked;
-    // Signal<int> volume_changed;
-    // Signal<double> tempo_changed;
-    // Signal<int;> fade_changed;
-    // Signal<bool, bool> repeat_changed;
-    // Signal<List> shuffled;
-    // Signal<Error> error;
-    // Signal<void> cleared;
-
 #define MAKE_SIGNAL(name, ...) \
 private:                                            \
     Signal<void(__VA_ARGS__)> name;                 \
@@ -201,13 +186,9 @@ public:                                             \
     MAKE_SIGNAL(error, Error)
     MAKE_SIGNAL(cleared, void)
     MAKE_SIGNAL(playlist_changed, List)
+    MAKE_SIGNAL(file_removed, int)
 
 #undef MAKE_SIGNAL
-
-    // std::array<std::function<void(void)>, 2> playlist_changed_callbacks;
-
-    // void on_playlist_changed(List list, auto &&fn) { playlist_changed_callbacks[static_cast<int>(list)] = fn; }
-    // void playlist_changed(List list) { playlist_changed_callbacks[static_cast<int>(list)](); }
 };
 
 // this is here for portability
