@@ -32,7 +32,6 @@ struct PlayerOptions {
     bool track_repeat       = false;
     bool file_repeat        = false;
     int default_duration    = 3 * 60 * 1000ull;
-    int silence_detection   = 0;
     double tempo            = 1.0;
     int volume              = SDL_MIX_MAXVOLUME;
 };
@@ -103,7 +102,6 @@ class Player {
 
     struct {
         bool autoplay;
-        bool silence_detection;
         int default_duration;
         int fade_out;
         int volume;
@@ -155,7 +153,6 @@ public:
     PlayerOptions options();
     void set_fade(int secs);
     void set_tempo(double tempo);
-    void set_silence_detection(bool ignore);
     void set_default_duration(int secs);
     void set_autoplay(bool value);
     void set_track_repeat(bool value);

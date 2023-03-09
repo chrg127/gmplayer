@@ -75,7 +75,6 @@ void Player::audio_callback(std::span<u8> stream)
 Player::Player(PlayerOptions &&options)
 {
     opts.autoplay          = options.autoplay;
-    opts.silence_detection = options.silence_detection;
     opts.default_duration  = options.default_duration;
     opts.fade_out          = options.fade_out;
     opts.tempo             = options.tempo;
@@ -224,7 +223,6 @@ bool Player::load_track(int trackno)
     auto &metadata = track_cache[num];
     format->set_fade(metadata.length, opts.fade_out);
     format->set_tempo(opts.tempo);
-    format->ignore_silence(opts.silence_detection);
     mpris->set_metadata({
         { mpris::Field::TrackId, std::string("/") + std::to_string(files.current)
                                                   + std::to_string(tracks.current) },
@@ -255,7 +253,7 @@ void Player::clear()
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     pause();
-    format.reset();
+    format = std::make_unique<Default>();
     track_cache.clear();
     file_cache.clear();
     tracks.clear();
@@ -313,6 +311,7 @@ void Player::stop()
 
 void Player::seek(int ms)
 {
+    printf("%d\n", ms);
     std::lock_guard<SDLMutex> lock(audio.mutex);
     if (auto err = format->seek(std::clamp(ms, 0, length())); err) {
         pause();
@@ -415,7 +414,6 @@ PlayerOptions Player::options()
         .track_repeat      = tracks.repeat,
         .file_repeat       = files.repeat,
         .default_duration  = opts.default_duration,
-        .silence_detection = opts.silence_detection,
         .tempo             = opts.tempo,
         .volume            = opts.volume,
     };
@@ -437,13 +435,6 @@ void Player::set_tempo(double tempo)
     format->set_tempo(tempo);
     mpris->set_rate(tempo);
     tempo_changed(tempo);
-}
-
-void Player::set_silence_detection(bool value)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    opts.silence_detection = value;
-    format->ignore_silence(opts.silence_detection);
 }
 
 void Player::set_default_duration(int secs)

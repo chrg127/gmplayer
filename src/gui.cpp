@@ -160,7 +160,6 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
     auto *fade              = make_checkbox(tr("&Enable fade-out"), options.fade_out != 0);
     auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), options.fade_out / 1000, fade->isChecked());
     auto *default_duration  = make_spinbox(10_min / 1000, options.default_duration / 1000);
-    auto *silence_detection = make_checkbox(tr("Do silence detection"), options.silence_detection);
 
     connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
         fade_secs->setEnabled(state);
@@ -173,7 +172,6 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
     connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
         player->set_fade(fade_secs->value());
         player->set_default_duration(default_duration->value());
-        player->set_silence_detection(silence_detection->isChecked());
         accept();
     });
 
@@ -183,7 +181,6 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
         fade,
         label_pair("Fade seconds:", fade_secs),
         label_pair("Default duration:", default_duration),
-        silence_detection,
         button_box
     ));
 }
