@@ -323,20 +323,13 @@ PlaylistTab::PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions
 CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
-    auto *title   = new QLabel;
-    auto *game    = new QLabel;
-    auto *system  = new QLabel;
-    auto *author  = new QLabel;
-    auto *comment = new QLabel;
-    auto *dumper  = new QLabel;
+    std::array<QLabel *, 7> labels;
+    for (auto &l : labels)
+        l = new QLabel;
 
     player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
-        title   ->setText(metadata.song.data());
-        game    ->setText(metadata.game.data());
-        author  ->setText(metadata.author.data());
-        system  ->setText(metadata.system.data());
-        comment ->setText(metadata.comment.data());
-        dumper  ->setText(metadata.dumper.data());
+        for (int i = 0; i < labels.size(); i++)
+            labels[i]->setText(QString::fromStdString(metadata.info[i]));
     });
 
     player->on_error([=, this] (gmplayer::Error error) {
@@ -345,24 +338,20 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
         case gmplayer::ErrType::Header:
         case gmplayer::ErrType::FileType:
         case gmplayer::ErrType::LoadTrack:
-            title   ->setText("");
-            game    ->setText("");
-            author  ->setText("");
-            system  ->setText("");
-            comment ->setText("");
-            dumper  ->setText("");
+            for (auto &l : labels)
+                l->setText("");
         }
     });
 
     setLayout(
         make_layout<QVBoxLayout>(
             make_groupbox<QFormLayout>("Track info",
-                std::make_tuple(new QLabel(tr("Title:")),   title),
-                std::make_tuple(new QLabel(tr("Game:")),    game),
-                std::make_tuple(new QLabel(tr("System:")),  system),
-                std::make_tuple(new QLabel(tr("Author:")),  author),
-                std::make_tuple(new QLabel(tr("Comment:")), comment),
-                std::make_tuple(new QLabel(tr("Dumper:")),  dumper)
+                std::make_tuple(new QLabel(tr("Title:")),   labels[gmplayer::Metadata::Song]),
+                std::make_tuple(new QLabel(tr("Game:")),    labels[gmplayer::Metadata::Game]),
+                std::make_tuple(new QLabel(tr("System:")),  labels[gmplayer::Metadata::System]),
+                std::make_tuple(new QLabel(tr("Author:")),  labels[gmplayer::Metadata::Author]),
+                std::make_tuple(new QLabel(tr("Comment:")), labels[gmplayer::Metadata::Comment]),
+                std::make_tuple(new QLabel(tr("Dumper:")),  labels[gmplayer::Metadata::Dumper])
             )
         )
     );
@@ -765,7 +754,7 @@ QString MainWindow::format_error(gmplayer::ErrType type)
     switch (type) {
     case gmplayer::ErrType::Seek:      return tr("Got an error while seeking.");
     case gmplayer::ErrType::LoadFile:  return tr("Got an error while loading file '%1'").arg(QString::fromStdString(player->current_file().filename()));
-    case gmplayer::ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'").arg(QString::fromStdString(player->current_track().song));
+    case gmplayer::ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'").arg(QString::fromStdString(player->current_track().info[gmplayer::Metadata::Song]));
     case gmplayer::ErrType::Play:      return tr("Got an error while playing.");
     case gmplayer::ErrType::Header:    return tr("Header of file '%1' is invalid.").arg(QString::fromStdString(player->current_file().filename()));
     case gmplayer::ErrType::FileType:  return tr("File %1 has an invalid file type.").arg(QString::fromStdString(player->current_file().filename()));

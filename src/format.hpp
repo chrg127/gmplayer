@@ -15,8 +15,11 @@ const int CHANNELS  = 2;
 const int SAMPLES_SIZE = SAMPLES * CHANNELS * 2;
 
 struct Metadata {
+    enum {
+        System = 0, Game, Song, Author, Copyright, Comment, Dumper
+    };
     int length;
-    std::string system, game, song, author, copyright, comment, dumper;
+    std::array<std::string, 7> info;
 };
 
 using PlayResult = tl::expected<std::array<u8, SAMPLES_SIZE>, Error>;

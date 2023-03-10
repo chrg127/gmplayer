@@ -227,9 +227,9 @@ bool Player::load_track(int trackno)
         { mpris::Field::TrackId, std::string("/") + std::to_string(files.current)
                                                   + std::to_string(tracks.current) },
         { mpris::Field::Length,              metadata.length                       },
-        { mpris::Field::Title,   std::string(metadata.song)                        },
-        { mpris::Field::Album,   std::string(metadata.game)                        },
-        { mpris::Field::Artist,  std::string(metadata.author)                      }
+        { mpris::Field::Title,   std::string(metadata.info[Metadata::Song])        },
+        { mpris::Field::Album,   std::string(metadata.info[Metadata::Game])        },
+        { mpris::Field::Artist,  std::string(metadata.info[Metadata::Author])      }
     });
     track_changed(trackno, metadata);
     return false;
@@ -311,7 +311,6 @@ void Player::stop()
 
 void Player::seek(int ms)
 {
-    printf("%d\n", ms);
     std::lock_guard<SDLMutex> lock(audio.mutex);
     if (auto err = format->seek(std::clamp(ms, 0, length())); err) {
         pause();
@@ -399,7 +398,7 @@ std::vector<std::string> Player::names(List which) const
             names.push_back(file_cache[i].file_path().stem().string());
     else
         for (auto i : tracks.order)
-            names.push_back(track_cache[i].song);
+            names.push_back(track_cache[i].info[Metadata::Song]);
     return names;
 }
 
