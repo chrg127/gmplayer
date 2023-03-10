@@ -150,6 +150,9 @@ public:
     int move(List which, int n, int pos);
     std::vector<std::string> names(List which) const;
 
+    std::vector<std::string> channel_names();
+    void mute_channel(int index, bool mute);
+
     PlayerOptions options();
     void set_fade(int secs);
     void set_tempo(double tempo);

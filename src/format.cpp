@@ -114,6 +114,21 @@ bool GME::track_ended() const
     return gme_track_ended(emu) || gme_tell(emu) > track_len + fade_len;
 }
 
+int GME::channel_count() const
+{
+    return gme_voice_count(emu);
+}
+
+std::string GME::channel_name(int index) const
+{
+    return gme_voice_name(emu, index);
+}
+
+void GME::mute_channel(int index, bool mute)
+{
+    gme_mute_voice(emu, index, mute);
+}
+
 void GME::set_fade(int from, int length)
 {
     fade_from = from;
@@ -125,11 +140,6 @@ void GME::set_fade(int from, int length)
 void GME::set_tempo(double tempo)
 {
     gme_set_tempo(emu, tempo);
-}
-
-void GME::ignore_silence(bool ignore)
-{
-    gme_ignore_silence(emu, ignore);
 }
 
 auto read_file(const io::MappedFile &file, int frequency)

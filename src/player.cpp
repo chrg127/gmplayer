@@ -405,6 +405,23 @@ std::vector<std::string> Player::names(List which) const
 
 
 
+std::vector<std::string> Player::channel_names()
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    std::vector<std::string> names;
+    for (int i = 0; i < format->channel_count(); i++)
+        names.push_back(format->channel_name(i));
+    return names;
+}
+
+void Player::mute_channel(int index, bool mute)
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    format->mute_channel(index, mute);
+}
+
+
+
 PlayerOptions Player::options()
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
