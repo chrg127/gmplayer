@@ -90,6 +90,12 @@ signals:
     void context_menu(const QPoint &p);
 };
 
+class ChannelWidget : public QWidget {
+    Q_OBJECT
+public:
+    ChannelWidget(const QString &name, int index, gmplayer::Player *player, QWidget *parent = nullptr);
+};
+
 class PlaylistTab : public QWidget {
     Q_OBJECT
     Playlist *filelist;

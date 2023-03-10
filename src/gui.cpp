@@ -290,6 +290,18 @@ void Playlist::setup_context_menu(auto &&fn)
 
 
 
+ChannelWidget::ChannelWidget(const QString &name, int index, gmplayer::Player *player, QWidget *parent)
+    : QWidget(parent)
+{
+    auto *label = new QLabel(name);
+    auto *checkbox = make_checkbox("Mute", false, this, [=, this] (int state) {
+        player->mute_channel(index, bool(state));
+    });
+    setLayout(make_layout<QVBoxLayout>(label, checkbox));
+}
+
+
+
 PlaylistTab::PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent)
     : QWidget(parent)
 {
