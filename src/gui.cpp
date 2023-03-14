@@ -339,9 +339,22 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
     for (auto &l : labels)
         l = new QLabel;
 
+    auto *channel_lt  = new QGridLayout;
+    auto *channel_box = new QGroupBox("Channels");
+    channel_box->setLayout(channel_lt);
+
     player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
         for (int i = 0; i < labels.size(); i++)
             labels[i]->setText(QString::fromStdString(metadata.info[i]));
+        for (auto *item = channel_lt->takeAt(0); item; item = channel_lt->takeAt(0)) {
+            delete item->widget();
+            delete item;
+        }
+        auto channels = player->channel_names();
+        for (int i = 0; i < channels.size(); i++) {
+            auto *w = new ChannelWidget(QString::fromStdString(channels[i]), i, player);
+            channel_lt->addWidget(w, i % 4, i / 4);
+        }
     });
 
     player->on_error([=, this] (gmplayer::Error error) {
@@ -364,7 +377,8 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
                 std::make_tuple(new QLabel(tr("Author:")),  labels[gmplayer::Metadata::Author]),
                 std::make_tuple(new QLabel(tr("Comment:")), labels[gmplayer::Metadata::Comment]),
                 std::make_tuple(new QLabel(tr("Dumper:")),  labels[gmplayer::Metadata::Dumper])
-            )
+            ),
+            channel_box
         )
     );
 }
@@ -416,7 +430,7 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
     tempo->setMaximum(100);
     tempo->setTickInterval(25);
     tempo->setTickPosition(QSlider::TicksBelow);
-    tempo->setValue(int_to_tempo(options.tempo));
+    tempo->setValue(tempo_to_int(options.tempo));
 
     auto get_tempo_value = [=, this] (int value) {
         double r = int_to_tempo(value);

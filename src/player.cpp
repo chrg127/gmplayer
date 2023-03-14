@@ -49,12 +49,12 @@ void Player::audio_callback(std::span<u8> stream)
     if (!format)
         return;
     auto pos = format->position();
-    // some songs don't have length information, hence the need for the second check.
     if (format->track_ended()) {
         SDL_PauseAudioDevice(audio.dev_id, 1);
         track_ended();
         if (opts.autoplay)
             next();
+        return;
     }
     auto res = format->play();
     if (!res) {
@@ -82,16 +82,15 @@ Player::Player(PlayerOptions &&options)
     files.repeat           = options.file_repeat;
     tracks.repeat          = options.track_repeat;
 
-    SDL_AudioSpec desired;
-    std::memset(&desired, 0, sizeof(desired));
+    SDL_AudioSpec desired = {};
     desired.freq     = 44100;
     desired.format   = AUDIO_S16SYS;
     desired.channels = CHANNELS;
     desired.samples  = SAMPLES;
     desired.callback = gmplayer::audio_callback;
     desired.userdata = nullptr;
-    audio.dev_id     = SDL_OpenAudioDevice(nullptr, 0, &desired, &audio.spec, 0);
-    audio.mutex      = SDLMutex(audio.dev_id);
+    audio.dev_id = SDL_OpenAudioDevice(nullptr, 0, &desired, &audio.spec, 0);
+    audio.mutex  = SDLMutex(audio.dev_id);
 
     audio.id = object_handler.add(this);
     object_handler.change_cur_to(audio.id);

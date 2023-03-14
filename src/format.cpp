@@ -43,8 +43,17 @@ GME::~GME()
 
 Error GME::open(std::span<const u8> data, int frequency)
 {
-    auto err = gme_open_data(data.data(), data.size(), &emu, frequency);
-    return err ? Error(ErrType::LoadFile, err) : Error();
+    auto type_str = gme_identify_header(data.data());
+    if (type_str == "")
+        return Error(ErrType::Header, "invalid header");
+    auto type = gme_identify_extension(type_str);
+    emu = gme_new_emu(type, frequency);
+    if (!emu)
+        return Error(ErrType::LoadFile, "out of memory");
+    auto err = gme_load_data(this->emu, data.data(), data.size());
+    if (err)
+        return Error(ErrType::LoadFile, err);
+    return Error{};
 }
 
 Error GME::load_m3u(std::filesystem::path path)
@@ -113,6 +122,7 @@ Metadata GME::track_metadata(int which, int default_length)
 
 bool GME::track_ended() const
 {
+    // some songs don't have length information, hence the need for the second check.
     return gme_track_ended(emu) || gme_tell(emu) > track_len + fade_len;
 }
 
@@ -147,11 +157,6 @@ void GME::set_tempo(double tempo)
 auto read_file(const io::MappedFile &file, int frequency)
     -> tl::expected<std::unique_ptr<Interface>, Error>
 {
-    gme_type_t type;
-    if (auto err = gme_identify_file(file.filename().c_str(), &type); type == nullptr)
-        return tl::unexpected(Error(ErrType::FileType, err));
-    if (auto header = gme_identify_header(file.data()); header[0] == '\0')
-        return tl::unexpected(Error(ErrType::Header, "invalid header"));
     auto ptr = std::make_unique<GME>();
     if (auto err = ptr->open(file.bytes(), frequency); err)
         return tl::unexpected(err);
