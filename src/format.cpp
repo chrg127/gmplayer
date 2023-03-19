@@ -70,8 +70,8 @@ Error GME::start_track(int n)
 
 PlayResult GME::play()
 {
-    std::array<u8, SAMPLES_SIZE> buf;
-    auto err = gme_play(emu, SAMPLES * CHANNELS, (short *) buf.data());
+    std::array<u16, SAMPLES_SIZE> buf;
+    auto err = gme_play(emu, SAMPLES_SIZE, (short *) buf.data());
     return err ? tl::unexpected(Error(ErrType::Play, err))
                : PlayResult(buf);
 }

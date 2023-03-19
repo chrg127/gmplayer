@@ -65,9 +65,13 @@ void Player::audio_callback(std::span<u8> stream)
     // fill stream with silence. this is needed for MixAudio to work how we want.
     std::fill(stream.begin(), stream.end(), 0);
     // we could also use memcpy here, but then we wouldn't have volume control
-    SDL_MixAudioFormat(stream.data(), samples.data(), audio.spec.format, samples.size(), opts.volume);
+    SDL_MixAudioFormat(
+        stream.data(), (const u8 *) samples.data(), audio.spec.format,
+        samples.size() * sizeof(u16), opts.volume
+    );
     mpris->set_position(pos * 1000);
     position_changed(pos);
+    samples_played(samples);
 }
 
 

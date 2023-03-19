@@ -12,7 +12,7 @@ namespace gmplayer {
 
 const int SAMPLES   = 2048;
 const int CHANNELS  = 2;
-const int SAMPLES_SIZE = SAMPLES * CHANNELS * 2;
+const int SAMPLES_SIZE = SAMPLES * CHANNELS;
 
 struct Metadata {
     enum {
@@ -22,7 +22,7 @@ struct Metadata {
     std::array<std::string, 7> info;
 };
 
-using PlayResult = tl::expected<std::array<u8, SAMPLES_SIZE>, Error>;
+using PlayResult = tl::expected<std::array<u16, SAMPLES_SIZE>, Error>;
 
 struct Interface {
     virtual ~Interface() = default;
