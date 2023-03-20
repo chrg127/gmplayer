@@ -34,6 +34,7 @@
 #include "io.hpp"
 #include "appinfo.hpp"
 #include "math.hpp"
+#include "visualizer.hpp"
 
 namespace fs = std::filesystem;
 using namespace gmplayer::literals;
@@ -349,62 +350,20 @@ Visualizer::Visualizer(QWidget *parent)
     render();
 }
 
-// Returns largest power of 2 that is <= the given value.
-// From Henry Warren's book "Hacker's Delight"
-static unsigned largest_power_of_2_within(unsigned x)
-{
-	static_assert(sizeof(x) <= 4, "This code doesn't work on 64-bit int");
-
-	// Set all bits less significant than most significant bit that's set
-	// e.g. 0b00100111  ->  0b00111111
-	x = x | (x >>  1);
-	x = x | (x >>  2);
-	x = x | (x >>  4);
-	x = x | (x >>  8);
-	x = x | (x >> 16);
-
-	// Clear all set bits besides the highest one.
-	return x - (x >> 1);
-}
-
-int get_sample_shift(int height)
-{
-    int sample_shift;
-    for ( sample_shift = 1; sample_shift < 14; )
-		if (((0x7FFFL * 2) >> sample_shift++) < height)
-			break;
-    return sample_shift;
-}
-
-int get_voffset(int height)
-{
-    return (height - largest_power_of_2_within(height)) / 2;
-}
-
 void Visualizer::render()
 {
     auto size = viewport()->size();
     auto width = size.width();
     auto height = size.height();
-    QPixmap plot{width, height};
-    plot.fill({0, 0, 0});
-    QPainter painter{&plot};
-    painter.setPen({0xff, 0, 0});
-
-    int sample_shift = get_sample_shift(height);
-    int v_offset     = get_voffset(height);
-    for (int x = 0; x < std::min<int>(data.size() / 2 - 1, width); x++) {
-        auto x1 = x;
-        auto x2 = x + 1;
-        int sample1 = (0x7FFF * 2 - data[x1 * 2] - data[x1 * 2 + 1]) >> sample_shift;
-        int sample2 = (0x7FFF * 2 - data[x2 * 2] - data[x2 * 2 + 1]) >> sample_shift;
-        auto y1 = sample1 + v_offset;
-        auto y2 = sample2 + v_offset;
-        painter.drawLine(QPoint(x1, y1), QPoint(x2, y2));
-    }
-
+    QPixmap image{width, height};
+    image.fill({0, 0, 0});
+    QPainter painter{&image};
+    painter.setPen({0xff, 0xff, 0xff});
+    visualizer::plot(data, width, height, [&] (auto p, auto q) {
+        painter.drawLine(QPoint(p[0], p[1]), QPoint(q[0], q[1]));
+    });
     scene->clear();
-    scene->addPixmap(plot);
+    scene->addPixmap(image);
 }
 
 void Visualizer::update_data(std::span<i16> newdata)
