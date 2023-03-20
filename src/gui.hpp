@@ -10,6 +10,7 @@
 #include <QDialog>
 #include <QPushButton>
 #include <QStringList>
+#include <QGraphicsView>
 #include "keyrecorder.hpp"
 #include "error.hpp"
 #include "player.hpp"
@@ -25,6 +26,8 @@ class QToolButton;
 class QSlider;
 class QLabel;
 class QListWidget;
+class QGraphicsScene;
+class QGraphicsView;
 
 namespace gui {
 
@@ -105,6 +108,21 @@ public:
     void setup_context_menu(auto &&fn) { filelist->setup_context_menu(fn); }
 };
 
+class Visualizer : public QGraphicsView {
+    Q_OBJECT
+    QGraphicsScene *scene;
+    int width, height;
+    std::array<i16, gmplayer::SAMPLES_SIZE> data;
+public:
+    Visualizer(QWidget *parent = nullptr);
+    void update_data(std::span<i16> newdata);
+    void render();
+    void showEvent(QShowEvent *);
+    void resizeEvent(QResizeEvent *ev);
+signals:
+    void updated();
+};
+
 class CurrentlyPlayingTab : public QWidget {
     Q_OBJECT
 public:
@@ -113,13 +131,11 @@ public:
 
 class Controls : public QWidget {
     Q_OBJECT
-
     enum class SliderHistory {
         DontKnow,
         WasPaused,
         WasPlaying,
     } history = SliderHistory::DontKnow;
-
 public:
     Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent = nullptr);
 };
