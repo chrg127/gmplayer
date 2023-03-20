@@ -67,7 +67,7 @@ void Player::audio_callback(std::span<u8> stream)
     // we could also use memcpy here, but then we wouldn't have volume control
     SDL_MixAudioFormat(
         stream.data(), (const u8 *) samples.data(), audio.spec.format,
-        samples.size() * sizeof(u16), opts.volume
+        samples.size() * sizeof(i16), opts.volume
     );
     mpris->set_position(pos * 1000);
     position_changed(pos);

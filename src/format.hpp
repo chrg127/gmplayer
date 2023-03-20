@@ -22,7 +22,7 @@ struct Metadata {
     std::array<std::string, 7> info;
 };
 
-using PlayResult = tl::expected<std::array<u16, SAMPLES_SIZE>, Error>;
+using PlayResult = tl::expected<std::array<i16, SAMPLES_SIZE>, Error>;
 
 struct Interface {
     virtual ~Interface() = default;
