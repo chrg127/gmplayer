@@ -47,7 +47,7 @@ Error GME::open(std::span<const u8> data, int frequency)
     if (type_str == "")
         return Error(ErrType::Header, "invalid header");
     auto type = gme_identify_extension(type_str);
-    emu = gme_new_emu(type, frequency);
+    emu = gme_new_emu_multi_channel(type, frequency);
     if (!emu)
         return Error(ErrType::LoadFile, "out of memory");
     auto err = gme_load_data(this->emu, data.data(), data.size());
@@ -152,6 +152,11 @@ void GME::set_fade(int from, int length)
 void GME::set_tempo(double tempo)
 {
     gme_set_tempo(emu, tempo);
+}
+
+bool GME::multi_channel() const
+{
+    return gme_multi_channel(emu);
 }
 
 auto read_file(const io::MappedFile &file, int frequency)

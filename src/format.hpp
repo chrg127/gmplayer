@@ -40,6 +40,7 @@ struct Interface {
     virtual void        mute_channel(int index, bool mute)                  = 0;
     virtual void        set_fade(int from, int length)                      = 0;
     virtual void        set_tempo(double tempo)                             = 0;
+    virtual bool        multi_channel()                               const = 0;
 };
 
 struct Default : public Interface {
@@ -58,6 +59,7 @@ struct Default : public Interface {
     void        mute_channel(int index, bool mute)                  override { }
     void        set_fade(int from, int length)                      override { }
     void        set_tempo(double tempo)                             override { }
+    bool        multi_channel()                               const override { return false; }
 };
 
 class GME : public Interface {
@@ -79,6 +81,7 @@ public:
     void        mute_channel(int index, bool mute)                  override;
     void        set_fade(int from, int length)                      override;
     void        set_tempo(double tempo)                             override;
+    bool        multi_channel()                               const override;
 };
 
 auto read_file(const io::MappedFile &file, int frequency) -> tl::expected<std::unique_ptr<Interface>, Error>;
