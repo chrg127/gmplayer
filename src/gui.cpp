@@ -22,6 +22,7 @@
 #include <QMimeData>
 #include <QPushButton>
 #include <QSettings>
+#include <QSizePolicy>
 #include <QString>
 #include <QStringLiteral>
 #include <QShortcut>
@@ -294,18 +295,6 @@ void Playlist::setup_context_menu(auto &&fn)
 
 
 
-ChannelWidget::ChannelWidget(const QString &name, int index, gmplayer::Player *player, QWidget *parent)
-    : QWidget(parent)
-{
-    auto *label = new QLabel(name);
-    auto *checkbox = make_checkbox("Mute", false, this, [=, this] (int state) {
-        player->mute_channel(index, bool(state));
-    });
-    setLayout(make_layout<QVBoxLayout>(label, checkbox));
-}
-
-
-
 PlaylistTab::PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent)
     : QWidget(parent)
 {
@@ -327,7 +316,7 @@ PlaylistTab::PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions
                 tracklist,
                 filelist
             ),
-            make_groupbox<QVBoxLayout>("Playlist settings",
+            make_groupbox<QHBoxLayout>("Playlist settings",
                 autoplay, repeat_track, repeat_file
             )
         )
@@ -385,20 +374,19 @@ VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
     std::fill(data.begin(), data.end(), 0);
-
-    auto *lt = new QGridLayout;
+    std::array<Visualizer *, 8> single;
+    for (int i = 0; i < 8; i++) {
+        single[i] = new Visualizer(data, i, 4, 8);
+        connect(this, &VisualizerTab::updated, single[i], &Visualizer::render);
+        single[i]->setVisible(false);
+    }
 
     player->on_track_changed([=, this] (int, const gmplayer::Metadata &) {
         auto channels = player->channel_names();
-        for (auto *item = lt->takeAt(0); item; item = lt->takeAt(0)) {
-            delete item->widget();
-            delete item;
-        }
-        for (int i = 0; i < channels.size(); i++) {
-            auto *v = new Visualizer(data, i, 4, 8, this);
-            connect(this, &VisualizerTab::updated, v, &Visualizer::render);
-            lt->addWidget(v, i/2, i%2);
-        }
+        for (auto &s : single)
+            s->setVisible(false);
+        for (int i = 0; i < channels.size(); i++)
+            single[i]->setVisible(true);
     });
 
     player->on_samples_played([=, this] (std::span<i16> newdata) {
@@ -406,8 +394,28 @@ VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
         emit updated();
     });
 
-    setLayout(lt);
+    setLayout(make_layout<QGridLayout>(
+        std::make_tuple(single[0], 0, 0), std::make_tuple(single[1], 0, 1),
+        std::make_tuple(single[2], 1, 0), std::make_tuple(single[3], 1, 1),
+        std::make_tuple(single[4], 2, 0), std::make_tuple(single[5], 2, 1),
+        std::make_tuple(single[6], 3, 0), std::make_tuple(single[7], 3, 1)
+    ));
 }
+
+
+
+ChannelWidget::ChannelWidget(int index, gmplayer::Player *player, QWidget *parent)
+    : QWidget(parent), index{index}
+{
+    label = new QLabel;
+    auto *checkbox = make_checkbox("Mute", false, this, [=, this] (int state) {
+        player->mute_channel(index, bool(state));
+    });
+    setLayout(make_layout<QVBoxLayout>(label, checkbox));
+}
+
+void ChannelWidget::set_name(const QString &name) { setEnabled(true);  label->setText(name);                             }
+void ChannelWidget::reset()                       { setEnabled(false); label->setText(QString("Channel %1").arg(index)); }
 
 
 
@@ -417,23 +425,20 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
     std::array<QLabel *, 7> labels;
     for (auto &l : labels)
         l = new QLabel;
-
-    auto *channel_lt  = new QGridLayout;
-    auto *channel_box = new QGroupBox("Channels");
-    channel_box->setLayout(channel_lt);
+    std::array<ChannelWidget *, 8> channels;
+    for (int i = 0; i < 8; i++) {
+        channels[i] = new ChannelWidget(i, player);
+        channels[i]->reset();
+    }
 
     player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
         for (int i = 0; i < labels.size(); i++)
             labels[i]->setText(QString::fromStdString(metadata.info[i]));
-        for (auto *item = channel_lt->takeAt(0); item; item = channel_lt->takeAt(0)) {
-            delete item->widget();
-            delete item;
-        }
-        auto channels = player->channel_names();
-        for (int i = 0; i < channels.size(); i++) {
-            auto *w = new ChannelWidget(QString::fromStdString(channels[i]), i, player);
-            channel_lt->addWidget(w, i/2, i%2);
-        }
+        auto names = player->channel_names();
+        for (auto &c : channels)
+            c->reset();
+        for (int i = 0; i < names.size(); i++)
+            channels[i]->set_name(QString::fromStdString(names[i]));
     });
 
     player->on_error([=, this] (gmplayer::Error error) {
@@ -457,7 +462,12 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
                 std::make_tuple(new QLabel(tr("Comment:")), labels[gmplayer::Metadata::Comment]),
                 std::make_tuple(new QLabel(tr("Dumper:")),  labels[gmplayer::Metadata::Dumper])
             ),
-            channel_box
+            make_groupbox<QGridLayout>("Channels",
+                std::make_tuple(channels[0], 0, 0), std::make_tuple(channels[1], 0, 1),
+                std::make_tuple(channels[2], 1, 0), std::make_tuple(channels[3], 1, 1),
+                std::make_tuple(channels[4], 2, 0), std::make_tuple(channels[5], 2, 1),
+                std::make_tuple(channels[6], 3, 0), std::make_tuple(channels[7], 3, 1)
+            )
         )
     );
 }
@@ -604,22 +614,25 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
         }
     });
 
+    auto *lt = make_layout<QHBoxLayout>(
+        prev_track,
+        play_btn,
+        next_track,
+        stop_btn,
+        tempo,
+        tempo_label,
+        volume_btn,
+        volume_slider
+    );
+    lt->insertStretch(4);
+
     setLayout(
         make_layout<QVBoxLayout>(
             make_layout<QHBoxLayout>(
                 duration_slider,
                 duration_label
             ),
-            make_layout<QHBoxLayout>(
-                prev_track,
-                play_btn,
-                next_track,
-                stop_btn,
-                tempo,
-                tempo_label,
-                volume_btn,
-                volume_slider
-            )
+            lt
         )
     );
 }

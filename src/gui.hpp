@@ -93,12 +93,6 @@ signals:
     void context_menu(const QPoint &p);
 };
 
-class ChannelWidget : public QWidget {
-    Q_OBJECT
-public:
-    ChannelWidget(const QString &name, int index, gmplayer::Player *player, QWidget *parent = nullptr);
-};
-
 class PlaylistTab : public QWidget {
     Q_OBJECT
     Playlist *filelist;
@@ -114,11 +108,21 @@ class Visualizer : public QGraphicsView {
     std::span<i16> data;
     int channel, channel_size, num_channels;
 public:
-    Visualizer(std::span<i16> data, int channel, int channel_size, int num_channels, QWidget *parent);
+    Visualizer(std::span<i16> data, int channel, int channel_size, int num_channels, QWidget *parent = nullptr);
     void showEvent(QShowEvent *);
     void resizeEvent(QResizeEvent *ev);
 public slots:
     void render();
+};
+
+class ChannelWidget : public QWidget {
+    Q_OBJECT
+    int index;
+    QLabel *label;
+public:
+    ChannelWidget(int index, gmplayer::Player *player, QWidget *parent = nullptr);
+    void set_name(const QString &name);
+    void reset();
 };
 
 class VisualizerTab : public QWidget {
