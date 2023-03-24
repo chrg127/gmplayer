@@ -336,40 +336,35 @@ PlaylistTab::PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions
 
 
 
-Visualizer::Visualizer(QWidget *parent)
+Visualizer::Visualizer(std::span<i16> data, int channel, int channel_size, int num_channels, QWidget *parent)
     : QGraphicsView(parent)
+    , scene{new QGraphicsScene(this)}
+    , data{data}
+    , channel{channel}
+    , channel_size{channel_size}
+    , num_channels{num_channels}
 {
-    scene = new QGraphicsScene(this);
     setScene(scene);
-    width = 100;
-    height = 100;
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    connect(this, &Visualizer::updated, this, &Visualizer::render);
-    std::fill(data.begin(), data.end(), 0);
     render();
 }
 
 void Visualizer::render()
 {
-    auto size = viewport()->size();
-    auto width = size.width();
+    auto size   = viewport()->size();
+    auto width  = size.width();
     auto height = size.height();
     QPixmap image{width, height};
     image.fill({0, 0, 0});
     QPainter painter{&image};
     painter.setPen({0xff, 0xff, 0xff});
-    visualizer::plot(data, width, height, [&] (auto p, auto q) {
+    // visualizer::plot(data, width, height, 0, 2, 1, [&] (auto p, auto q) {
+    visualizer::plot(data, width, height, channel, channel_size, num_channels, [&] (auto p, auto q) {
         painter.drawLine(QPoint(p[0], p[1]), QPoint(q[0], q[1]));
     });
     scene->clear();
     scene->addPixmap(image);
-}
-
-void Visualizer::update_data(std::span<i16> newdata)
-{
-    std::copy(newdata.begin(), newdata.end(), data.begin());
-    emit updated();
 }
 
 void Visualizer::showEvent(QShowEvent *ev)
@@ -386,6 +381,36 @@ void Visualizer::resizeEvent(QResizeEvent *ev)
 
 
 
+VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
+    : QWidget(parent)
+{
+    std::fill(data.begin(), data.end(), 0);
+
+    auto *lt = new QGridLayout;
+
+    player->on_track_changed([=, this] (int, const gmplayer::Metadata &) {
+        auto channels = player->channel_names();
+        for (auto *item = lt->takeAt(0); item; item = lt->takeAt(0)) {
+            delete item->widget();
+            delete item;
+        }
+        for (int i = 0; i < channels.size(); i++) {
+            auto *v = new Visualizer(data, i, 4, 8, this);
+            connect(this, &VisualizerTab::updated, v, &Visualizer::render);
+            lt->addWidget(v, i/2, i%2);
+        }
+    });
+
+    player->on_samples_played([=, this] (std::span<i16> newdata) {
+        std::copy(newdata.begin(), newdata.end(), data.begin());
+        emit updated();
+    });
+
+    setLayout(lt);
+}
+
+
+
 CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
@@ -397,8 +422,6 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
     auto *channel_box = new QGroupBox("Channels");
     channel_box->setLayout(channel_lt);
 
-    auto *visualizer = new Visualizer;
-
     player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
         for (int i = 0; i < labels.size(); i++)
             labels[i]->setText(QString::fromStdString(metadata.info[i]));
@@ -409,12 +432,8 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
         auto channels = player->channel_names();
         for (int i = 0; i < channels.size(); i++) {
             auto *w = new ChannelWidget(QString::fromStdString(channels[i]), i, player);
-            channel_lt->addWidget(w, i % 4, i / 4);
+            channel_lt->addWidget(w, i/2, i%2);
         }
-    });
-
-    player->on_samples_played([=, this] (std::span<i16> data) {
-        visualizer->update_data(data);
     });
 
     player->on_error([=, this] (gmplayer::Error error) {
@@ -438,8 +457,7 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
                 std::make_tuple(new QLabel(tr("Comment:")), labels[gmplayer::Metadata::Comment]),
                 std::make_tuple(new QLabel(tr("Dumper:")),  labels[gmplayer::Metadata::Dumper])
             ),
-            channel_box,
-            visualizer
+            channel_box
         )
     );
 }
@@ -670,12 +688,15 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
             );
     });
 
-    auto *playlist_tab = new PlaylistTab(player, options);
+    // tabs
+    auto *playlist_tab          = new PlaylistTab(player, options);
     auto *currently_playing_tab = new CurrentlyPlayingTab(player);
+    auto *visualizer_tab        = new VisualizerTab(player);
     auto *controls = new Controls(player, options);
     auto *tabs = make_tabs(
-        std::tuple { playlist_tab, "Playlists" },
-        std::tuple { currently_playing_tab, "Current Track" }
+        std::tuple { playlist_tab,          "Playlists" },
+        std::tuple { currently_playing_tab, "Current Track" },
+        std::tuple { visualizer_tab,        "Visualizer" }
     );
 
     playlist_tab->setup_context_menu([=, this] (const QPoint &p) {
@@ -707,6 +728,15 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         });
         menu.exec(p);
     });
+
+    // player->on_samples_played([=, this, i = 0] (std::span<i16> data) mutable {
+    //     auto f = io::File::open("samples-" + std::to_string(i) + ".txt", io::Access::Write);
+    //     for (auto sample : data)
+    //         fprintf(f.value().data(), "%d\n", sample);
+    //     i = i +1;
+    //     if (i == 5)
+    //         std::exit(1);
+    // });
 
     auto *center = new QWidget(this);
     setCentralWidget(center);

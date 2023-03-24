@@ -111,14 +111,21 @@ public:
 class Visualizer : public QGraphicsView {
     Q_OBJECT
     QGraphicsScene *scene;
-    int width, height;
-    std::array<i16, gmplayer::SAMPLES_SIZE> data;
+    std::span<i16> data;
+    int channel, channel_size, num_channels;
 public:
-    Visualizer(QWidget *parent = nullptr);
-    void update_data(std::span<i16> newdata);
-    void render();
+    Visualizer(std::span<i16> data, int channel, int channel_size, int num_channels, QWidget *parent);
     void showEvent(QShowEvent *);
     void resizeEvent(QResizeEvent *ev);
+public slots:
+    void render();
+};
+
+class VisualizerTab : public QWidget {
+    Q_OBJECT
+    std::array<i16, gmplayer::SAMPLES_SIZE * 8> data;
+public:
+    VisualizerTab(gmplayer::Player *player, QWidget *parent = nullptr);
 signals:
     void updated();
 };
