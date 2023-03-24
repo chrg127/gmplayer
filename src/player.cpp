@@ -13,68 +13,9 @@ namespace fs = std::filesystem;
 
 namespace gmplayer {
 
-namespace {
-    /*
-     * problem: we have one single player and we'd like to make it into a class to use
-     * actual ctors and dtors (instead of manually calling an init() and free().
-     * we can't make it global due to global ctors running before main().
-     * solution: let us created more than one player (this is feasible and makes sense anyway, since
-     * we can open multiple audio devices) and use this thing here that lets us register more players
-     * and select which one to use. audio_callback() will select the 'current' player and call
-     * Player::audio_callback for it.
-     */
-    struct {
-        std::vector<Player *> players;
-        int cur = 0;
-
-        int add(Player *player)     { players.push_back(player); return players.size() - 1; }
-        Player & get()              { return *players[cur]; }
-        void change_cur_to(int id)  { cur = id; }
-    } object_handler;
-}
-
-// this must be in the global scope for the friend declaration inside Player to work.
-void audio_callback(void *, u8 *stream, int len)
-{
-    object_handler.get().audio_callback({stream, std::size_t(len)});
-}
-
-void Playlist::regen() { std::iota(order.begin(), order.end(), 0); }
+void Playlist::regen()         { std::iota(order.begin(), order.end(), 0); }
 void Playlist::regen(int size) { order.resize(size); regen(); }
-void Playlist::shuffle() { std::shuffle(order.begin(), order.end(), rng::rng); }
-
-
-void Player::audio_callback(std::span<u8> stream)
-{
-    if (!format)
-        return;
-    auto pos = format->position();
-    if (format->track_ended()) {
-        SDL_PauseAudioDevice(audio.dev_id, 1);
-        track_ended();
-        if (opts.autoplay)
-            next();
-        return;
-    }
-    auto res = format->play();
-    if (!res) {
-        SDL_PauseAudioDevice(audio.dev_id, 1);
-        error(res.error());
-    }
-    auto &samples = res.value();
-    // fill stream with silence. this is needed for MixAudio to work how we want.
-    std::fill(stream.begin(), stream.end(), 0);
-    // we could also use memcpy here, but then we wouldn't have volume control
-    SDL_MixAudioFormat(
-        stream.data(), (const u8 *) samples.data(), audio.spec.format,
-        samples.size() * sizeof(i16), opts.volume
-    );
-    mpris->set_position(pos * 1000);
-    position_changed(pos);
-    samples_played(samples);
-}
-
-
+void Playlist::shuffle()       { std::shuffle(order.begin(), order.end(), rng::rng); }
 
 Player::Player(PlayerOptions &&options)
 {
@@ -86,18 +27,19 @@ Player::Player(PlayerOptions &&options)
     files.repeat           = options.file_repeat;
     tracks.repeat          = options.track_repeat;
 
-    SDL_AudioSpec desired = {};
-    desired.freq     = 44100;
-    desired.format   = AUDIO_S16SYS;
-    desired.channels = CHANNELS;
-    desired.samples  = SAMPLES;
-    desired.callback = gmplayer::audio_callback;
-    desired.userdata = nullptr;
-    audio.dev_id = SDL_OpenAudioDevice(nullptr, 0, &desired, &audio.spec, 0);
+    audio.spec.freq     = 44100;
+    audio.spec.format   = AUDIO_S16SYS;
+    audio.spec.channels = CHANNELS;
+    audio.spec.samples  = SAMPLES;
+    audio.spec.userdata = this;
+    audio.spec.callback = [] (void *userdata, u8 *stream, int length) {
+        ((Player *) userdata)->audio_callback({stream, std::size_t(length)});
+    };
+    audio.dev_id = SDL_OpenAudioDevice(nullptr, 0, &audio.spec, &audio.spec, 0);
     audio.mutex  = SDLMutex(audio.dev_id);
 
-    audio.id = object_handler.add(this);
-    object_handler.change_cur_to(audio.id);
+    // audio.id = object_handler.add(this);
+    // object_handler.change_cur_to(audio.id);
     format = std::make_unique<Default>();
 
     mpris = mpris::make_server("gmplayer");
@@ -149,6 +91,43 @@ Player::~Player()
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     SDL_CloseAudioDevice(audio.dev_id);
+}
+
+void Player::audio_callback(std::span<u8> stream)
+{
+    if (!format)
+        return;
+    auto pos = format->position();
+    mpris->set_position(pos * 1000);
+    position_changed(pos);
+    if (format->track_ended()) {
+        SDL_PauseAudioDevice(audio.dev_id, 1);
+        track_ended();
+        if (opts.autoplay)
+            next();
+        return;
+    }
+    // fill stream with silence
+    std::fill(stream.begin(), stream.end(), 0);
+    if (format->multi_channel()) {
+        std::array<i16, SAMPLES_SIZE * 8> samples;
+        for (auto i = 0u; i < 8; i++) {
+            if (auto err = format->play({samples.data() + SAMPLES_SIZE * i, SAMPLES_SIZE}); err) {
+                error(err);
+                return;
+            }
+        }
+        // SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, stream.size(), opts.volume);
+        samples_played(samples);
+    } else {
+        std::array<i16, SAMPLES_SIZE> samples;
+        if (auto err = format->play(samples); err) {
+            error(err);
+            return;
+        }
+        SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(i16), opts.volume);
+        samples_played(samples);
+    }
 }
 
 Error Player::add_file_internal(fs::path path)

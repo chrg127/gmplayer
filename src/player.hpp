@@ -44,8 +44,8 @@ struct Playlist {
     void regen();
     void regen(int size);
     void shuffle();
-    void clear() { order.clear(); current = -1; }
-    void remove(int i) { order.erase(order.begin() + i); }
+    void clear()         { order.clear(); current = -1; }
+    void remove(int i)   { order.erase(order.begin() + i); }
 
     int move(int i, int pos)
     {
@@ -94,7 +94,6 @@ class Player {
     std::unique_ptr<mpris::Server> mpris = nullptr;
 
     struct {
-        int id                   = 0;
         SDL_AudioDeviceID dev_id = 0;
         mutable SDLMutex mutex;
         SDL_AudioSpec spec;
@@ -109,7 +108,6 @@ class Player {
     } opts;
 
     void audio_callback(std::span<u8> stream);
-    friend void audio_callback(void *, u8 *stream, int len);
     Error add_file_internal(std::filesystem::path path);
 
 public:

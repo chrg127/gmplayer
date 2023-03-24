@@ -47,6 +47,7 @@ Error GME::open(std::span<const u8> data, int frequency)
     if (type_str == "")
         return Error(ErrType::Header, "invalid header");
     auto type = gme_identify_extension(type_str);
+    // emu = gme_new_emu(type, frequency);
     emu = gme_new_emu_multi_channel(type, frequency);
     if (!emu)
         return Error(ErrType::LoadFile, "out of memory");
@@ -68,12 +69,10 @@ Error GME::start_track(int n)
     return err ? Error(ErrType::LoadTrack, err) : Error();
 }
 
-PlayResult GME::play()
+Error GME::play(std::span<i16> out)
 {
-    std::array<i16, SAMPLES_SIZE> buf;
-    auto err = gme_play(emu, SAMPLES_SIZE, (short *) buf.data());
-    return err ? tl::unexpected(Error(ErrType::Play, err))
-               : PlayResult(buf);
+    auto err = gme_play(emu, out.size(), out.data());
+    return err ? Error(ErrType::Play, err) : Error{};
 }
 
 Error GME::seek(int n)

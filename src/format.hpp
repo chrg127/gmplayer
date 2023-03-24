@@ -22,14 +22,12 @@ struct Metadata {
     std::array<std::string, 7> info;
 };
 
-using PlayResult = tl::expected<std::array<i16, SAMPLES_SIZE>, Error>;
-
 struct Interface {
     virtual ~Interface() = default;
     virtual Error       open(std::span<const u8> data, int frequency)       = 0;
     virtual Error       load_m3u(std::filesystem::path path)                = 0;
     virtual Error       start_track(int n)                                  = 0;
-    virtual PlayResult  play()                                              = 0;
+    virtual Error       play(std::span<i16> out)                            = 0;
     virtual Error       seek(int n)                                         = 0;
     virtual int         position()                                    const = 0;
     virtual int         track_count()                                 const = 0;
@@ -48,7 +46,7 @@ struct Default : public Interface {
     Error       open(std::span<const u8> data, int frequency)       override { return Error{}; }
     Error       load_m3u(std::filesystem::path path)                override { return Error{}; }
     Error       start_track(int n)                                  override { return Error{}; }
-    PlayResult  play()                                              override { return PlayResult{}; }
+    Error       play(std::span<i16> out)                            override { return Error{}; }
     Error       seek(int n)                                         override { return Error{}; }
     int         position()                                    const override { return 0; }
     int         track_count()                                 const override { return 0; }
@@ -70,7 +68,7 @@ public:
     Error       open(std::span<const u8> data, int frequency)       override;
     Error       load_m3u(std::filesystem::path path)                override;
     Error       start_track(int n)                                  override;
-    PlayResult  play()                                              override;
+    Error       play(std::span<i16> out)                            override;
     Error       seek(int n)                                         override;
     int         position()                                    const override;
     int         track_count()                                 const override;
