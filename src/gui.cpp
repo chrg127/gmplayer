@@ -348,10 +348,10 @@ void Visualizer::render()
     image.fill({0, 0, 0});
     QPainter painter{&image};
     painter.setPen({0xff, 0xff, 0xff});
-    // visualizer::plot(data, width, height, 0, 2, 1, [&] (auto p, auto q) {
     visualizer::plot(data, width, height, channel, channel_size, num_channels, [&] (auto p, auto q) {
         painter.drawLine(QPoint(p[0], p[1]), QPoint(q[0], q[1]));
     });
+    painter.drawText(8, height - 8, name);
     scene->clear();
     scene->addPixmap(image);
 }
@@ -373,33 +373,44 @@ void Visualizer::resizeEvent(QResizeEvent *ev)
 VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
-    std::fill(data.begin(), data.end(), 0);
-    std::array<Visualizer *, 8> single;
+    full = new Visualizer(full_data, 0, 2, 1);
+    connect(this, &VisualizerTab::updated, full, &Visualizer::render);
+    full->set_name(tr("Full"));
     for (int i = 0; i < 8; i++) {
-        single[i] = new Visualizer(data, i, 4, 8);
+        single[i] = new Visualizer(single_data, i, 4, 8);
         connect(this, &VisualizerTab::updated, single[i], &Visualizer::render);
         single[i]->setVisible(false);
     }
 
-    player->on_track_changed([=, this] (int, const gmplayer::Metadata &) {
-        auto channels = player->channel_names();
+    player->on_file_changed([=, this] (int) {
         for (auto &s : single)
             s->setVisible(false);
-        for (int i = 0; i < channels.size(); i++)
-            single[i]->setVisible(true);
+        if (player->is_multi_channel()) {
+            auto channels = player->channel_names();
+            for (int i = 0; i < channels.size(); i++) {
+                single[i]->set_name(QString::fromStdString(channels[i]));
+                single[i]->setVisible(true);
+            }
+        }
     });
 
-    player->on_samples_played([=, this] (std::span<i16> newdata) {
-        std::copy(newdata.begin(), newdata.end(), data.begin());
+    player->on_samples_played([=, this] (std::span<i16> new_single_data, std::span<i16> new_full_data) {
+        std::copy(new_single_data.begin(), new_single_data.end(), single_data.begin());
+        std::copy(new_full_data.begin(),   new_full_data.end(),   full_data.begin());
         emit updated();
     });
 
-    setLayout(make_layout<QGridLayout>(
-        std::make_tuple(single[0], 0, 0), std::make_tuple(single[1], 0, 1),
-        std::make_tuple(single[2], 1, 0), std::make_tuple(single[3], 1, 1),
-        std::make_tuple(single[4], 2, 0), std::make_tuple(single[5], 2, 1),
-        std::make_tuple(single[6], 3, 0), std::make_tuple(single[7], 3, 1)
-    ));
+    setLayout(
+        make_layout<QVBoxLayout>(
+            full,
+            make_layout<QGridLayout>(
+                std::make_tuple(single[0], 0, 0), std::make_tuple(single[1], 0, 1),
+                std::make_tuple(single[2], 1, 0), std::make_tuple(single[3], 1, 1),
+                std::make_tuple(single[4], 2, 0), std::make_tuple(single[5], 2, 1),
+                std::make_tuple(single[6], 3, 0), std::make_tuple(single[7], 3, 1)
+            )
+        )
+    );
 }
 
 

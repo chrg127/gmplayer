@@ -109,25 +109,23 @@ void Player::audio_callback(std::span<u8> stream)
     }
     // fill stream with silence
     std::fill(stream.begin(), stream.end(), 0);
+    std::array<i16, SAMPLES_SIZE * 8> samples_single = {};
+    std::array<i16, SAMPLES_SIZE>     samples        = {};
     if (format->multi_channel()) {
-        std::array<i16, SAMPLES_SIZE * 8> samples;
         for (auto i = 0u; i < 8; i++) {
-            if (auto err = format->play({samples.data() + SAMPLES_SIZE * i, SAMPLES_SIZE}); err) {
+            if (auto err = format->play({samples_single.data() + SAMPLES_SIZE * i, SAMPLES_SIZE}); err) {
                 error(err);
                 return;
             }
         }
-        // SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, stream.size(), opts.volume);
-        samples_played(samples);
     } else {
-        std::array<i16, SAMPLES_SIZE> samples;
         if (auto err = format->play(samples); err) {
             error(err);
             return;
         }
         SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(i16), opts.volume);
-        samples_played(samples);
     }
+    samples_played(samples_single, samples);
 }
 
 Error Player::add_file_internal(fs::path path)
@@ -248,6 +246,8 @@ void Player::clear()
 
 const io::MappedFile &Player::current_file()  const { std::lock_guard<SDLMutex> lock(audio.mutex); return  file_cache[ files.order[ files.current]]; }
 const       Metadata &Player::current_track() const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[tracks.current]]; }
+
+bool Player::is_multi_channel() const { return format->multi_channel(); }
 
 bool Player::is_playing() const
 {
