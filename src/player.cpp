@@ -478,4 +478,9 @@ void Player::set_volume_relative(int offset)
     volume_changed(opts.volume);
 }
 
+bool is_playlist(std::filesystem::path filename)
+{
+    return filename.extension() == ".playlist";
+}
+
 } // namespace gmplayer

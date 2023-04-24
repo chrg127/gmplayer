@@ -176,7 +176,6 @@ class MainWindow : public QMainWindow {
     QString save_dialog(const QString &window_name, const QString &filter);
     void load_shortcuts();
     std::optional<QString> add_files(std::span<std::filesystem::path> paths);
-    void open_playlist(std::filesystem::path file_path);
     void open_file(std::filesystem::path filename);
     void edit_settings();
     void edit_shortcuts();
@@ -187,6 +186,7 @@ class MainWindow : public QMainWindow {
 
 public:
     MainWindow(gmplayer::Player *player, QWidget *parent = nullptr);
+    void open_playlist(std::filesystem::path file_path);
     void open_files(std::span<std::filesystem::path> paths, OpenFilesFlags flags = OpenFilesFlags::None);
 };
 

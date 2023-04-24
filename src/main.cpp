@@ -71,10 +71,14 @@ int main(int argc, char *argv[])
 
     mw.show();
     if (argc > 1) {
-        std::vector<std::filesystem::path> filenames;
-        for (int i = 1; i < argc; i++)
-            filenames.push_back(std::filesystem::path(argv[i]));
-        mw.open_files(filenames, gui::OpenFilesFlags::AddToRecent | gui::OpenFilesFlags::ClearAndPlay);
+        if (argc == 2 && gmplayer::is_playlist(std::filesystem::path(argv[1]))) {
+            mw.open_playlist(std::filesystem::path(argv[1]));
+        } else {
+            std::vector<std::filesystem::path> filenames;
+            for (int i = 1; i < argc; i++)
+                filenames.push_back(std::filesystem::path(argv[i]));
+            mw.open_files(filenames, gui::OpenFilesFlags::AddToRecent | gui::OpenFilesFlags::ClearAndPlay);
+        }
     }
 
     a.exec();

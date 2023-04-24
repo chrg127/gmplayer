@@ -193,5 +193,6 @@ public:                                             \
 
 // this is here for portability
 inline constexpr int get_max_volume_value() { return SDL_MIX_MAXVOLUME; }
+bool is_playlist(std::filesystem::path filename);
 
 } // namespace gmplayer

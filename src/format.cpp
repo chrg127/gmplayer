@@ -44,7 +44,7 @@ GME::~GME()
 Error GME::open(std::span<const u8> data, int frequency)
 {
     auto type_str = gme_identify_header(data.data());
-    if (type_str == "")
+    if (strcmp(type_str, "") == 0)
         return Error(ErrType::Header, "invalid header");
     auto type = gme_identify_extension(type_str);
     // emu = gme_new_emu(type, frequency);
