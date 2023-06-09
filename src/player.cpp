@@ -28,9 +28,9 @@ Player::Player(PlayerOptions &&options)
     tracks.repeat          = options.track_repeat;
 
     audio.spec.freq     = 44100;
-    audio.spec.format   = AUDIO_S16SYS;
+    audio.spec.format   = /*AUDIO_F32;*/ AUDIO_S16SYS;
     audio.spec.channels = CHANNELS;
-    audio.spec.samples  = SAMPLES;
+    audio.spec.samples  = NUM_FRAMES;
     audio.spec.userdata = this;
     audio.spec.callback = [] (void *userdata, u8 *stream, int length) {
         ((Player *) userdata)->audio_callback({stream, std::size_t(length)});
@@ -107,25 +107,26 @@ void Player::audio_callback(std::span<u8> stream)
             next();
         return;
     }
-    // fill stream with silence
-    std::fill(stream.begin(), stream.end(), 0);
-    std::array<i16, SAMPLES_SIZE * 8> samples_single = {};
-    std::array<i16, SAMPLES_SIZE>     samples        = {};
-    if (format->multi_channel()) {
-        for (auto i = 0u; i < 8; i++) {
-            if (auto err = format->play({samples_single.data() + SAMPLES_SIZE * i, SAMPLES_SIZE}); err) {
-                error(err);
-                return;
+    std::fill(stream.begin(), stream.end(), 0); // fill stream with silence
+    std::array<i16, SAMPLES_SIZE * NUM_VOICES> separated = {};
+    std::array<i16, SAMPLES_SIZE>              mixed     = {};
+    auto multi = format->multi_channel();
+    auto err = multi ? format->play(separated) : format->play(mixed);
+    if (err) {
+        error(err);
+        return;
+    }
+    if (multi) {
+        for (auto f = 0u; f < NUM_FRAMES; f++) {
+            for (auto t = 0u; t < NUM_VOICES; t++) {
+                mixed[f*2 + 0] += separated[FRAME_SIZE*f + t*CHANNELS + 0] / 2;
+                mixed[f*2 + 1] += separated[FRAME_SIZE*f + t*CHANNELS + 1] / 2;
             }
         }
-    } else {
-        if (auto err = format->play(samples); err) {
-            error(err);
-            return;
-        }
-        SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(i16), opts.volume);
     }
-    samples_played(samples_single, samples);
+    auto &samples = mixed;
+    SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(i16), opts.volume);
+    samples_played(separated, mixed);
 }
 
 Error Player::add_file_internal(fs::path path)

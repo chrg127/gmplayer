@@ -10,9 +10,11 @@ class Music_Emu;
 
 namespace gmplayer {
 
-const int SAMPLES   = 2048;
-const int CHANNELS  = 2;
-const int SAMPLES_SIZE = SAMPLES * CHANNELS;
+const int NUM_FRAMES    = 2048;
+const int CHANNELS      = 2;
+const int NUM_VOICES    = 8;
+const int SAMPLES_SIZE  = NUM_FRAMES * CHANNELS;
+const int FRAME_SIZE    = NUM_VOICES * CHANNELS;
 
 struct Metadata {
     enum {

@@ -47,7 +47,6 @@ Error GME::open(std::span<const u8> data, int frequency)
     if (strcmp(type_str, "") == 0)
         return Error(ErrType::Header, "invalid header");
     auto type = gme_identify_extension(type_str);
-    // emu = gme_new_emu(type, frequency);
     emu = gme_new_emu_multi_channel(type, frequency);
     if (!emu)
         return Error(ErrType::LoadFile, "out of memory");

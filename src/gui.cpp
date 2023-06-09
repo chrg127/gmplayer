@@ -377,7 +377,7 @@ VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
     connect(this, &VisualizerTab::updated, full, &Visualizer::render);
     full->set_name(tr("Full"));
     for (int i = 0; i < 8; i++) {
-        single[i] = new Visualizer(single_data, i, 4, 8);
+        single[i] = new Visualizer(single_data, i, 2, 8);
         connect(this, &VisualizerTab::updated, single[i], &Visualizer::render);
         single[i]->setVisible(false);
     }

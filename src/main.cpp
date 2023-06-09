@@ -40,6 +40,10 @@ void save_player_options(const gmplayer::PlayerOptions &options)
     settings.endGroup();
 }
 
+#define USE_QT 1
+
+#if USE_QT
+
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
@@ -89,3 +93,48 @@ int main(int argc, char *argv[])
     SDL_Quit();
     return 0;
 }
+
+#else
+
+// a second main to test features directly without involving qt stuff.
+int main()
+{
+    SDL_Init(SDL_INIT_AUDIO);
+
+    gmplayer::Player player{load_player_options()};
+
+    player.mpris_server().set_desktop_entry(QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "gmplayer.desktop").toStdString());
+    player.mpris_server().set_identity("gmplayer");
+    player.mpris_server().set_supported_uri_schemes({"file"});
+    player.mpris_server().set_supported_mime_types({"application/x-pkcs7-certificates", "application/octet-stream", "text/plain"});
+    player.mpris_server().on_quit([] { QApplication::quit(); });
+
+    auto err = player.add_file(std::filesystem::path{"test_files/smb3.nsf"});
+    if (err) {
+        printf("%s\n", err.code.message().c_str());
+        return 1;
+    }
+
+    player.on_error([&] (auto err) { printf("%s\n", err.code.message().c_str()); });
+    player.load_file(0);
+    player.load_track(0);
+    player.seek(1_sec);
+    player.start_or_resume();
+
+    bool sdl_running = true;
+    while (sdl_running) {
+        for (SDL_Event ev; SDL_PollEvent(&ev); ) {
+            switch (ev.type) {
+            case SDL_QUIT:
+                sdl_running = false;
+            }
+        }
+
+        SDL_Delay(16);
+    }
+
+    SDL_Quit();
+    return 0;
+}
+
+#endif
