@@ -95,8 +95,6 @@ Player::~Player()
 
 void Player::audio_callback(std::span<u8> stream)
 {
-    if (!format)
-        return;
     auto pos = format->position();
     mpris->set_position(pos * 1000);
     position_changed(pos);
@@ -173,23 +171,22 @@ bool Player::load_file(int fileno)
     pause();
     track_cache.clear();
     files.current = fileno;
-    auto res = read_file(current_file(), 44100);
+    auto res = read_file(current_file(), 44100, opts.default_duration);
     if (!res) {
         format = std::make_unique<Default>();
-        tracks.regen(track_cache.size());
-        playlist_changed(List::Track);
-        file_changed(fileno);
         error(res.error());
-        return true;
     } else {
         format = std::move(res.value());
+        auto err = format->load_m3u(current_file().file_path().replace_extension("m3u"));
+        if (err)
+            printf("%s\n", err.code.message().c_str());
         for (int i = 0; i < format->track_count(); i++)
-            track_cache.push_back(format->track_metadata(i, opts.default_duration));
-        tracks.regen(track_cache.size());
-        playlist_changed(List::Track);
-        file_changed(fileno);
-        return false;
+            track_cache.push_back(format->track_metadata(i));
     }
+    tracks.regen(track_cache.size());
+    playlist_changed(List::Track);
+    file_changed(fileno);
+    return !bool(res);
 }
 
 bool Player::load_track(int trackno)

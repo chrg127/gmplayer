@@ -27,6 +27,13 @@ struct GMEErrorCategory : public std::error_category {
 
 static GMEErrorCategory errcat;
 
+int get_length(gme_info_t *info, int def)
+{
+    return info->length      > 0 ? info->length
+         : info->loop_length > 0 ? info->intro_length + info->loop_length * 2
+         : def;
+}
+
 } // namespace
 
 Error::Error(ErrType e, std::string_view s)
@@ -41,8 +48,9 @@ GME::~GME()
     }
 }
 
-Error GME::open(std::span<const u8> data, int frequency)
+Error GME::open(std::span<const u8> data, int frequency, int default_length)
 {
+    this->default_length = default_length;
     auto type_str = gme_identify_header(data.data());
     if (strcmp(type_str, "") == 0)
         return Error(ErrType::Header, "invalid header");
@@ -62,9 +70,13 @@ Error GME::load_m3u(std::filesystem::path path)
     return err ? Error(ErrType::LoadM3U, err) : Error();
 }
 
-Error GME::start_track(int n)
+Error GME::start_track(int which)
 {
-    auto err = gme_start_track(emu, n);
+    auto err = gme_start_track(emu, which);
+    gme_info_t *info;
+    gme_track_info(emu, &info, which);
+    track_len = get_length(info, default_length);
+    gme_free_info(info);
     return err ? Error(ErrType::LoadTrack, err) : Error();
 }
 
@@ -94,15 +106,12 @@ int GME::track_count() const
     return gme_track_count(emu);
 }
 
-Metadata GME::track_metadata(int which, int default_length)
+Metadata GME::track_metadata(int which)
 {
     gme_info_t *info;
     gme_track_info(emu, &info, which);
-    track_len = info->length      > 0 ? info->length
-              : info->loop_length > 0 ? info->intro_length + info->loop_length * 2
-              : default_length;
     auto data = Metadata {
-        .length    = track_len,
+        .length = get_length(info, default_length),
         .info = {
             info->system,
             info->game,
@@ -157,11 +166,11 @@ bool GME::multi_channel() const
     return gme_multi_channel(emu);
 }
 
-auto read_file(const io::MappedFile &file, int frequency)
+auto read_file(const io::MappedFile &file, int frequency, int default_length)
     -> tl::expected<std::unique_ptr<Interface>, Error>
 {
     auto ptr = std::make_unique<GME>();
-    if (auto err = ptr->open(file.bytes(), frequency); err)
+    if (auto err = ptr->open(file.bytes(), frequency, default_length); err)
         return tl::unexpected(err);
     return ptr;
 }
