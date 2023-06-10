@@ -34,6 +34,7 @@ struct PlayerOptions {
     int default_duration    = 3 * 60 * 1000ull;
     double tempo            = 1.0;
     int volume              = SDL_MIX_MAXVOLUME;
+    bool load_m3u           = true;
 };
 
 struct Playlist {
@@ -105,6 +106,7 @@ class Player {
         int fade_out;
         int volume;
         double tempo;
+        bool load_m3u;
     } opts;
 
     void audio_callback(std::span<u8> stream);
@@ -161,6 +163,7 @@ public:
     void set_file_repeat(bool value);
     void set_volume(int value);
     void set_volume_relative(int offset);
+    void set_load_m3u(bool value);
 
     mpris::Server &mpris_server() { return *mpris; }
 

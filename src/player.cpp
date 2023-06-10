@@ -177,9 +177,11 @@ bool Player::load_file(int fileno)
         error(res.error());
     } else {
         format = std::move(res.value());
-        auto err = format->load_m3u(current_file().file_path().replace_extension("m3u"));
-        if (err)
-            printf("%s\n", err.code.message().c_str());
+        if (opts.load_m3u) {
+            auto err = format->load_m3u(current_file().file_path().replace_extension("m3u"));
+            if (err)
+                printf("%s\n", err.code.message().c_str());
+        }
         for (int i = 0; i < format->track_count(); i++)
             track_cache.push_back(format->track_metadata(i));
     }
@@ -412,6 +414,7 @@ PlayerOptions Player::options()
         .default_duration  = opts.default_duration,
         .tempo             = opts.tempo,
         .volume            = opts.volume,
+        .load_m3u          = opts.load_m3u,
     };
 }
 
@@ -474,6 +477,11 @@ void Player::set_volume_relative(int offset)
     std::lock_guard<SDLMutex> lock(audio.mutex);
     opts.volume += offset;
     volume_changed(opts.volume);
+}
+
+void Player::set_load_m3u(bool value)
+{
+    opts.load_m3u = value;
 }
 
 bool is_playlist(std::filesystem::path filename)

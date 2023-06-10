@@ -20,7 +20,8 @@ gmplayer::PlayerOptions load_player_options()
         .file_repeat        = settings.value("file_repeat",                        false).toBool(),
         .default_duration   = settings.value("default_duration",              int(3_min)).toInt(),
         .tempo              = settings.value("tempo",                                1.0).toDouble(),
-        .volume             = settings.value("volume",  gmplayer::get_max_volume_value()).toInt()
+        .volume             = settings.value("volume",  gmplayer::get_max_volume_value()).toInt(),
+        .load_m3u           = settings.value("loadm3u",                             true).toBool(),
     };
     settings.endGroup();
     return options;
@@ -37,6 +38,7 @@ void save_player_options(const gmplayer::PlayerOptions &options)
     settings.setValue("default_duration",  options.default_duration);
     settings.setValue("tempo",             options.tempo);
     settings.setValue("volume",            options.volume);
+    settings.setValue("loadm3u",           options.load_m3u);
     settings.endGroup();
 }
 
