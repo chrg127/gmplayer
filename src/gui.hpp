@@ -4,6 +4,7 @@
 #include <span>
 #include <string>
 #include <optional>
+#include <filesystem>
 #include <QObject>
 #include <QWidget>
 #include <QMainWindow>
@@ -11,15 +12,12 @@
 #include <QPushButton>
 #include <QStringList>
 #include <QGraphicsView>
+#include "common.hpp"
 #include "keyrecorder.hpp"
 #include "error.hpp"
+#include "format.hpp"
 #include "player.hpp"
-#include "common.hpp"
 
-namespace gmplayer {
-    class Player;
-    class PlayerOptions;
-}
 class QShortcut;
 class QMenu;
 class QToolButton;

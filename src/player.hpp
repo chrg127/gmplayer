@@ -6,17 +6,13 @@
 #include <span>
 #include <vector>
 #include <SDL_audio.h> // SDL_AudioDeviceID
-#include "mpris_server.hpp"
 #include "common.hpp"
-#include "io.hpp"
 #include "format.hpp"
 
-namespace gmplayer {
+namespace mpris { struct Server; }
+namespace io { class File; class MappedFile; }
 
-namespace literals {
-    inline constexpr long long operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
-    inline constexpr long long operator"" _min(unsigned long long mins) { return mins * 60_sec; }
-}
+namespace gmplayer {
 
 struct SDLMutex {
     SDL_AudioDeviceID id;
@@ -34,7 +30,6 @@ struct PlayerOptions {
     int default_duration    = 3 * 60 * 1000ull;
     double tempo            = 1.0;
     int volume              = SDL_MIX_MAXVOLUME;
-    bool load_m3u           = true;
 };
 
 struct Playlist {
@@ -56,19 +51,15 @@ struct Playlist {
         return i+pos;
     }
 
-    std::optional<int> next() const
+    std::optional<int> get(int off, int min, int max) const
     {
-        return repeat && current != -1    ? std::optional{current}
-             : current + 1 < order.size() ? std::optional{current + 1}
+        return repeat && current != -1                    ? std::optional{current}
+             : current + off < max && current + off > min ? std::optional{current + off}
              : std::nullopt;
     }
 
-    std::optional<int> prev() const
-    {
-        return repeat && current != -1 ? std::optional{current}
-             : current - 1 >= 0        ? std::optional{current - 1}
-             : std::nullopt;
-    }
+    std::optional<int> next() const { return get(+1, -1, order.size()); }
+    std::optional<int> prev() const { return get(-1, -1, order.size()); }
 };
 
 template <typename T> class Signal;
@@ -87,12 +78,12 @@ public:
 };
 
 class Player {
-    std::unique_ptr<Interface> format = nullptr;
+    std::unique_ptr<Interface> format;
     std::vector<io::MappedFile> file_cache;
     std::vector<Metadata> track_cache;
     Playlist files;
     Playlist tracks;
-    std::unique_ptr<mpris::Server> mpris = nullptr;
+    std::unique_ptr<mpris::Server> mpris;
 
     struct {
         SDL_AudioDeviceID dev_id = 0;
@@ -106,7 +97,6 @@ class Player {
         int fade_out;
         int volume;
         double tempo;
-        bool load_m3u;
     } opts;
 
     void audio_callback(std::span<u8> stream);
@@ -118,9 +108,6 @@ public:
     Player(PlayerOptions &&options);
     ~Player();
 
-    Player(const Player &) = delete;
-    Player & operator=(const Player &) = delete;
-
     Error add_file(std::filesystem::path path);
     std::pair<std::vector<Error>, int> add_files(std::span<std::filesystem::path> path);
     void remove_file(int fileno);
@@ -129,9 +116,8 @@ public:
     void load_pair(int file, int track);
     void save_playlist(List which, io::File &to);
     void clear();
-    const io::MappedFile &current_file() const;
-    const       Metadata &current_track() const;
-    bool is_multi_channel() const;
+    const io::MappedFile & current_file()  const;
+    const Metadata       & current_track() const;
 
     bool is_playing() const;
     void start_or_resume();
@@ -142,6 +128,7 @@ public:
     void seek_relative(int off);
     int position();
     int length() const;
+    bool is_multi_channel() const;
 
     void next();
     void prev();
@@ -165,7 +152,7 @@ public:
     void set_volume_relative(int offset);
     void set_load_m3u(bool value);
 
-    mpris::Server &mpris_server() { return *mpris; }
+    mpris::Server &mpris_server();
 
 #define MAKE_SIGNAL(name, ...) \
 private:                                            \
@@ -196,6 +183,7 @@ public:                                             \
 
 // this is here for portability
 inline constexpr int get_max_volume_value() { return SDL_MIX_MAXVOLUME; }
-bool is_playlist(std::filesystem::path filename);
+
+inline bool is_playlist(std::filesystem::path filename) { return filename.extension() == ".playlist"; }
 
 } // namespace gmplayer

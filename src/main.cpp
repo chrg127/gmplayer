@@ -6,6 +6,7 @@
 #include <SDL.h>
 #include "gui.hpp"
 #include "player.hpp"
+#include "mpris_server.hpp"
 
 using namespace gmplayer::literals;
 
@@ -21,7 +22,6 @@ gmplayer::PlayerOptions load_player_options()
         .default_duration   = settings.value("default_duration",              int(3_min)).toInt(),
         .tempo              = settings.value("tempo",                                1.0).toDouble(),
         .volume             = settings.value("volume",  gmplayer::get_max_volume_value()).toInt(),
-        .load_m3u           = settings.value("loadm3u",                             true).toBool(),
     };
     settings.endGroup();
     return options;
@@ -38,7 +38,6 @@ void save_player_options(const gmplayer::PlayerOptions &options)
     settings.setValue("default_duration",  options.default_duration);
     settings.setValue("tempo",             options.tempo);
     settings.setValue("volume",            options.volume);
-    settings.setValue("loadm3u",           options.load_m3u);
     settings.endGroup();
 }
 
@@ -113,7 +112,7 @@ int main()
 
     auto err = player.add_file(std::filesystem::path{"test_files/smb3.nsf"});
     if (err) {
-        printf("%s\n", err.code.message().c_str());
+        printf("%s\n", err.message().c_str());
         return 1;
     }
 
@@ -131,7 +130,6 @@ int main()
                 sdl_running = false;
             }
         }
-
         SDL_Delay(16);
     }
 

@@ -5,9 +5,10 @@
 #include <mutex>
 #include <span>
 #include <SDL.h>
-#include <gme/gme.h>
+#include "format.hpp"
 #include "random.hpp"
 #include "io.hpp"
+#include "mpris_server.hpp"
 
 namespace fs = std::filesystem;
 
@@ -19,13 +20,13 @@ void Playlist::shuffle()       { std::shuffle(order.begin(), order.end(), rng::r
 
 Player::Player(PlayerOptions &&options)
 {
-    opts.autoplay          = options.autoplay;
-    opts.default_duration  = options.default_duration;
-    opts.fade_out          = options.fade_out;
-    opts.tempo             = options.tempo;
-    opts.volume            = options.volume;
-    files.repeat           = options.file_repeat;
-    tracks.repeat          = options.track_repeat;
+    opts.fade_out           = options.fade_out;
+    opts.autoplay           = options.autoplay;
+    files.repeat            = options.file_repeat;
+    tracks.repeat           = options.track_repeat;
+    opts.default_duration   = options.default_duration;
+    opts.tempo              = options.tempo;
+    opts.volume             = options.volume;
 
     audio.spec.freq     = 44100;
     audio.spec.format   = /*AUDIO_F32;*/ AUDIO_S16SYS;
@@ -38,9 +39,7 @@ Player::Player(PlayerOptions &&options)
     audio.dev_id = SDL_OpenAudioDevice(nullptr, 0, &audio.spec, &audio.spec, 0);
     audio.mutex  = SDLMutex(audio.dev_id);
 
-    // audio.id = object_handler.add(this);
-    // object_handler.change_cur_to(audio.id);
-    format = std::make_unique<Default>();
+    format = make_default_format();
 
     mpris = mpris::make_server("gmplayer");
     mpris->set_maximum_rate(4.0);
@@ -108,7 +107,7 @@ void Player::audio_callback(std::span<u8> stream)
     std::fill(stream.begin(), stream.end(), 0); // fill stream with silence
     std::array<i16, SAMPLES_SIZE * NUM_VOICES> separated = {};
     std::array<i16, SAMPLES_SIZE>              mixed     = {};
-    auto multi = format->multi_channel();
+    auto multi = format->is_multi_channel();
     auto err = multi ? format->play(separated) : format->play(mixed);
     if (err) {
         error(err);
@@ -173,15 +172,10 @@ bool Player::load_file(int fileno)
     files.current = fileno;
     auto res = read_file(current_file(), 44100, opts.default_duration);
     if (!res) {
-        format = std::make_unique<Default>();
+        format = make_default_format();
         error(res.error());
     } else {
         format = std::move(res.value());
-        if (opts.load_m3u) {
-            auto err = format->load_m3u(current_file().file_path().replace_extension("m3u"));
-            if (err)
-                printf("%s\n", err.code.message().c_str());
-        }
         for (int i = 0; i < format->track_count(); i++)
             track_cache.push_back(format->track_metadata(i));
     }
@@ -233,7 +227,7 @@ void Player::clear()
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     pause();
-    format = std::make_unique<Default>();
+    format = make_default_format();
     track_cache.clear();
     file_cache.clear();
     tracks.clear();
@@ -247,7 +241,7 @@ void Player::clear()
 const io::MappedFile &Player::current_file()  const { std::lock_guard<SDLMutex> lock(audio.mutex); return  file_cache[ files.order[ files.current]]; }
 const       Metadata &Player::current_track() const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[tracks.current]]; }
 
-bool Player::is_multi_channel() const { return format->multi_channel(); }
+bool Player::is_multi_channel() const { return format->is_multi_channel(); }
 
 bool Player::is_playing() const
 {
@@ -414,7 +408,6 @@ PlayerOptions Player::options()
         .default_duration  = opts.default_duration,
         .tempo             = opts.tempo,
         .volume            = opts.volume,
-        .load_m3u          = opts.load_m3u,
     };
 }
 
@@ -479,14 +472,6 @@ void Player::set_volume_relative(int offset)
     volume_changed(opts.volume);
 }
 
-void Player::set_load_m3u(bool value)
-{
-    opts.load_m3u = value;
-}
-
-bool is_playlist(std::filesystem::path filename)
-{
-    return filename.extension() == ".playlist";
-}
+mpris::Server &Player::mpris_server() { return *mpris; }
 
 } // namespace gmplayer

@@ -1,44 +1,29 @@
 #include "format.hpp"
+
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include "gme/gme.h"
+#include "io.hpp"
 
 namespace gmplayer {
 
 namespace {
-
-struct GMEErrorCategory : public std::error_category {
-    ~GMEErrorCategory() {}
-    const char *name() const noexcept { return "gme error"; }
-    std::string message(int n) const
+    int get_length(gme_info_t *info, int default_length)
     {
-        switch (static_cast<ErrType>(n)) {
-        case ErrType::None:           return "Success";
-        case ErrType::FileType:       return "Invalid music file type";
-        case ErrType::Header:         return "Invalid music file header";
-        case ErrType::Play:           return "Found an error while playing";
-        case ErrType::Seek:           return "Seek error";
-        case ErrType::LoadFile:       return "Couldn't load file";
-        case ErrType::LoadTrack:      return "Couldn't load track";
-        case ErrType::LoadM3U:        return "Couldn't load m3u file";
-        default:                      return "Unknown error";
-        }
+        return info->length      > 0 ? info->length
+             : info->loop_length > 0 ? info->intro_length + info->loop_length * 2
+             : default_length;
     }
-};
-
-static GMEErrorCategory errcat;
-
-int get_length(gme_info_t *info, int def)
-{
-    return info->length      > 0 ? info->length
-         : info->loop_length > 0 ? info->intro_length + info->loop_length * 2
-         : def;
-}
-
 } // namespace
 
-Error::Error(ErrType e, std::string_view s)
-    : code{static_cast<int>(e), errcat}, details{s}
-{ }
+auto read_file(const io::MappedFile &file, int frequency, int default_length)
+    -> tl::expected<std::unique_ptr<Interface>, Error>
+{
+    if (auto gme = GME::make(file, frequency, default_length); gme)
+        return gme;
+    return tl::unexpected(Error{ErrType::LoadFile, "no suitable interface found"});
+}
 
 GME::~GME()
 {
@@ -48,26 +33,25 @@ GME::~GME()
     }
 }
 
-Error GME::open(std::span<const u8> data, int frequency, int default_length)
+auto GME::make(const io::MappedFile &file, int frequency, int default_length)
+    -> tl::expected<std::unique_ptr<Interface>, Error>
 {
-    this->default_length = default_length;
+    auto data = file.bytes();
     auto type_str = gme_identify_header(data.data());
     if (strcmp(type_str, "") == 0)
-        return Error(ErrType::Header, "invalid header");
-    auto type = gme_identify_extension(type_str);
-    emu = gme_new_emu_multi_channel(type, frequency);
+        return tl::unexpected(Error(ErrType::Header, "invalid header"));
+    auto emu = gme_new_emu_multi_channel(gme_identify_extension(type_str), frequency);
     if (!emu)
-        return Error(ErrType::LoadFile, "out of memory");
-    auto err = gme_load_data(this->emu, data.data(), data.size());
-    if (err)
-        return Error(ErrType::LoadFile, err);
-    return Error{};
-}
-
-Error GME::load_m3u(std::filesystem::path path)
-{
-    auto err = gme_load_m3u(emu, path.string().c_str());
-    return err ? Error(ErrType::LoadM3U, err) : Error();
+        return tl::unexpected(Error(ErrType::LoadFile, "out of memory"));
+    if (auto err = gme_load_data(emu, data.data(), data.size()); err)
+        return tl::unexpected(Error(ErrType::LoadFile, err));
+    // load m3u file automatically. we don't care if it's found or not.
+    if (auto err = gme_load_m3u(emu, file.file_path().replace_extension("m3u").c_str()); err) {
+#ifdef DEBUG
+        printf("GME: %s\n", err);
+#endif
+    }
+    return std::make_unique<GME>(emu, default_length);
 }
 
 Error GME::start_track(int which)
@@ -161,18 +145,9 @@ void GME::set_tempo(double tempo)
     gme_set_tempo(emu, tempo);
 }
 
-bool GME::multi_channel() const
+bool GME::is_multi_channel() const
 {
     return gme_multi_channel(emu);
-}
-
-auto read_file(const io::MappedFile &file, int frequency, int default_length)
-    -> tl::expected<std::unique_ptr<Interface>, Error>
-{
-    auto ptr = std::make_unique<GME>();
-    if (auto err = ptr->open(file.bytes(), frequency, default_length); err)
-        return tl::unexpected(err);
-    return ptr;
 }
 
 } // namespace gmplayer
