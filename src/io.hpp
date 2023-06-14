@@ -221,14 +221,12 @@ inline Result<std::string> read_file(std::filesystem::path path)
     return buf;
 }
 
-/* Returns the user's home. */
-inline std::filesystem::path user_home()
-{
-#ifdef PLATFORM_LINUX
-    return getenv("HOME");
-#else
-    return std::filesystem::path("/");
-#endif
-}
+namespace directory {
+
+std::filesystem::path home();
+std::filesystem::path config();
+std::filesystem::path data();
+
+} // namespace directory
 
 } // namespace io

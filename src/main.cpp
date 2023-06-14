@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
             std::vector<std::filesystem::path> filenames;
             for (int i = 1; i < argc; i++)
                 filenames.push_back(std::filesystem::path(argv[i]));
-            mw.open_files(filenames, gui::OpenFilesFlags::AddToRecent | gui::OpenFilesFlags::ClearAndPlay);
+            mw.open_files(filenames, { gui::OpenFilesFlags::AddToRecent, gui::OpenFilesFlags::ClearAndPlay });
         }
     }
 

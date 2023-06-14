@@ -17,6 +17,7 @@
 #include "error.hpp"
 #include "format.hpp"
 #include "player.hpp"
+#include "flags.hpp"
 
 class QShortcut;
 class QMenu;
@@ -154,10 +155,9 @@ public:
     Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent = nullptr);
 };
 
-DEFINE_OPTION_ENUM(OpenFilesFlags,
-    AddToRecent = 1 << 1,
-    ClearAndPlay = 1 << 2,
-)
+enum class OpenFilesFlags {
+    AddToRecent, ClearAndPlay
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -185,7 +185,7 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow(gmplayer::Player *player, QWidget *parent = nullptr);
     void open_playlist(std::filesystem::path file_path);
-    void open_files(std::span<std::filesystem::path> paths, OpenFilesFlags flags = OpenFilesFlags::None);
+    void open_files(std::span<std::filesystem::path> paths, Flags<OpenFilesFlags> flags = {});
 };
 
 } // namespace gui

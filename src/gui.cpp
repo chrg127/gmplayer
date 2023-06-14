@@ -664,7 +664,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     auto *file_menu = create_menu(this, "&File",
         std::make_tuple("Open files",    [this] {
             auto files = multiple_file_dialog(tr("Open files"), tr(MUSIC_FILE_FILTER));
-            open_files(files, OpenFilesFlags::AddToRecent | OpenFilesFlags::ClearAndPlay);
+            open_files(files, { OpenFilesFlags::AddToRecent, OpenFilesFlags::ClearAndPlay });
         }),
         std::make_tuple("Open playlist", [this] {
             if (auto f = file_dialog(tr("Open playlist"), tr(PLAYLIST_FILTER)); !f)
@@ -842,23 +842,22 @@ void MainWindow::open_playlist(fs::path file_path)
         paths.push_back(p);
     }
 
-    open_files(paths, OpenFilesFlags::ClearAndPlay);
+    open_files(paths, { OpenFilesFlags::ClearAndPlay });
 }
 
 void MainWindow::open_file(fs::path filename)
 {
     auto paths = std::array{filename};
-    open_files(paths, OpenFilesFlags::AddToRecent | OpenFilesFlags::ClearAndPlay);
+    open_files(paths, { OpenFilesFlags::AddToRecent, OpenFilesFlags::ClearAndPlay });
 }
 
-void MainWindow::open_files(std::span<fs::path> paths, OpenFilesFlags flags)
+void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> flags)
 {
-    if ((flags & OpenFilesFlags::AddToRecent) != OpenFilesFlags::None)
+    if (flags.contains(OpenFilesFlags::AddToRecent))
         for (auto &p : paths)
             recent_files->add(p);
-    if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None) {
+    if (flags.contains(OpenFilesFlags::ClearAndPlay))
         player->clear();
-    }
     auto [errors, num_files] = player->add_files(paths);
     if (errors.size() > 0) {
         QString text;
@@ -868,7 +867,7 @@ void MainWindow::open_files(std::span<fs::path> paths, OpenFilesFlags flags)
                         .arg(QString::fromStdString(e.details));
         msgbox("Errors were found while opening files.", text);
     }
-    if ((flags & OpenFilesFlags::ClearAndPlay) != OpenFilesFlags::None && num_files > 0)
+    if (flags.contains(OpenFilesFlags::ClearAndPlay))
         player->load_pair(0, 0);
 }
 

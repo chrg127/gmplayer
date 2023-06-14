@@ -21,39 +21,39 @@ enum class Compiler : uint { Clang, GCC, MSVC, Unknown };
 enum class Platform : uint { Windows, MacOS, Linux, Unknown };
 
 #ifdef __clang__
-#   define COMPILER_CLANG
-    static inline constexpr Compiler compiler() { return Compiler::Clang; }
+    #define COMPILER_CLANG
+    static constexpr inline Compiler compiler() { return Compiler::Clang; }
 #elif defined(__GNUC__)
-#   define COMPILER_GCC
-    static inline constexpr Compiler compiler() { return Compiler::GCC; }
+    #define COMPILER_GCC
+    static constexpr inline Compiler compiler() { return Compiler::GCC; }
 #elif defined(_MSC_VER)
-#   define COMPILER_MICROSOFT
-    static inline constexpr Compiler compiler() { return Compiler::MSVC; }
+    #define COMPILER_MSVC
+    static constexpr inline Compiler compiler() { return Compiler::MSVC; }
 #else
-#   warning "unable to detect compiler"
-#   define COMPILER_UNKNOWN
-    static inline constexpr Compiler compiler() { return Compiler::Unknown; }
+    #warning "unable to detect compiler"
+    #define COMPILER_UNKNOWN
+    static constexpr inline Compiler compiler() { return Compiler::Unknown; }
 #endif
 
 #ifdef _WIN32
-#   define PLATFORM_WINDOWS
+    #define PLATFORM_WINDOWS
     static inline constexpr Platform platform() { return Platform::Windows; }
 #elif defined(__APPLE__)
-#   define PLATFORM_MACOS
+    #define PLATFORM_MACOS
     static inline constexpr Platform platform() { return Platform::MacOS; }
 #elif defined(linux) || defined(__linux__)
-#   define PLATFORM_LINUX
+    #define PLATFORM_LINUX
     static inline constexpr Platform platform() { return Platform::Linux; }
 #else
-#   define PLATFORM_UNKNOWN
-#   warning "unable to detect platform"
+    #define PLATFORM_UNKNOWN
+    #warning "unable to detect platform"
     static inline constexpr Platform platform() { return Platform::Unknown; }
 #endif
 
 #if defined(COMPILER_CLANG) || defined(COMPILER_GCC)
   #define noinline   __attribute__((noinline))
   #define alwaysinline  inline __attribute__((always_inline))
-#elif defined(COMPILER_MICROSOFT)
+#elif defined(COMPILER_MSVC)
   #define noinline   __declspec(noinline)
   #define alwaysinline  inline __forceinline
 #else
@@ -63,23 +63,27 @@ enum class Platform : uint { Windows, MacOS, Linux, Unknown };
 
 #define FWD(x) std::forward<decltype(x)>(x)
 
-#define DEFINE_OPTION_ENUM(name, ...)       \
-enum class name : std::uint32_t {           \
-    None = 0x0,                             \
-    __VA_ARGS__                             \
-};                                          \
-                                            \
-inline name operator|(name a, name b) {     \
-    return static_cast<name>(               \
-        static_cast<u32>(a)                 \
-      | static_cast<u32>(b)                 \
-    );                                      \
-}                                           \
-                                            \
-inline name operator&(name a, name b) {     \
-    return static_cast<name>(               \
-        static_cast<u32>(a)                 \
-      & static_cast<u32>(b)                 \
-    );                                      \
-}                                           \
+// A better assert macro. Should trigger a quick break on any debugger.
+#ifdef DEBUG
+    #if __GNUC__
+        #define ASSERT(c) if (!(c)) __builtin_trap()
+    #elif _MSC_VER
+        #define ASSERT(c) if (!(c)) __debugbreak()
+    #else
+        #define ASSERT(c) if (!(c)) *(volatile int *)0 = 0
+    #endif
+#else
+    #define ASSERT(c)
+#endif
 
+[[noreturn]] inline void unreachable()
+{
+    // Uses compiler specific extensions if possible.
+    // Even if no extension is used, undefined behavior is still raised by
+    // an empty function body and the noreturn attribute.
+#if defined(COMPILER_GCC) || defined(COMPILER_CLANG)
+    __builtin_unreachable();
+#elif defined(COMPILER_MSVC)
+    __assume(false);
+#endif
+}

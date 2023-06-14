@@ -9,9 +9,12 @@
     #include <sys/mman.h>
     #include <sys/stat.h>
     #include <unistd.h>
+    #include <pwd.h>
 #else
     #error "io.hpp: platform not supported"
 #endif
+
+namespace fs = std::filesystem;
 
 namespace io {
 
@@ -92,5 +95,51 @@ int close_mapped_file(u8 *ptr, std::size_t len)
 #endif
 
 } // namespace detail
+
+namespace directory {
+
+std::filesystem::path home()
+{
+#ifdef PLATFORM_WINDOWS
+    wchar_t path_string[PATH_MAX] = L"";
+    SHGetFolderPathW(nullptr, CSIDL_PROFILE | CSIDL_FLAG_CREATE, nullptr, 0, path);
+    return fs::path(path_string);
+#else
+    auto *userinfo = getpwuid(getuid());
+    return fs::path(userinfo->pw_dir);
+#endif
+}
+
+std::filesystem::path config()
+{
+#ifdef PLATFORM_WINDOWS
+    wchar_t path_string[PATH_MAX] = L"";
+    SHGetFolderPathW(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path);
+    return fs::path(path_string);
+#elif defined(PLATFORM_MACOS)
+    return home() / "Library/Application Support";
+#else
+    if (auto *env = getenv("XDG_CONFIG_HOME"))
+        return fs::path(env);
+    return home() / fs::path(".config");
+#endif
+}
+
+std::filesystem::path data()
+{
+#ifdef PLATFORM_WINDOWS
+    wchar_t path_string[PATH_MAX] = L"";
+    SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path);
+    return fs::path(path_string);
+#elif defined(PLATFORM_MACOS)
+    return home() / "Library/Application Support";
+#else
+    if (auto *env = getenv("XDG_DATA_HOME"))
+        return fs::path(env);
+    return home() / fs::path(".local/share");
+#endif
+}
+
+} // namespace directory
 
 } // namespace io
