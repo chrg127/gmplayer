@@ -36,6 +36,7 @@
 #include "appinfo.hpp"
 #include "math.hpp"
 #include "visualizer.hpp"
+#include "format.hpp"
 
 namespace fs = std::filesystem;
 using namespace gmplayer::literals;
@@ -376,8 +377,8 @@ VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
     full = new Visualizer(full_data, 0, 2, 1);
     connect(this, &VisualizerTab::updated, full, &Visualizer::render);
     full->set_name(tr("Full"));
-    for (int i = 0; i < 8; i++) {
-        single[i] = new Visualizer(single_data, i, 2, 8);
+    for (int i = 0; i < gmplayer::NUM_VOICES; i++) {
+        single[i] = new Visualizer(single_data, i, 4, 8);
         connect(this, &VisualizerTab::updated, single[i], &Visualizer::render);
         single[i]->setVisible(false);
     }
@@ -867,8 +868,9 @@ void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> fla
                         .arg(QString::fromStdString(e.details));
         msgbox("Errors were found while opening files.", text);
     }
-    if (flags.contains(OpenFilesFlags::ClearAndPlay))
+    if (flags.contains(OpenFilesFlags::ClearAndPlay)) {
         player->load_pair(0, 0);
+    }
 }
 
 void MainWindow::edit_settings()
