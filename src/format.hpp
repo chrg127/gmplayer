@@ -14,10 +14,9 @@ class Music_Emu;
 namespace gmplayer {
 
 const int NUM_FRAMES    = 2048;
-const int CHANNELS      = 2;
+const int NUM_CHANNELS      = 2;
 const int NUM_VOICES    = 8;
-const int SAMPLES_SIZE  = NUM_FRAMES * CHANNELS;
-const int FRAME_SIZE    = NUM_VOICES * CHANNELS;
+const int FRAME_SIZE    = NUM_VOICES * NUM_CHANNELS;
 
 namespace literals {
     inline constexpr long long operator"" _sec(unsigned long long secs) { return secs * 1000ull; }

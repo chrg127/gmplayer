@@ -378,7 +378,7 @@ VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
     connect(this, &VisualizerTab::updated, full, &Visualizer::render);
     full->set_name(tr("Full"));
     for (int i = 0; i < gmplayer::NUM_VOICES; i++) {
-        single[i] = new Visualizer(single_data, i, 4, 8);
+        single[i] = new Visualizer(single_data, i, 2, 8);
         connect(this, &VisualizerTab::updated, single[i], &Visualizer::render);
         single[i]->setVisible(false);
     }
@@ -395,9 +395,9 @@ VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
         }
     });
 
-    player->on_samples_played([=, this] (std::span<i16> new_single_data, std::span<i16> new_full_data) {
-        std::copy(new_single_data.begin(), new_single_data.end(), single_data.begin());
-        std::copy(new_full_data.begin(),   new_full_data.end(),   full_data.begin());
+    player->on_samples_played([=, this] (std::span<i16> single, std::span<i16> full) {
+        std::copy(single.begin(), single.begin() + 32768, single_data.begin());
+        std::copy(full.begin(),   full.end(),   full_data.begin());
         emit updated();
     });
 

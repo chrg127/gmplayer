@@ -30,7 +30,7 @@ Player::Player(PlayerOptions &&options)
 
     audio.spec.freq     = 44100;
     audio.spec.format   = /*AUDIO_F32;*/ AUDIO_S16SYS;
-    audio.spec.channels = CHANNELS;
+    audio.spec.channels = NUM_CHANNELS;
     audio.spec.samples  = NUM_FRAMES;
     audio.spec.userdata = this;
     audio.spec.callback = [] (void *userdata, u8 *stream, int length) {
@@ -105,8 +105,8 @@ void Player::audio_callback(std::span<u8> stream)
         return;
     }
     std::fill(stream.begin(), stream.end(), 0); // fill stream with silence
-    std::array<i16, SAMPLES_SIZE * NUM_VOICES> separated = {};
-    std::array<i16, SAMPLES_SIZE>              mixed     = {};
+    std::array<i16, NUM_FRAMES * NUM_CHANNELS * NUM_VOICES> separated = {};
+    std::array<i16, NUM_FRAMES * NUM_CHANNELS>              mixed     = {};
     auto multi = format->is_multi_channel();
     auto err = multi ? format->play(separated) : format->play(mixed);
     if (err) {
@@ -114,10 +114,12 @@ void Player::audio_callback(std::span<u8> stream)
         return;
     }
     if (multi) {
-        for (auto f = 0u; f < NUM_FRAMES; f++) {
+        for (auto f = 0u; f < NUM_FRAMES; f += 2) {
             for (auto t = 0u; t < NUM_VOICES; t++) {
-                mixed[f*2 + 0] += separated[FRAME_SIZE*f + t*CHANNELS + 0] / 2;
-                mixed[f*2 + 1] += separated[FRAME_SIZE*f + t*CHANNELS + 1] / 2;
+                mixed[f*2 + 0] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + 0];
+                mixed[f*2 + 1] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + 1];
+                mixed[f*2 + 2] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + 2];
+                mixed[f*2 + 3] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + 3];
             }
         }
     }

@@ -118,8 +118,8 @@ public slots:
 
 class VisualizerTab : public QWidget {
     Q_OBJECT
-    std::array<i16, gmplayer::SAMPLES_SIZE * 8> single_data = {};
-    std::array<i16, gmplayer::SAMPLES_SIZE>     full_data   = {};
+    std::array<i16, gmplayer::NUM_FRAMES * gmplayer::NUM_CHANNELS * gmplayer::NUM_VOICES> single_data = {};
+    std::array<i16, gmplayer::NUM_FRAMES * gmplayer::NUM_CHANNELS>                        full_data   = {};
     Visualizer *full;
     std::array<Visualizer *, 8> single;
 public:
