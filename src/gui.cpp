@@ -895,11 +895,11 @@ QString MainWindow::format_error(gmplayer::ErrType type)
 {
     switch (type) {
     case gmplayer::ErrType::Seek:      return tr("Got an error while seeking.");
-    case gmplayer::ErrType::LoadFile:  return tr("Got an error while loading file '%1'").arg(QString::fromStdString(player->current_file().filename()));
+    case gmplayer::ErrType::LoadFile:  return tr("Got an error while loading file '%1'").arg(QString::fromStdString(player->current_file().name()));
     case gmplayer::ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'").arg(QString::fromStdString(player->current_track().info[gmplayer::Metadata::Song]));
     case gmplayer::ErrType::Play:      return tr("Got an error while playing.");
-    case gmplayer::ErrType::Header:    return tr("Header of file '%1' is invalid.").arg(QString::fromStdString(player->current_file().filename()));
-    case gmplayer::ErrType::FileType:  return tr("File %1 has an invalid file type.").arg(QString::fromStdString(player->current_file().filename()));
+    case gmplayer::ErrType::Header:    return tr("Header of file '%1' is invalid.").arg(QString::fromStdString(player->current_file().name()));
+    case gmplayer::ErrType::FileType:  return tr("File %1 has an invalid file type.").arg(QString::fromStdString(player->current_file().name()));
     default:                           return "";
     }
 }

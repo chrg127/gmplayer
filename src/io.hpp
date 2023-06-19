@@ -71,10 +71,10 @@ namespace detail {
  */
 class File {
     std::unique_ptr<FILE, void (*)(FILE *)> file_ptr = { nullptr, detail::file_deleter };
-    std::filesystem::path path;
+    std::filesystem::path filepath;
 
     File(FILE *f, std::filesystem::path p)
-        : file_ptr{f, detail::file_deleter}, path{std::move(p)}
+        : file_ptr{f, detail::file_deleter}, filepath{std::move(p)}
     { }
 
 public:
@@ -120,12 +120,12 @@ public:
         return !(c == EOF);
     }
 
-    std::string filename() const noexcept            { return path.filename().string(); }
-    std::filesystem::path file_path() const noexcept { return path; }
-    FILE *data() const noexcept                      { return file_ptr.get(); }
-    int getc()                                       { return std::fgetc(file_ptr.get()); }
-    int ungetc(int c)                                { return std::ungetc(c, file_ptr.get()); }
-    int close()                                      { return std::fclose(file_ptr.release()); }
+    std::string           name() const noexcept { return filepath.filename().string(); }
+    std::filesystem::path path() const noexcept { return filepath; }
+    FILE *                data() const noexcept { return file_ptr.get(); }
+    int                   getc()                { return std::fgetc(file_ptr.get()); }
+    int                   ungetc(int c)         { return std::ungetc(c, file_ptr.get()); }
+    int                   close()               { return std::fclose(file_ptr.release()); }
 };
 
 /*
@@ -144,10 +144,10 @@ public:
 class MappedFile {
     u8 *ptr = nullptr;
     std::size_t len = 0;
-    std::filesystem::path path;
+    std::filesystem::path filepath;
 
     MappedFile(u8 *p, std::size_t s, std::filesystem::path pa)
-        : ptr{p}, len{s}, path{pa}
+        : ptr{p}, len{s}, filepath{pa}
     { }
 
 public:
@@ -160,7 +160,7 @@ public:
     {
         std::swap(ptr, m.ptr);
         std::swap(len, m.len);
-        std::swap(path, m.path);
+        std::swap(filepath, m.filepath);
         return *this;
     }
 
@@ -184,21 +184,21 @@ public:
     using iterator        =       value_type *;
     using const_iterator  = const value_type *;
 
-                reference operator[](size_type pos)                               { return ptr[pos]; }
-          const_reference operator[](size_type pos)                const          { return ptr[pos]; }
-                      u8 *data()                                         noexcept { return ptr; }
-                const u8 *data()                                   const noexcept { return ptr; }
-                 iterator begin()                                        noexcept { return ptr; }
-           const_iterator begin()                                  const noexcept { return ptr; }
-                 iterator end()                                          noexcept { return ptr + len; }
-           const_iterator end()                                    const noexcept { return ptr + len; }
-                size_type size()                                   const noexcept { return len; }
-            std::span<u8> slice(size_type start, size_type length)                { return { ptr + start, length}; }
-      std::span<const u8> slice(size_type start, size_type length) const          { return { ptr + start, length}; }
-            std::span<u8> bytes()                                                 { return { ptr, len }; }
-      std::span<const u8> bytes()                                  const          { return { ptr, len }; }
-              std::string filename()                               const noexcept { return path.filename().string(); }
-    std::filesystem::path file_path()                              const noexcept { return path; }
+    reference               operator[](size_type pos)                               { return ptr[pos]; }
+    const_reference         operator[](size_type pos)                const          { return ptr[pos]; }
+    u8 *                    data()                                         noexcept { return ptr; }
+    const u8 *              data()                                   const noexcept { return ptr; }
+    iterator                begin()                                        noexcept { return ptr; }
+    const_iterator          begin()                                  const noexcept { return ptr; }
+    iterator                end()                                          noexcept { return ptr + len; }
+    const_iterator          end()                                    const noexcept { return ptr + len; }
+    size_type               size()                                   const noexcept { return len; }
+    std::span<u8>           slice(size_type start, size_type length)                { return { ptr + start, length}; }
+    std::span<const u8>     slice(size_type start, size_type length) const          { return { ptr + start, length}; }
+    std::span<u8>           bytes()                                                 { return { ptr, len }; }
+    std::span<const u8>     bytes()                                  const          { return { ptr, len }; }
+    std::string             name()                                   const noexcept { return filepath.filename().string(); }
+    std::filesystem::path   path()                                   const noexcept { return filepath; }
 };
 
 /*

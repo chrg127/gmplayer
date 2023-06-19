@@ -222,7 +222,7 @@ void Player::save_playlist(List which, io::File &to)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     for (auto i : (which == List::Track ? tracks.order : files.order))
-        fprintf(to.data(), "%s\n", file_cache[i].file_path().c_str());
+        fprintf(to.data(), "%s\n", file_cache[i].path().c_str());
 }
 
 void Player::clear()
@@ -373,7 +373,7 @@ std::vector<std::string> Player::names(List which) const
     std::vector<std::string> names;
     if (which == List::File)
         for (auto i : files.order)
-            names.push_back(file_cache[i].file_path().stem().string());
+            names.push_back(file_cache[i].path().stem().string());
     else
         for (auto i : tracks.order)
             names.push_back(track_cache[i].info[Metadata::Song]);

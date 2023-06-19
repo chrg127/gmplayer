@@ -18,7 +18,7 @@ namespace {
 } // namespace
 
 auto read_file(const io::MappedFile &file, int frequency, int default_length)
-    -> tl::expected<std::unique_ptr<Interface>, Error>
+    -> tl::expected<std::unique_ptr<FormatInterface>, Error>
 {
     if (auto gme = GME::make(file, frequency, default_length); gme)
         return gme;
@@ -34,7 +34,7 @@ GME::~GME()
 }
 
 auto GME::make(const io::MappedFile &file, int frequency, int default_length)
-    -> tl::expected<std::unique_ptr<Interface>, Error>
+    -> tl::expected<std::unique_ptr<FormatInterface>, Error>
 {
     auto data = file.bytes();
     auto type_str = gme_identify_header(data.data());
@@ -46,7 +46,7 @@ auto GME::make(const io::MappedFile &file, int frequency, int default_length)
     if (auto err = gme_load_data(emu, data.data(), data.size()); err)
         return tl::unexpected(Error(ErrType::LoadFile, err));
     // load m3u file automatically. we don't care if it's found or not.
-    if (auto err = gme_load_m3u(emu, file.file_path().replace_extension("m3u").c_str()); err) {
+    if (auto err = gme_load_m3u(emu, file.path().replace_extension("m3u").c_str()); err) {
 #ifdef DEBUG
         printf("GME: %s\n", err);
 #endif

@@ -78,7 +78,7 @@ public:
 };
 
 class Player {
-    std::unique_ptr<Interface> format;
+    std::unique_ptr<FormatInterface> format;
     std::vector<io::MappedFile> file_cache;
     std::vector<Metadata> track_cache;
     Playlist files;

@@ -14,7 +14,7 @@ class Music_Emu;
 namespace gmplayer {
 
 const int NUM_FRAMES    = 2048;
-const int NUM_CHANNELS      = 2;
+const int NUM_CHANNELS  = 2;
 const int NUM_VOICES    = 8;
 const int FRAME_SIZE    = NUM_VOICES * NUM_CHANNELS;
 
@@ -29,8 +29,8 @@ struct Metadata {
     std::array<std::string, 7> info;
 };
 
-struct Interface {
-    virtual ~Interface() = default;
+struct FormatInterface {
+    virtual ~FormatInterface() = default;
     virtual Error       start_track(int n)                       = 0;
     virtual Error       play(std::span<i16> out)                 = 0;
     virtual Error       seek(int n)                              = 0;
@@ -46,7 +46,7 @@ struct Interface {
     virtual bool        is_multi_channel()                 const = 0;
 };
 
-struct Default : public Interface {
+struct Default : public FormatInterface {
     ~Default() { }
     Error       start_track(int n)                       override { return Error{}; }
     Error       play(std::span<i16> out)                 override { return Error{}; }
@@ -63,7 +63,7 @@ struct Default : public Interface {
     bool        is_multi_channel()                 const override { return false; }
 };
 
-class GME : public Interface {
+class GME : public FormatInterface {
     Music_Emu *emu = nullptr;
     int fade_from = 0, fade_len = 0, default_length = 0, track_len = 0;
 public:
@@ -83,12 +83,12 @@ public:
     void        set_tempo(double tempo)                  override;
     bool        is_multi_channel()                 const override;
     static auto make(const io::MappedFile &file, int frequency, int default_length)
-        -> tl::expected<std::unique_ptr<Interface>, Error>;
+        -> tl::expected<std::unique_ptr<FormatInterface>, Error>;
 };
 
-inline std::unique_ptr<Interface> make_default_format() { return std::make_unique<Default>(); }
+inline std::unique_ptr<FormatInterface> make_default_format() { return std::make_unique<Default>(); }
 
 auto read_file(const io::MappedFile &file, int frequency, int default_length)
-    -> tl::expected<std::unique_ptr<Interface>, Error>;
+    -> tl::expected<std::unique_ptr<FormatInterface>, Error>;
 
 } // namespace gmplayer

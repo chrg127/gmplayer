@@ -64,7 +64,7 @@ inline auto make_seed()
  *       <random> generators. A copy of the generator exists for every thread.
  */
 inline thread_local const auto seed = make_seed();
-inline thread_local auto rng  = Generator(seed);
+inline thread_local auto rng = Generator(seed);
 
 /* Helpful function for extracting values from the generator. */
 template <std::integral       T = int>   T get()             { return std::uniform_int_distribution <T>(    )(rng); }
