@@ -23,13 +23,13 @@ struct SDLMutex {
 };
 
 struct PlayerOptions {
-    int fade_out            = 0;
-    bool autoplay           = false;
-    bool track_repeat       = false;
-    bool file_repeat        = false;
-    int default_duration    = 3 * 60 * 1000ull;
-    double tempo            = 1.0;
-    int volume              = SDL_MIX_MAXVOLUME;
+    int fade_out;
+    bool autoplay;
+    bool track_repeat;
+    bool file_repeat;
+    int default_duration;
+    double tempo;
+    int volume;
 };
 
 struct Playlist {
@@ -180,9 +180,6 @@ public:                                             \
 
 #undef MAKE_SIGNAL
 };
-
-// this is here for portability
-inline constexpr int get_max_volume_value() { return SDL_MIX_MAXVOLUME; }
 
 inline bool is_playlist(std::filesystem::path filename) { return filename.extension() == ".playlist"; }
 

@@ -2,23 +2,40 @@
 
 #include <array>
 #include <span>
+#include <QWidget>
+#include <QGraphicsView>
 #include "common.hpp"
-#include "math.hpp"
+#include "const.hpp"
 
-namespace visualizer {
+namespace gmplayer { class Player; }
 
-void plot(std::span<i16> data, i64 width, i64 height, int voice, int num_channels, int num_voices, auto &&draw)
-{
-    auto m = [&](auto s) { return math::map<i64>(s, std::numeric_limits<i16>::min(), std::numeric_limits<i16>::max(), 0, height); };
-    const auto frame_size = num_voices * num_channels;
-    const auto num_frames = data.size() / frame_size;
-    for (i64 f = 0; f < num_frames; f += 2) {
-        auto y0 = m(math::avg(data.subspan((f+0)*frame_size + voice*num_channels*2 + 0, num_channels)));
-        auto y1 = m(math::avg(data.subspan((f+0)*frame_size + voice*num_channels*2 + 2, num_channels)));
-        auto y2 = m(math::avg(data.subspan((f+2)*frame_size + voice*num_channels*2 + 0, num_channels)));
-        draw(std::array{f+0, y0}, std::array{f+1, y1});
-        draw(std::array{f+1, y1}, std::array{f+2, y2});
-    }
-}
+namespace gui {
 
-} // namespace visualizer
+class Visualizer : public QGraphicsView {
+    Q_OBJECT
+    QGraphicsScene *scene;
+    std::span<i16> data;
+    int channel, channel_size, num_channels;
+    QString name;
+    void showEvent(QShowEvent *) override;
+    void resizeEvent(QResizeEvent *ev) override;
+public:
+    Visualizer(std::span<i16> data, int channel, int channel_size, int num_channels, QWidget *parent = nullptr);
+    void set_name(const QString &name) { this->name = name; }
+public slots:
+    void render();
+};
+
+class VisualizerTab : public QWidget {
+    Q_OBJECT
+    std::array<i16, NUM_FRAMES * NUM_CHANNELS * NUM_VOICES> single_data = {};
+    std::array<i16, NUM_FRAMES * NUM_CHANNELS>              full_data   = {};
+    Visualizer *full;
+    std::array<Visualizer *, 8> single;
+public:
+    VisualizerTab(gmplayer::Player *player, QWidget *parent = nullptr);
+signals:
+    void updated();
+};
+
+} // namespace gui

@@ -45,7 +45,7 @@ inline QGroupBox *make_groupbox(const QString &title, auto... widgets)
 }
 
 template <typename T>
-QFormLayout *label_pair(const char *text, T *widget)
+inline QFormLayout *label_pair(const char *text, T *widget)
 {
     return make_layout<QFormLayout>(std::tuple {
         new QLabel(text),
@@ -63,7 +63,7 @@ inline void msgbox(const QString &msg, const QString &details = "", const QStrin
 }
 
 template <typename T>
-QMenu *create_menu(T *window, const char *name, auto&&... actions)
+inline QMenu *create_menu(T *window, const char *name, auto&&... actions)
 {
     auto *menu = window->menuBar()->addMenu(QObject::tr(name));
     auto f = [=](auto &a) {
@@ -75,7 +75,7 @@ QMenu *create_menu(T *window, const char *name, auto&&... actions)
     return menu;
 }
 
-QCheckBox *make_checkbox(const QString &name, bool checked, QObject *o, auto &&fn)
+inline QCheckBox *make_checkbox(const QString &name, bool checked, QObject *o, auto &&fn)
 {
     auto c = new QCheckBox(name);
     c->setChecked(checked);
@@ -83,14 +83,14 @@ QCheckBox *make_checkbox(const QString &name, bool checked, QObject *o, auto &&f
     return c;
 }
 
-QCheckBox *make_checkbox(const QString &name, bool checked)
+inline QCheckBox *make_checkbox(const QString &name, bool checked)
 {
     auto c = new QCheckBox(name);
     c->setChecked(checked);
     return c;
 }
 
-QComboBox *make_combo(int cur, auto&&... args)
+inline QComboBox *make_combo(int cur, auto&&... args)
 {
     auto *b = new QComboBox;
     (b->addItem(std::get<0>(args), std::get<1>(args)), ...);
@@ -98,7 +98,7 @@ QComboBox *make_combo(int cur, auto&&... args)
     return b;
 }
 
-QSpinBox *make_spinbox(int maximum, int value, bool enabled = true)
+inline QSpinBox *make_spinbox(int maximum, int value, bool enabled = true)
 {
     auto *s = new QSpinBox;
     s->setMaximum(maximum);
@@ -107,21 +107,21 @@ QSpinBox *make_spinbox(int maximum, int value, bool enabled = true)
     return s;
 }
 
-QPushButton *make_button(const QString &name, QObject *o, auto &&fn)
+inline QPushButton *make_button(const QString &name, QObject *o, auto &&fn)
 {
     auto *b = new QPushButton(name);
     QObject::connect(b, &QPushButton::released, o, fn);
     return b;
 }
 
-QTabWidget *make_tabs(auto&&... args)
+inline QTabWidget *make_tabs(auto&&... args)
 {
     auto *tabs = new QTabWidget;
     (tabs->addTab(std::get<0>(args), std::get<1>(args)), ...);
     return tabs;
 }
 
-void print_all_resources()
+inline void print_all_resources()
 {
     QDirIterator it(":", QDirIterator::Subdirectories);
     while (it.hasNext())

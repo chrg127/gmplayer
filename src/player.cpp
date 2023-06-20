@@ -63,7 +63,7 @@ Player::Player(PlayerOptions &&options)
         shuffled(List::File);
     });
     mpris->on_volume_changed(  [=, this] (double vol) {
-        set_volume(std::lerp(0.0, get_max_volume_value(), vol));
+        set_volume(std::lerp(0.0, MAX_VOLUME_VALUE, vol));
     });
     mpris->on_loop_status_changed([=, this] (mpris::LoopStatus status) {
         switch (status) {
@@ -463,7 +463,7 @@ void Player::set_volume(int value)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     opts.volume = value;
-    mpris->set_volume(double(opts.volume) / double(get_max_volume_value()));
+    mpris->set_volume(double(opts.volume) / double(MAX_VOLUME_VALUE));
     volume_changed(opts.volume);
 }
 

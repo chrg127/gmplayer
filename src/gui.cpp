@@ -45,6 +45,9 @@ namespace gui {
 
 namespace {
 
+static const QString APP_NAME = "gmplayer";
+static const QString VERSION = "v0.1";
+
 constexpr auto MUSIC_FILE_FILTER =
     "All supported formats (*.spc *.nsf *.nsfe *.gbs *.gym *.ay *.kss *.hes *.vgm *.sap);;"
     "All files (*.*)"
@@ -230,13 +233,43 @@ RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *pare
 
 
 
+static const QString ABOUT_TEXT = R"(
+<p style="white-space: pre-wrap; margin: 25px;">
+
+A music player for retro game music.
+Supports the following file formats: SPC, GYM, NSF, NSFE, GBS, AY, KSS, HES, VGM, SAP.
+</p>
+<p style="white-space: pre-wrap; margin: 25px;">
+gmplayer is distributed under the GNU GPLv3 license.
+
+<a href="https://github.com/chrg127/gmplayer">Home page</a>.
+</p>
+)";
+
+static const QString LIBS_TEXT = R"(
+<p style="white-space: pre-wrap; margin: 25px;">
+
+gmplayer uses the following libraries:
+</p>
+<ul>
+    <li><a href="https://www.qt.io/">Qt5 (Base, GUI, Widgets, DBus)</a></li>
+    <li><a href="https://bitbucket.org/mpyne/game-music-emu/wiki/Home">Game_Music_Emu</a></li>
+    <li><a href="https://www.libsdl.org">SDL2</a></li>
+    <li><a href="https://github.com/sailfishos/qtmpris">MprisQt</a></li>
+</ul>
+
+<p style="white-space: pre-wrap; margin: 25px;">
+
+</p>
+)";
+
 AboutDialog::AboutDialog(QWidget *parent)
 {
     auto *icon = new QLabel;
     icon->setPixmap(QPixmap((":/icons/gmplayer32.png")));
-    auto *label = new QLabel(QString("<h2><b>gmplayer %1</b></h2>").arg(gmplayer::version));
-    auto *about_label = new QLabel(gmplayer::about_text); about_label->setOpenExternalLinks(true);
-    auto *lib_label   = new QLabel(gmplayer::lib_text);   lib_label->setOpenExternalLinks(true);
+    auto *label       = new QLabel(QString("<h2><b>%1 %2</b></h2>").arg(APP_NAME).arg(VERSION));
+    auto *about_label = new QLabel(ABOUT_TEXT);   about_label->setOpenExternalLinks(true);
+    auto *lib_label   = new QLabel(LIBS_TEXT);    lib_label->setOpenExternalLinks(true);
     auto *tabs = make_tabs(
         std::make_tuple(about_label, "About"),
         std::make_tuple(lib_label, "Libraries")
@@ -319,96 +352,6 @@ PlaylistTab::PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions
             ),
             make_groupbox<QHBoxLayout>("Playlist settings",
                 autoplay, repeat_track, repeat_file
-            )
-        )
-    );
-}
-
-
-
-Visualizer::Visualizer(std::span<i16> data, int channel, int channel_size, int num_channels, QWidget *parent)
-    : QGraphicsView(parent)
-    , scene{new QGraphicsScene(this)}
-    , data{data}
-    , channel{channel}
-    , channel_size{channel_size}
-    , num_channels{num_channels}
-{
-    setScene(scene);
-    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    render();
-}
-
-void Visualizer::render()
-{
-    auto size   = viewport()->size();
-    auto width  = size.width();
-    auto height = size.height();
-    QPixmap image{width, height};
-    image.fill({0, 0, 0});
-    QPainter painter{&image};
-    painter.setPen({0xff, 0xff, 0xff});
-    visualizer::plot(data, width, height, channel, channel_size, num_channels, [&] (auto p, auto q) {
-        painter.drawLine(QPoint(p[0], p[1]), QPoint(q[0], q[1]));
-    });
-    painter.drawText(8, height - 8, name);
-    scene->clear();
-    scene->addPixmap(image);
-}
-
-void Visualizer::showEvent(QShowEvent *ev)
-{
-    render();
-    QGraphicsView::showEvent(ev);
-}
-
-void Visualizer::resizeEvent(QResizeEvent *ev)
-{
-    render();
-    QGraphicsView::resizeEvent(ev);
-}
-
-
-
-VisualizerTab::VisualizerTab(gmplayer::Player *player, QWidget *parent)
-    : QWidget(parent)
-{
-    full = new Visualizer(full_data, 0, 2, 1);
-    connect(this, &VisualizerTab::updated, full, &Visualizer::render);
-    full->set_name(tr("Full"));
-    for (int i = 0; i < gmplayer::NUM_VOICES; i++) {
-        single[i] = new Visualizer(single_data, i, 2, 8);
-        connect(this, &VisualizerTab::updated, single[i], &Visualizer::render);
-        single[i]->setVisible(false);
-    }
-
-    player->on_file_changed([=, this] (int) {
-        for (auto &s : single)
-            s->setVisible(false);
-        if (player->is_multi_channel()) {
-            auto channels = player->channel_names();
-            for (int i = 0; i < channels.size(); i++) {
-                single[i]->set_name(QString::fromStdString(channels[i]));
-                single[i]->setVisible(true);
-            }
-        }
-    });
-
-    player->on_samples_played([=, this] (std::span<i16> single, std::span<i16> full) {
-        std::copy(single.begin(), single.begin() + 32768, single_data.begin());
-        std::copy(full.begin(),   full.end(),   full_data.begin());
-        emit updated();
-    });
-
-    setLayout(
-        make_layout<QVBoxLayout>(
-            full,
-            make_layout<QGridLayout>(
-                std::make_tuple(single[0], 0, 0), std::make_tuple(single[1], 0, 1),
-                std::make_tuple(single[2], 1, 0), std::make_tuple(single[3], 1, 1),
-                std::make_tuple(single[4], 2, 0), std::make_tuple(single[5], 2, 1),
-                std::make_tuple(single[6], 3, 0), std::make_tuple(single[7], 3, 1)
             )
         )
     );
@@ -549,13 +492,13 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
 
     // volume slider and button
     auto *volume_slider = new QSlider(Qt::Horizontal);
-    volume_slider->setRange(0, gmplayer::get_max_volume_value());
+    volume_slider->setRange(0, MAX_VOLUME_VALUE);
     volume_slider->setValue(options.volume);
 
     connect(volume_slider, &QSlider::sliderMoved, this, [=, this] (int value) { player->set_volume(value); });
     QToolButton *volume_btn = make_btn(
         options.volume == 0 ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume,
-        [=, this, last = options.volume == 0 ? gmplayer::get_max_volume_value() : options.volume] () mutable {
+        [=, this, last = options.volume == 0 ? MAX_VOLUME_VALUE : options.volume] () mutable {
             int vol = volume_slider->value();
             player->set_volume(vol != 0 ? last = vol, 0 : last);
         }

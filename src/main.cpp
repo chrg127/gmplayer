@@ -21,7 +21,7 @@ gmplayer::PlayerOptions load_player_options()
         .file_repeat        = settings.value("file_repeat",                        false).toBool(),
         .default_duration   = settings.value("default_duration",              int(3_min)).toInt(),
         .tempo              = settings.value("tempo",                                1.0).toDouble(),
-        .volume             = settings.value("volume",  gmplayer::get_max_volume_value()).toInt(),
+        .volume             = settings.value("volume",                  MAX_VOLUME_VALUE).toInt(),
     };
     settings.endGroup();
     return options;

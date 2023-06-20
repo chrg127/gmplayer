@@ -101,33 +101,6 @@ public:
     void setup_context_menu(auto &&fn) { filelist->setup_context_menu(fn); }
 };
 
-class Visualizer : public QGraphicsView {
-    Q_OBJECT
-    QGraphicsScene *scene;
-    std::span<i16> data;
-    int channel, channel_size, num_channels;
-    QString name;
-    void showEvent(QShowEvent *) override;
-    void resizeEvent(QResizeEvent *ev) override;
-public:
-    Visualizer(std::span<i16> data, int channel, int channel_size, int num_channels, QWidget *parent = nullptr);
-    void set_name(const QString &name) { this->name = name; }
-public slots:
-    void render();
-};
-
-class VisualizerTab : public QWidget {
-    Q_OBJECT
-    std::array<i16, gmplayer::NUM_FRAMES * gmplayer::NUM_CHANNELS * gmplayer::NUM_VOICES> single_data = {};
-    std::array<i16, gmplayer::NUM_FRAMES * gmplayer::NUM_CHANNELS>                        full_data   = {};
-    Visualizer *full;
-    std::array<Visualizer *, 8> single;
-public:
-    VisualizerTab(gmplayer::Player *player, QWidget *parent = nullptr);
-signals:
-    void updated();
-};
-
 class ChannelWidget : public QWidget {
     Q_OBJECT
     int index;

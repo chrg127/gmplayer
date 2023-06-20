@@ -6,17 +6,13 @@
 #include <expected.hpp>
 #include "common.hpp"
 #include "error.hpp"
+#include "const.hpp"
 
 namespace io { class MappedFile; }
 
 class Music_Emu;
 
 namespace gmplayer {
-
-const int NUM_FRAMES    = 2048;
-const int NUM_CHANNELS  = 2;
-const int NUM_VOICES    = 8;
-const int FRAME_SIZE    = NUM_VOICES * NUM_CHANNELS;
 
 namespace literals {
     inline constexpr long long operator"" _sec(unsigned long long secs) { return secs * 1000ull; }

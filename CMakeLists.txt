@@ -36,7 +36,7 @@ endif()
 
 add_executable(gmplayer
     src/main.cpp src/gui.cpp src/player.cpp src/keyrecorder.cpp src/io.cpp
-    src/format.cpp src/mpris_server.cpp resources/icons.qrc
+    src/visualizer.cpp src/format.cpp src/mpris_server.cpp resources/icons.qrc
 )
 
 target_link_libraries(gmplayer PRIVATE pthread Qt5::Widgets ${SDL2_LIBRARIES} ${GME_LIBRARIES} SDBusCpp::sdbus-c++)
