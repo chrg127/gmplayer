@@ -63,11 +63,11 @@ inline void msgbox(const QString &msg, const QString &details = "", const QStrin
 }
 
 template <typename T>
-inline QMenu *create_menu(T *window, const char *name, auto&&... actions)
+inline QMenu *create_menu(T *window, const QString &name, auto&&... actions)
 {
-    auto *menu = window->menuBar()->addMenu(QObject::tr(name));
+    auto *menu = window->menuBar()->addMenu(name);
     auto f = [=](auto &a) {
-        auto *act = new QAction(QObject::tr(std::get<0>(a)), window);
+        auto *act = new QAction(std::get<0>(a), window);
         QObject::connect(act, &QAction::triggered, window, std::get<1>(a));
         menu->addAction(act);
     };

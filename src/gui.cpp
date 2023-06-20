@@ -31,12 +31,10 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include "qtutils.hpp"
-#include "player.hpp"
 #include "io.hpp"
 #include "appinfo.hpp"
 #include "math.hpp"
 #include "visualizer.hpp"
-#include "format.hpp"
 
 namespace fs = std::filesystem;
 using namespace gmplayer::literals;
@@ -598,7 +596,7 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
 MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     : QMainWindow(parent), player{player}
 {
-    setWindowTitle("gmplayer");
+    setWindowTitle(APP_NAME);
     setWindowIcon(QIcon(":/icons/gmplayer64.png"));
     setAcceptDrops(true);
 
@@ -606,27 +604,27 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
 
     // menus
     auto *file_menu = create_menu(this, "&File",
-        std::make_tuple("Open files",    [this] {
+        std::make_tuple(tr("Open &files"),    [this] {
             auto files = multiple_file_dialog(tr("Open files"), tr(MUSIC_FILE_FILTER));
             open_files(files, { OpenFilesFlags::AddToRecent, OpenFilesFlags::ClearAndPlay });
         }),
-        std::make_tuple("Open playlist", [this] {
+        std::make_tuple(tr("Open &playlist"), [this] {
             if (auto f = file_dialog(tr("Open playlist"), tr(PLAYLIST_FILTER)); !f)
                 open_playlist(f.value());
         })
     );
 
-    create_menu(this, "&Edit",
-        std::make_tuple("Settings",  &MainWindow::edit_settings),
-        std::make_tuple("Shortcuts", &MainWindow::edit_shortcuts)
+    create_menu(this, tr("&Edit"),
+        std::make_tuple(tr("&Settings"),  &MainWindow::edit_settings),
+        std::make_tuple(tr("S&hortcuts"), &MainWindow::edit_shortcuts)
     );
 
-    create_menu(this, "&About",
-        std::make_tuple("About gmplayer", [=, this] {
+    create_menu(this, tr("&About"),
+        std::make_tuple(tr("About &gmplayer"), [=, this] {
             auto *wnd = new AboutDialog();
             wnd->open();
         }),
-        std::make_tuple("About Qt", &QApplication::aboutQt)
+        std::make_tuple(tr("About &Qt"), &QApplication::aboutQt)
     );
 
     // recent files, shortcuts, open dialog position
@@ -662,49 +660,38 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     auto *visualizer_tab        = new VisualizerTab(player);
     auto *controls = new Controls(player, options);
     auto *tabs = make_tabs(
-        std::tuple { playlist_tab,          "Playlists" },
-        std::tuple { currently_playing_tab, "Current Track" },
-        std::tuple { visualizer_tab,        "Visualizer" }
+        std::tuple { playlist_tab,          tr("&Playlists") },
+        std::tuple { currently_playing_tab, tr("&Current Track") },
+        std::tuple { visualizer_tab,        tr("&Visualizer") }
     );
 
     playlist_tab->setup_context_menu([=, this] (const QPoint &p) {
         QMenu menu;
-        menu.addAction(tr("Add files"), [=, this] {
+        menu.addAction(tr("&Add files"), [=, this] {
             auto files = multiple_file_dialog(tr("Add files"), tr(MUSIC_FILE_FILTER));
             open_files(files);
         });
-        menu.addAction(tr("Remove file"), [=, this] {
-            auto cur = playlist_tab->current_file();
-            if (cur == -1)
-                msgbox(tr("A file must be selected first."));
-            else
+        menu.addAction(tr("&Remove file"), [=, this] {
+            if (auto cur = playlist_tab->current_file(); cur != -1)
                 player->remove_file(cur);
+            else
+                msgbox(tr("A file must be selected first."));
         });
-        menu.addAction(tr("Save playlist"), [=, this]() {
-            auto filename = save_dialog(tr("Save playlist"), tr("Playlist files (*.playlist)"));
-            if (filename.isEmpty())
-                return;
-            auto file_path = fs::path(filename.toStdString());
-            auto f = io::File::open(file_path, io::Access::Write);
-            if (!f) {
-                msgbox(QString("Couldn't open file %1. (%2)")
-                    .arg(QString::fromStdString(file_path.filename().string()))
-                    .arg(QString::fromStdString(f.error().message())));
-                return;
+        menu.addAction(tr("&Save playlist"), [=, this]() {
+            if (auto filename = save_dialog(tr("Save playlist"), tr("Playlist files (*.playlist)")); !filename.isEmpty()) {
+                auto file_path = fs::path(filename.toStdString());
+                auto f = io::File::open(file_path, io::Access::Write);
+                if (!f) {
+                    msgbox(tr("Couldn't open file %1. (%2)")
+                        .arg(QString::fromStdString(file_path.filename().string()))
+                        .arg(QString::fromStdString(f.error().message())));
+                    return;
+                }
+                player->save_playlist(gmplayer::Player::List::File, f.value());
             }
-            player->save_playlist(gmplayer::Player::List::File, f.value());
         });
         menu.exec(p);
     });
-
-    // player->on_samples_played([=, this, i = 0] (std::span<i16> data) mutable {
-    //     auto f = io::File::open("samples-" + std::to_string(i) + ".txt", io::Access::Write);
-    //     for (auto sample : data)
-    //         fprintf(f.value().data(), "%d\n", sample);
-    //     i = i +1;
-    //     if (i == 5)
-    //         std::exit(1);
-    // });
 
     auto *center = new QWidget(this);
     setCentralWidget(center);
@@ -721,8 +708,8 @@ void MainWindow::load_shortcuts()
 {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
     auto add_shortcut = [&](const QString &name, const QString &display_name,
-                            const QString &key, auto &&fn) {
-        auto value = settings.value(name, key).toString();
+                            const QString &default_value, auto &&fn) {
+        auto value = settings.value(name, default_value).toString();
         auto *shortcut = new QShortcut(QKeySequence(value), this);
         connect(shortcut, &QShortcut::activated, this, fn);
         shortcuts[name] = {
@@ -773,7 +760,7 @@ void MainWindow::open_playlist(fs::path file_path)
     recent_playlists->add(file_path);
     auto file = io::File::open(file_path, io::Access::Read);
     if (!file) {
-        msgbox(QString("Couldn't open playlist %1 (%2).").arg(QString::fromStdString(file_path.string())),
+        msgbox(tr("Couldn't open playlist %1 (%2).").arg(QString::fromStdString(file_path.string())),
                QString::fromStdString(file.error().message()));
         return;
     }
@@ -809,7 +796,7 @@ void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> fla
             text += QString("%1: %2\n")
                         .arg(QString::fromStdString(e.code.message()))
                         .arg(QString::fromStdString(e.details));
-        msgbox("Errors were found while opening files.", text);
+        msgbox(tr("Errors were found while opening files."), text);
     }
     if (flags.contains(OpenFilesFlags::ClearAndPlay)) {
         player->load_pair(0, 0);
@@ -866,7 +853,7 @@ void MainWindow::dropEvent(QDropEvent *event)
 {
     auto mime = event->mimeData();
     if (!mime->hasUrls()) {
-        msgbox("No file paths/urls dropped (this should never happen)");
+        msgbox(tr("No file paths/urls dropped (this should never happen)"));
         return;
     }
     std::vector<fs::path> files;
@@ -875,9 +862,9 @@ void MainWindow::dropEvent(QDropEvent *event)
         if (url.isLocalFile())
             files.push_back(fs::path(url.toLocalFile().toStdString()));
         else
-            errors += QString("%1: not a local file").arg(url.toString());
+            errors += tr("%1: not a local file").arg(url.toString());
     if (!errors.isEmpty())
-        msgbox("Errors were found while inspecting dropped files.", errors);
+        msgbox(tr("Errors were found while inspecting dropped files."), errors);
     open_files(files);
     event->acceptProposedAction();
 }

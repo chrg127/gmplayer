@@ -15,7 +15,7 @@
 #include "common.hpp"
 #include "keyrecorder.hpp"
 #include "error.hpp"
-#include "format.hpp"
+#include "const.hpp"
 #include "player.hpp"
 #include "flags.hpp"
 
