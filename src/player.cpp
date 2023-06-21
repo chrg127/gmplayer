@@ -9,6 +9,7 @@
 #include "random.hpp"
 #include "io.hpp"
 #include "mpris_server.hpp"
+#include "math.hpp"
 
 namespace fs = std::filesystem;
 
@@ -29,7 +30,7 @@ Player::Player(PlayerOptions &&options)
     opts.volume             = options.volume;
 
     audio.spec.freq     = 44100;
-    audio.spec.format   = /*AUDIO_F32;*/ AUDIO_S16SYS;
+    audio.spec.format   = AUDIO_F32;//*/ AUDIO_S16SYS;
     audio.spec.channels = NUM_CHANNELS;
     audio.spec.samples  = NUM_FRAMES;
     audio.spec.userdata = this;
@@ -116,15 +117,16 @@ void Player::audio_callback(std::span<u8> stream)
     if (multi) {
         for (auto f = 0u; f < NUM_FRAMES; f += 2) {
             for (auto t = 0u; t < NUM_VOICES; t++) {
-                mixed[f*2 + 0] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + 0];
-                mixed[f*2 + 1] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + 1];
-                mixed[f*2 + 2] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + 2];
-                mixed[f*2 + 3] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + 3];
+                for (auto i = 0u; i < NUM_CHANNELS*2; i++) {
+                    mixed[f*2 + i] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + i] * effects.volume[t];
+                }
             }
         }
     }
-    auto &samples = mixed;
-    SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(i16), opts.volume);
+    std::array<float, NUM_FRAMES * NUM_CHANNELS> samples;
+    for (auto i = 0u; i < NUM_FRAMES * NUM_CHANNELS; i++)
+        samples[i] = mixed[i] / 32000.f;
+    SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(f32), opts.volume);
     samples_played(separated, mixed);
 }
 
@@ -397,6 +399,12 @@ void Player::mute_channel(int index, bool mute)
     format->mute_channel(index, mute);
 }
 
+void Player::set_channel_volume(int index, int value)
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    effects.volume[index] = std::exp2(math::map<float>(value, 0, MAX_VOLUME_VALUE, -1.0, 1.0));
+    channel_volume_changed(index, value);
+}
 
 
 PlayerOptions Player::options()

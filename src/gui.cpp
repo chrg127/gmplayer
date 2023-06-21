@@ -361,10 +361,18 @@ ChannelWidget::ChannelWidget(int index, gmplayer::Player *player, QWidget *paren
     : QWidget(parent), index{index}
 {
     label = new QLabel;
+    volume = new VolumeWidget(MAX_VOLUME_VALUE/2, 0, MAX_VOLUME_VALUE);
+    connect(volume, &VolumeWidget::volume_changed, this, [=, this] (int value) {
+        player->set_channel_volume(index, value);
+    });
     auto *checkbox = make_checkbox("Mute", false, this, [=, this] (int state) {
         player->mute_channel(index, bool(state));
     });
-    setLayout(make_layout<QVBoxLayout>(label, checkbox));
+    player->on_channel_volume_changed([=, this] (int i, int v) {
+        if (i == index)
+            volume->set_value(v);
+    });
+    setLayout(make_layout<QVBoxLayout>(label, checkbox, volume));
 }
 
 void ChannelWidget::set_name(const QString &name) { setEnabled(true);  label->setText(name);                             }
@@ -449,17 +457,10 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
     });
 
     // playback buttons
-    auto make_btn = [&](auto icon, auto &&fn) {
-        auto *b = new QToolButton(this);
-        b->setIcon(style()->standardIcon(icon));
-        QObject::connect(b, &QAbstractButton::clicked, this, fn);
-        return b;
-    };
-
-    auto *play_btn   = make_btn(QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
-    auto *stop_btn   = make_btn(QStyle::SP_MediaStop,         [=, this] { player->stop();       });
-    auto *next_track = make_btn(QStyle::SP_MediaSkipForward,  [=, this] { player->next();       });
-    auto *prev_track = make_btn(QStyle::SP_MediaSkipBackward, [=, this] { player->prev();       });
+    auto *play_btn   = make_tool_btn(this, QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
+    auto *stop_btn   = make_tool_btn(this, QStyle::SP_MediaStop,         [=, this] { player->stop();       });
+    auto *next_track = make_tool_btn(this, QStyle::SP_MediaSkipForward,  [=, this] { player->next();       });
+    auto *prev_track = make_tool_btn(this, QStyle::SP_MediaSkipBackward, [=, this] { player->prev();       });
     play_btn->setEnabled(false);
     stop_btn->setEnabled(false);
     next_track->setEnabled(false);
@@ -489,18 +490,8 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
     connect(tempo, &QSlider::sliderMoved, this, [=, this] { get_tempo_value(tempo->value()); });
 
     // volume slider and button
-    auto *volume_slider = new QSlider(Qt::Horizontal);
-    volume_slider->setRange(0, MAX_VOLUME_VALUE);
-    volume_slider->setValue(options.volume);
-
-    connect(volume_slider, &QSlider::sliderMoved, this, [=, this] (int value) { player->set_volume(value); });
-    QToolButton *volume_btn = make_btn(
-        options.volume == 0 ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume,
-        [=, this, last = options.volume == 0 ? MAX_VOLUME_VALUE : options.volume] () mutable {
-            int vol = volume_slider->value();
-            player->set_volume(vol != 0 ? last = vol, 0 : last);
-        }
-    );
+    auto *volume = new VolumeWidget(options.volume, 0, MAX_VOLUME_VALUE);
+    connect(volume, &VolumeWidget::volume_changed, this, [&] (auto value) { player->set_volume(value); });
 
     // player signals
     player->on_played([=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
@@ -516,14 +507,9 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
         duration_slider->setValue(ms);
     });
 
-    player->on_fade_changed([=, this] (int len) { duration_slider->setRange(0, len); });
-
-    player->on_volume_changed([=, this] (int value) {
-        volume_slider->setValue(value);
-        volume_btn->setIcon(style()->standardIcon(value == 0 ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume));
-    });
-
-    player->on_tempo_changed([=, this] (double value) { tempo->setValue(tempo_to_int(value)); });
+    player->on_fade_changed(  [=, this] (int len)      { duration_slider->setRange(0, len); });
+    player->on_volume_changed([=, this] (int value)    { volume->set_value(value); });
+    player->on_tempo_changed( [=, this] (double value) { tempo->setValue(tempo_to_int(value)); });
 
     player->on_repeat_changed([=, this] (bool, bool) {
         next_track->setEnabled(player->has_next());
@@ -574,8 +560,7 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
         stop_btn,
         tempo,
         tempo_label,
-        volume_btn,
-        volume_slider
+        volume
     );
     lt->insertStretch(4);
 
@@ -591,6 +576,30 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
 }
 
 
+
+VolumeWidget::VolumeWidget(int start_value, int min, int max, int tick_interval, QWidget *parent)
+{
+    slider = new QSlider(Qt::Horizontal);
+    slider->setRange(min, max);
+    slider->setValue(start_value);
+    connect(slider, &QSlider::sliderMoved, this, [=, this] (int value) { emit volume_changed(value); });
+
+    mute = make_tool_btn(this,
+        start_value == 0 ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume,
+        [=, this, last = start_value == 0 ? max : start_value] () mutable {
+            int value = slider->value();
+            emit volume_changed(value != 0 ? last = value, 0 : last);
+        }
+    );
+
+    setLayout(make_layout<QHBoxLayout>(mute, slider));
+}
+
+void VolumeWidget::set_value(int value)
+{
+    slider->setValue(value);
+    mute->setIcon(style()->standardIcon(value == 0 ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume));
+}
 
 
 MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)

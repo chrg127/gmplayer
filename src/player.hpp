@@ -99,6 +99,10 @@ class Player {
         double tempo;
     } opts;
 
+    struct {
+        std::array<float, NUM_VOICES> volume = { 1, 1, 1, 1, 1, 1, 1, 1 };
+    } effects;
+
     void audio_callback(std::span<u8> stream);
     Error add_file_internal(std::filesystem::path path);
 
@@ -140,6 +144,7 @@ public:
 
     std::vector<std::string> channel_names();
     void mute_channel(int index, bool mute);
+    void set_channel_volume(int index, int value);
 
     PlayerOptions options();
     void set_fade(int secs);
@@ -177,6 +182,7 @@ public:                                             \
     MAKE_SIGNAL(playlist_changed, List)
     MAKE_SIGNAL(file_removed, int)
     MAKE_SIGNAL(samples_played, std::span<i16>, std::span<i16>)
+    MAKE_SIGNAL(channel_volume_changed, int, int)
 
 #undef MAKE_SIGNAL
 };

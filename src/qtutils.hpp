@@ -16,6 +16,7 @@
 #include <QSpinBox>
 #include <QMenuBar>
 #include <QDebug>
+#include <QToolButton>
 
 template <typename T> void add_to_layout(T *lt, QWidget *w) { lt->addWidget(w); }
 template <typename T> void add_to_layout(T *lt, QLayout *l) { lt->addLayout(l); }
@@ -126,4 +127,12 @@ inline void print_all_resources()
     QDirIterator it(":", QDirIterator::Subdirectories);
     while (it.hasNext())
         qDebug() << it.next();
+}
+
+QToolButton *make_tool_btn(auto *obj, auto icon, auto &&fn)
+{
+    auto *b = new QToolButton;
+    b->setIcon(obj->style()->standardIcon(icon));
+    QObject::connect(b, &QAbstractButton::clicked, obj, fn);
+    return b;
 }

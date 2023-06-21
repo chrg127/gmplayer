@@ -101,10 +101,22 @@ public:
     void setup_context_menu(auto &&fn) { filelist->setup_context_menu(fn); }
 };
 
+class VolumeWidget : public QWidget {
+    Q_OBJECT
+    QSlider *slider;
+    QToolButton *mute;
+public:
+    explicit VolumeWidget(int start_value, int min, int max, int tick_interval = 0, QWidget *parent = nullptr);
+    void set_value(int value);
+signals:
+    void volume_changed(int value);
+};
+
 class ChannelWidget : public QWidget {
     Q_OBJECT
     int index;
     QLabel *label;
+    VolumeWidget *volume;
 public:
     ChannelWidget(int index, gmplayer::Player *player, QWidget *parent = nullptr);
     void set_name(const QString &name);
