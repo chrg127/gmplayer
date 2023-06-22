@@ -361,8 +361,10 @@ ChannelWidget::ChannelWidget(int index, gmplayer::Player *player, QWidget *paren
     : QWidget(parent), index{index}
 {
     label = new QLabel;
-    volume = new VolumeWidget(MAX_VOLUME_VALUE/2, 0, MAX_VOLUME_VALUE);
-    connect(volume, &VolumeWidget::volume_changed, this, [=, this] (int value) {
+    volume = new QSlider(Qt::Horizontal);
+    volume->setRange(0, MAX_VOLUME_VALUE);
+    volume->setValue(MAX_VOLUME_VALUE/2);
+    connect(volume, &QSlider::sliderMoved, this, [=, this] (int value) {
         player->set_channel_volume(index, value);
     });
     auto *checkbox = make_checkbox("Mute", false, this, [=, this] (int state) {
@@ -370,13 +372,21 @@ ChannelWidget::ChannelWidget(int index, gmplayer::Player *player, QWidget *paren
     });
     player->on_channel_volume_changed([=, this] (int i, int v) {
         if (i == index)
-            volume->set_value(v);
+            volume->setValue(v);
     });
-    setLayout(make_layout<QVBoxLayout>(label, checkbox, volume));
+    setLayout(
+        make_layout<QVBoxLayout>(
+            label,
+            checkbox,
+            make_layout<QHBoxLayout>(new QLabel("Volume:"), volume)
+        )
+    );
 }
 
 void ChannelWidget::set_name(const QString &name) { setEnabled(true);  label->setText(name);                             }
 void ChannelWidget::reset()                       { setEnabled(false); label->setText(QString("Channel %1").arg(index)); }
+void ChannelWidget::enable_volume(bool enable)    { volume->setEnabled(enable); }
+
 
 
 
@@ -395,11 +405,17 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
     player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
         for (int i = 0; i < labels.size(); i++)
             labels[i]->setText(QString::fromStdString(metadata.info[i]));
+    });
+
+    player->on_file_changed([=, this] (int) {
         auto names = player->channel_names();
+        auto multi = player->is_multi_channel();
         for (auto &c : channels)
             c->reset();
-        for (int i = 0; i < names.size(); i++)
+        for (int i = 0; i < names.size(); i++) {
             channels[i]->set_name(QString::fromStdString(names[i]));
+            channels[i]->enable_volume(multi);
+        }
     });
 
     player->on_error([=, this] (gmplayer::Error error) {
@@ -491,7 +507,7 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
 
     // volume slider and button
     auto *volume = new VolumeWidget(options.volume, 0, MAX_VOLUME_VALUE);
-    connect(volume, &VolumeWidget::volume_changed, this, [&] (auto value) { player->set_volume(value); });
+    connect(volume, &VolumeWidget::volume_changed, this, [=, this] (auto value) { player->set_volume(value); });
 
     // player signals
     player->on_played([=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
@@ -531,8 +547,8 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
         prev_track->setEnabled(player->has_prev());
     });
     player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
-    player->on_file_changed([=, this] (int fileno) { stop_btn->setEnabled(true); });
-    player->on_file_removed([=, this] (int fileno) {
+    player->on_file_changed([=, this] (int) { stop_btn->setEnabled(true); });
+    player->on_file_removed([=, this] (int) {
         next_track->setEnabled(player->has_next());
         prev_track->setEnabled(player->has_prev());
     });

@@ -116,11 +116,12 @@ class ChannelWidget : public QWidget {
     Q_OBJECT
     int index;
     QLabel *label;
-    VolumeWidget *volume;
+    QSlider *volume;
 public:
     ChannelWidget(int index, gmplayer::Player *player, QWidget *parent = nullptr);
     void set_name(const QString &name);
     void reset();
+    void enable_volume(bool enable);
 };
 
 class CurrentlyPlayingTab : public QWidget {
