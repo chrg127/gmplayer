@@ -19,6 +19,8 @@ class Visualizer : public QGraphicsView {
     QString name;
     void showEvent(QShowEvent *) override;
     void resizeEvent(QResizeEvent *ev) override;
+    void wheelEvent(QWheelEvent *) override { }
+
 public:
     Visualizer(std::span<i16> data, int channel, int channel_size, int num_channels, QWidget *parent = nullptr);
     void set_name(const QString &name) { this->name = name; }
