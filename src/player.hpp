@@ -181,7 +181,7 @@ public:                                             \
     MAKE_SIGNAL(cleared, void)
     MAKE_SIGNAL(playlist_changed, List)
     MAKE_SIGNAL(file_removed, int)
-    MAKE_SIGNAL(samples_played, std::span<i16>, std::span<i16>)
+    MAKE_SIGNAL(samples_played, std::span<i16>, std::span<f32>)
     MAKE_SIGNAL(channel_volume_changed, int, int)
 
 #undef MAKE_SIGNAL

@@ -106,28 +106,25 @@ void Player::audio_callback(std::span<u8> stream)
         return;
     }
     std::fill(stream.begin(), stream.end(), 0); // fill stream with silence
-    std::array<i16, NUM_FRAMES * NUM_CHANNELS * NUM_VOICES> separated = {};
-    std::array<i16, NUM_FRAMES * NUM_CHANNELS>              mixed     = {};
+    std::array<i16,   NUM_FRAMES * NUM_CHANNELS * NUM_VOICES> separated = {};
+    std::array<i16,   NUM_FRAMES * NUM_CHANNELS>              mixed     = {};
+    std::array<float, NUM_FRAMES * NUM_CHANNELS>              samples   = {};
     auto multi = format->is_multi_channel();
     auto err = multi ? format->play(separated) : format->play(mixed);
     if (err) {
         error(err);
         return;
     }
-    if (multi) {
-        for (auto f = 0u; f < NUM_FRAMES; f += 2) {
-            for (auto t = 0u; t < NUM_VOICES; t++) {
-                for (auto i = 0u; i < NUM_CHANNELS*2; i++) {
-                    mixed[f*2 + i] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + i] * effects.volume[t];
-                }
-            }
-        }
-    }
-    std::array<float, NUM_FRAMES * NUM_CHANNELS> samples;
-    for (auto i = 0u; i < NUM_FRAMES * NUM_CHANNELS; i++)
-        samples[i] = mixed[i] / 32000.f;
+    if (multi)
+        for (auto f = 0u; f < NUM_FRAMES; f += 2)
+            for (auto t = 0u; t < NUM_VOICES; t++)
+                for (auto i = 0u; i < NUM_CHANNELS*2; i++)
+                    samples[f*2 + i] += float(separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + i]) / 32768.f * effects.volume[t];
+    else
+        for (auto i = 0u; i < samples.size(); i++)
+            samples[i] = mixed[i] / 32768.f;
     SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(f32), opts.volume);
-    samples_played(separated, mixed);
+    samples_played(separated, samples);
 }
 
 Error Player::add_file_internal(fs::path path)
@@ -402,7 +399,7 @@ void Player::mute_channel(int index, bool mute)
 void Player::set_channel_volume(int index, int value)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    effects.volume[index] = std::exp2(math::map<float>(value, 0, MAX_VOLUME_VALUE, -1.0, 1.0));
+    effects.volume[index] = std::exp2(math::map<float>(value, 0, MAX_VOLUME_VALUE, -4.0, 4.0));
     channel_volume_changed(index, value);
 }
 
