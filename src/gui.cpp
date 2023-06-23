@@ -630,11 +630,11 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     // menus
     auto *file_menu = create_menu(this, "&File",
         std::make_tuple(tr("Open &files"),    [this] {
-            auto files = multiple_file_dialog(tr("Open files"), tr(MUSIC_FILE_FILTER));
-            open_files(files, { OpenFilesFlags::AddToRecent, OpenFilesFlags::ClearAndPlay });
+            if (auto files = multiple_file_dialog(tr("Open files"), tr(MUSIC_FILE_FILTER)); !files.empty())
+                open_files(files, { OpenFilesFlags::AddToRecent, OpenFilesFlags::ClearAndPlay });
         }),
         std::make_tuple(tr("Open &playlist"), [this] {
-            if (auto f = file_dialog(tr("Open playlist"), tr(PLAYLIST_FILTER)); !f)
+            if (auto f = file_dialog(tr("Open playlist"), tr(PLAYLIST_FILTER)); f)
                 open_playlist(f.value());
         })
     );
@@ -693,8 +693,8 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     playlist_tab->setup_context_menu([=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction(tr("&Add files"), [=, this] {
-            auto files = multiple_file_dialog(tr("Add files"), tr(MUSIC_FILE_FILTER));
-            open_files(files);
+            if (auto files = multiple_file_dialog(tr("Add files"), tr(MUSIC_FILE_FILTER)); !files.empty())
+                open_files(files);
         });
         menu.addAction(tr("&Remove file"), [=, this] {
             if (auto cur = playlist_tab->current_file(); cur != -1)
