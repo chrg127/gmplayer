@@ -115,12 +115,18 @@ void Player::audio_callback(std::span<u8> stream)
         error(err);
         return;
     }
-    if (multi)
-        for (auto f = 0u; f < NUM_FRAMES; f += 2)
-            for (auto t = 0u; t < NUM_VOICES; t++)
-                for (auto i = 0u; i < NUM_CHANNELS*2; i++)
-                    samples[f*2 + i] += float(separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + i]) / 32768.f * effects.volume[t];
-    else
+
+    auto maxvol = 1.0f / float(MAX_VOLUME_VALUE);
+    if (multi) {
+        for (auto f = 0u; f < NUM_FRAMES; f += 2) {
+            for (auto t = 0u; t < NUM_VOICES; t++) {
+                for (auto i = 0u; i < NUM_CHANNELS*2; i++) {
+                    auto vol = float(effects.volume[t]);
+                    samples[f*2 + i] += separated[f*FRAME_SIZE + t*NUM_CHANNELS*2 + i] / 32768.f * vol * maxvol;
+                }
+            }
+        }
+    } else
         for (auto i = 0u; i < samples.size(); i++)
             samples[i] = mixed[i] / 32768.f;
     SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(f32), opts.volume);
@@ -399,7 +405,7 @@ void Player::mute_channel(int index, bool mute)
 void Player::set_channel_volume(int index, int value)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    effects.volume[index] = std::exp2(math::map<float>(value, 0, MAX_VOLUME_VALUE, -4.0, 4.0));
+    effects.volume[index] = value;
     channel_volume_changed(index, value);
 }
 

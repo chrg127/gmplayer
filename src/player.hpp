@@ -100,7 +100,10 @@ class Player {
     } opts;
 
     struct {
-        std::array<float, NUM_VOICES> volume = { 1, 1, 1, 1, 1, 1, 1, 1 };
+        std::array<int, NUM_VOICES> volume = { MAX_VOLUME_VALUE / 2, MAX_VOLUME_VALUE / 2,
+                                               MAX_VOLUME_VALUE / 2, MAX_VOLUME_VALUE / 2,
+                                               MAX_VOLUME_VALUE / 2, MAX_VOLUME_VALUE / 2,
+                                               MAX_VOLUME_VALUE / 2, MAX_VOLUME_VALUE / 2, };
     } effects;
 
     void audio_callback(std::span<u8> stream);
