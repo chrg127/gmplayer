@@ -245,8 +245,26 @@ void Player::clear()
     cleared();
 }
 
-const io::MappedFile &Player::current_file()  const { std::lock_guard<SDLMutex> lock(audio.mutex); return  file_cache[ files.order[ files.current]]; }
-const       Metadata &Player::current_track() const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[tracks.current]]; }
+const io::MappedFile &  Player::current_file()    const { std::lock_guard<SDLMutex> lock(audio.mutex); return  file_cache[ files.order[ files.current]]; }
+const Metadata &        Player::current_track()   const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[tracks.current]]; }
+const Metadata &        Player::track_info(int i) const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[             i]]; }
+
+const std::vector<Metadata> Player::file_info(int i) const
+{
+    auto format = gmplayer::read_file(file_cache[files.order[i]], 44100, opts.default_duration);
+    if (!format)
+        return {};
+    std::vector<Metadata> v;
+    for (int i = 0; i < format.value()->track_count(); i++)
+        v.push_back(format.value()->track_metadata(i));
+    return v;
+}
+
+int Player::get_track_count() const
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    return tracks.order.size();
+}
 
 bool Player::is_multi_channel() const { return format->is_multi_channel(); }
 

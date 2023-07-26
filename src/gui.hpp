@@ -94,11 +94,16 @@ signals:
 
 class PlaylistTab : public QWidget {
     Q_OBJECT
-    Playlist *filelist;
+    Playlist *filelist, *tracklist;
 public:
     PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent = nullptr);
-    int current_file() const { return filelist->current(); }
-    void setup_context_menu(auto &&fn) { filelist->setup_context_menu(fn); }
+    int current_file()  const { return filelist->current(); }
+    int current_track() const { return tracklist->current(); }
+
+    void setup_context_menu(gmplayer::Player::List which, auto &&fn)
+    {
+        (which == gmplayer::Player::List::Track ? tracklist : filelist)->setup_context_menu(fn);
+    }
 };
 
 class VolumeWidget : public QWidget {
@@ -124,10 +129,10 @@ public:
     void enable_volume(bool enable);
 };
 
-class CurrentlyPlayingTab : public QWidget {
+class VoicesTab : public QWidget {
     Q_OBJECT
 public:
-    CurrentlyPlayingTab(gmplayer::Player *player, QWidget *parent = nullptr);
+    VoicesTab(gmplayer::Player *player, QWidget *parent = nullptr);
 };
 
 class Controls : public QWidget {
@@ -139,6 +144,14 @@ class Controls : public QWidget {
     } history = SliderHistory::DontKnow;
 public:
     Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent = nullptr);
+};
+
+class Details : public QDialog {
+    Q_OBJECT
+    std::vector<gmplayer::Metadata> ms;
+public:
+    Details(const gmplayer::Metadata &metadata, QWidget *parent = nullptr);
+    Details(std::span<const gmplayer::Metadata> metadata, QWidget *parent = nullptr);
 };
 
 enum class OpenFilesFlags {

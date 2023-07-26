@@ -125,6 +125,9 @@ public:
     void clear();
     const io::MappedFile & current_file()  const;
     const Metadata       & current_track() const;
+    const Metadata       & track_info(int i) const;
+    const std::vector<Metadata> file_info(int i) const;
+    int get_track_count() const;
 
     bool is_playing() const;
     void start_or_resume();

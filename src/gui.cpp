@@ -17,6 +17,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QListWidget>
+#include <QTreeWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
@@ -30,6 +31,9 @@
 #include <QSlider>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QList>
+#include <QScrollArea>
+#include "format.hpp"
 #include "qtutils.hpp"
 #include "io.hpp"
 #include "appinfo.hpp"
@@ -330,8 +334,8 @@ void Playlist::setup_context_menu(auto &&fn)
 PlaylistTab::PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent)
     : QWidget(parent)
 {
-    auto *tracklist = new Playlist(gmplayer::Player::List::Track, player);
-          filelist  = new Playlist(gmplayer::Player::List::File,  player);
+    tracklist = new Playlist(gmplayer::Player::List::Track, player);
+    filelist  = new Playlist(gmplayer::Player::List::File,  player);
     auto *autoplay     = make_checkbox("Autoplay",     options.autoplay,     this, [=, this] (int state) { player->set_autoplay(state); });
     auto *repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player->set_track_repeat(state); });
     auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player->set_file_repeat(state); });
@@ -390,22 +394,14 @@ void ChannelWidget::enable_volume(bool enable)    { volume->setEnabled(enable); 
 
 
 
-CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *parent)
+VoicesTab::VoicesTab(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
-    std::array<QLabel *, 7> labels;
-    for (auto &l : labels)
-        l = new QLabel;
     std::array<ChannelWidget *, 8> channels;
     for (int i = 0; i < 8; i++) {
         channels[i] = new ChannelWidget(i, player);
         channels[i]->reset();
     }
-
-    player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
-        for (int i = 0; i < labels.size(); i++)
-            labels[i]->setText(QString::fromStdString(metadata.info[i]));
-    });
 
     player->on_file_changed([=, this] (int) {
         auto names = player->channel_names();
@@ -418,33 +414,12 @@ CurrentlyPlayingTab::CurrentlyPlayingTab(gmplayer::Player *player, QWidget *pare
         }
     });
 
-    player->on_error([=, this] (gmplayer::Error error) {
-        switch (static_cast<gmplayer::ErrType>(error.code.value())) {
-        case gmplayer::ErrType::LoadFile:
-        case gmplayer::ErrType::Header:
-        case gmplayer::ErrType::FileType:
-        case gmplayer::ErrType::LoadTrack:
-            for (auto &l : labels)
-                l->setText("");
-        }
-    });
-
     setLayout(
-        make_layout<QVBoxLayout>(
-            make_groupbox<QFormLayout>("Track info",
-                std::make_tuple(new QLabel(tr("Title:")),   labels[gmplayer::Metadata::Song]),
-                std::make_tuple(new QLabel(tr("Game:")),    labels[gmplayer::Metadata::Game]),
-                std::make_tuple(new QLabel(tr("System:")),  labels[gmplayer::Metadata::System]),
-                std::make_tuple(new QLabel(tr("Author:")),  labels[gmplayer::Metadata::Author]),
-                std::make_tuple(new QLabel(tr("Comment:")), labels[gmplayer::Metadata::Comment]),
-                std::make_tuple(new QLabel(tr("Dumper:")),  labels[gmplayer::Metadata::Dumper])
-            ),
-            make_groupbox<QGridLayout>("Channels",
-                std::make_tuple(channels[0], 0, 0), std::make_tuple(channels[1], 0, 1),
-                std::make_tuple(channels[2], 1, 0), std::make_tuple(channels[3], 1, 1),
-                std::make_tuple(channels[4], 2, 0), std::make_tuple(channels[5], 2, 1),
-                std::make_tuple(channels[6], 3, 0), std::make_tuple(channels[7], 3, 1)
-            )
+        make_layout<QGridLayout>(
+            std::make_tuple(channels[0], 0, 0), std::make_tuple(channels[1], 0, 1),
+            std::make_tuple(channels[2], 1, 0), std::make_tuple(channels[3], 1, 1),
+            std::make_tuple(channels[4], 2, 0), std::make_tuple(channels[5], 2, 1),
+            std::make_tuple(channels[6], 3, 0), std::make_tuple(channels[7], 3, 1)
         )
     );
 }
@@ -618,6 +593,56 @@ void VolumeWidget::set_value(int value)
 }
 
 
+
+Details::Details(const gmplayer::Metadata &metadata, QWidget *parent)
+{
+    std::array<QLabel *, 7> labels;
+    for (int i = 0; i < labels.size(); i++) {
+        labels[i] = new QLabel;
+        labels[i]->setText(QString::fromStdString(metadata.info[i]));
+    }
+    setLayout(make_layout<QFormLayout>(
+        std::make_tuple(new QLabel(QObject::tr("Title:")),   labels[gmplayer::Metadata::Song]),
+        std::make_tuple(new QLabel(QObject::tr("Game:")),    labels[gmplayer::Metadata::Game]),
+        std::make_tuple(new QLabel(QObject::tr("System:")),  labels[gmplayer::Metadata::System]),
+        std::make_tuple(new QLabel(QObject::tr("Author:")),  labels[gmplayer::Metadata::Author]),
+        std::make_tuple(new QLabel(QObject::tr("Comment:")), labels[gmplayer::Metadata::Comment]),
+        std::make_tuple(new QLabel(QObject::tr("Dumper:")),  labels[gmplayer::Metadata::Dumper])
+    ));
+}
+
+Details::Details(std::span<const gmplayer::Metadata> metadata, QWidget *parent)
+{
+    ms.assign(metadata.begin(), metadata.end());
+    std::array<QLabel *, 7> labels;
+    for (int i = 0; i < labels.size(); i++) {
+        labels[i] = new QLabel;
+        labels[i]->setText(QString::fromStdString(ms[0].info[i]));
+    }
+    auto *list = new QListWidget;
+    for (const auto &m : ms)
+        new QListWidgetItem(QString::fromStdString(m.info[gmplayer::Metadata::Song]), list);
+    connect(list, &QListWidget::itemActivated, this, [=, this] {
+        for (int i = 0; i < labels.size(); i++)
+            labels[i]->setText(QString::fromStdString(ms[list->currentRow()].info[i]));
+    });
+    setLayout(
+        make_layout<QHBoxLayout>(
+            list,
+            make_layout<QFormLayout>(
+                std::make_tuple(new QLabel(QObject::tr("Title:")),   labels[gmplayer::Metadata::Song]),
+                std::make_tuple(new QLabel(QObject::tr("Game:")),    labels[gmplayer::Metadata::Game]),
+                std::make_tuple(new QLabel(QObject::tr("System:")),  labels[gmplayer::Metadata::System]),
+                std::make_tuple(new QLabel(QObject::tr("Author:")),  labels[gmplayer::Metadata::Author]),
+                std::make_tuple(new QLabel(QObject::tr("Comment:")), labels[gmplayer::Metadata::Comment]),
+                std::make_tuple(new QLabel(QObject::tr("Dumper:")),  labels[gmplayer::Metadata::Dumper])
+            )
+        )
+    );
+}
+
+
+
 MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     : QMainWindow(parent), player{player}
 {
@@ -680,17 +705,17 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     });
 
     // tabs
-    auto *playlist_tab          = new PlaylistTab(player, options);
-    auto *currently_playing_tab = new CurrentlyPlayingTab(player);
-    auto *visualizer_tab        = new VisualizerTab(player);
+    auto *playlist_tab      = new PlaylistTab(player, options);
+    auto *voices_tab        = new VoicesTab(player);
+    auto *visualizer_tab    = new VisualizerTab(player);
     auto *controls = new Controls(player, options);
     auto *tabs = make_tabs(
-        std::tuple { playlist_tab,          tr("&Playlists") },
-        std::tuple { currently_playing_tab, tr("&Current Track") },
-        std::tuple { visualizer_tab,        tr("&Visualizer") }
+        std::tuple { playlist_tab,   tr("&Playlists") },
+        std::tuple { voices_tab,     tr("&Channels") },
+        std::tuple { visualizer_tab, tr("&Visualizer") }
     );
 
-    playlist_tab->setup_context_menu([=, this] (const QPoint &p) {
+    playlist_tab->setup_context_menu(gmplayer::Player::List::File, [=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction(tr("&Add files"), [=, this] {
             if (auto files = multiple_file_dialog(tr("Add files"), tr(MUSIC_FILE_FILTER)); !files.empty())
@@ -702,7 +727,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
             else
                 msgbox(tr("A file must be selected first."));
         });
-        menu.addAction(tr("&Save playlist"), [=, this]() {
+        menu.addAction(tr("&Save playlist"), [=, this] {
             if (auto filename = save_dialog(tr("Save playlist"), tr("Playlist files (*.playlist)")); !filename.isEmpty()) {
                 auto file_path = fs::path(filename.toStdString());
                 auto f = io::File::open(file_path, io::Access::Write);
@@ -715,6 +740,27 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
                 player->save_playlist(gmplayer::Player::List::File, f.value());
             }
         });
+        auto *action = menu.addAction(tr("&Details"), [=, this] {
+            if (auto fileno = playlist_tab->current_file(); fileno != -1) {
+                auto mds = player->file_info(fileno);
+                auto *wnd = new Details(mds);
+                wnd->open();
+            }
+        });
+        action->setEnabled(playlist_tab->current_file() != -1);
+        menu.exec(p);
+    });
+
+    playlist_tab->setup_context_menu(gmplayer::Player::List::Track, [=, this] (const QPoint &p) {
+        QMenu menu;
+        auto *action = menu.addAction(tr("&Details"), [=, this] {
+            if (auto trackno = playlist_tab->current_track(); trackno != -1) {
+                auto metadata = player->track_info(trackno);
+                auto *wnd = new Details(metadata);
+                wnd->open();
+            }
+        });
+        action->setEnabled(playlist_tab->current_track() != -1);
         menu.exec(p);
     });
 
