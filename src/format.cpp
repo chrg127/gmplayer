@@ -17,6 +17,30 @@ namespace {
     }
 } // namespace
 
+std::string format_metadata(std::string_view fmt, const Metadata &m)
+{
+    auto get_info = [&](char c) -> std::string {
+        switch (c) {
+        case 's': return m.info[Metadata::Song];
+        case 'a': return m.info[Metadata::Author];
+        case 'g': return m.info[Metadata::Game];
+        case 'b': return m.info[Metadata::System];
+        case 'c': return m.info[Metadata::Comment];
+        case 'd': return m.info[Metadata::Dumper];
+        case 'l': return std::to_string(m.length);
+        default: return "";
+        }
+    };
+    std::string out;
+    for (int i = 0; i < fmt.size(); i++) {
+        if (fmt[i] != '%')
+            out += fmt[i];
+        else
+            out += get_info(fmt[++i]);
+    }
+    return out;
+}
+
 auto read_file(const io::MappedFile &file, int frequency, int default_length)
     -> tl::expected<std::unique_ptr<FormatInterface>, Error>
 {

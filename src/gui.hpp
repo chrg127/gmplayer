@@ -30,10 +30,18 @@ class QGraphicsView;
 
 namespace gui {
 
+struct SettingsResult {
+    int fade;
+    int default_duration;
+    std::string status_fmtstring;
+};
+
 class SettingsWindow : public QDialog {
     Q_OBJECT
 public:
-    explicit SettingsWindow(gmplayer::Player *player, QWidget *parent = nullptr);
+    SettingsWindow(gmplayer::Player *player, const QString &status_format_string, QWidget *parent = nullptr);
+signals:
+    void done(SettingsResult r);
 };
 
 struct Shortcut {
@@ -142,8 +150,14 @@ class Controls : public QWidget {
         WasPaused,
         WasPlaying,
     } history = SliderHistory::DontKnow;
+    std::string status_format_string;
+    gmplayer::Metadata metadata;
+    QLabel *status;
+
 public:
-    Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent = nullptr);
+    Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, const std::string &format_string, QWidget *parent = nullptr);
+    void set_status_format_string(std::string &&s);
+    std::string get_status_format_string() { return status_format_string; }
 };
 
 class Details : public QDialog {
@@ -166,6 +180,7 @@ class MainWindow : public QMainWindow {
     std::map<QString, Shortcut> shortcuts = {};
     RecentList *recent_files              = nullptr,
                *recent_playlists          = nullptr;
+    Controls *controls = nullptr;
 
     void update_next_prev_track();
     std::optional<std::filesystem::path> file_dialog(const QString &window_name, const QString &filter);

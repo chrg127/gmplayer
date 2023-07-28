@@ -25,6 +25,8 @@ struct Metadata {
     std::array<std::string, 7> info;
 };
 
+std::string format_metadata(std::string_view fmt, const Metadata &m);
+
 struct FormatInterface {
     virtual ~FormatInterface() = default;
     virtual Error       start_track(int n)                       = 0;

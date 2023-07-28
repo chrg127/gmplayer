@@ -33,6 +33,7 @@
 #include <QVBoxLayout>
 #include <QList>
 #include <QScrollArea>
+#include <QLineEdit>
 #include "format.hpp"
 #include "qtutils.hpp"
 #include "io.hpp"
@@ -127,6 +128,23 @@ void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
     settings.endGroup();
 }
 
+QString load_status_format_string()
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("idk");
+    auto s = settings.value("metadata_format_string", "%s - %g - %a").toString();
+    settings.endGroup();
+    return s;
+}
+
+void save_status_format_string(const QString &s)
+{
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
+    settings.beginGroup("idk");
+    settings.setValue("metadata_format_string", s);
+    settings.endGroup();
+}
+
 int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
 double int_to_tempo(int value) { return std::exp2(math::map(double(value), 0.0, 100.0, -2.0, 2.0)); }
 
@@ -164,13 +182,14 @@ void RecentList::add(fs::path path)
 
 
 
-SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
+SettingsWindow::SettingsWindow(gmplayer::Player *player, const QString &status_format_string, QWidget *parent)
 {
     auto options = player->options();
 
     auto *fade              = make_checkbox(tr("Enable &fade-out"), options.fade_out != 0);
     auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), options.fade_out / 1000, fade->isChecked());
     auto *default_duration  = make_spinbox(10_min / 1000, options.default_duration / 1000);
+    auto *fmtstring         = new QLineEdit(status_format_string);
 
     connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
         fade_secs->setEnabled(state);
@@ -180,18 +199,25 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
 
     auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
                                           | QDialogButtonBox::Cancel);
-    connect(button_box, &QDialogButtonBox::accepted, this, [=, this]() {
-        player->set_fade(fade_secs->value());
-        player->set_default_duration(default_duration->value());
-        accept();
-    });
-
+    connect(button_box, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(button_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    connect(this, &QDialog::finished, this, [=, this] (int r) {
+        if (r == QDialog::Accepted) {
+            auto res = SettingsResult {
+                .fade = fade_secs->value(),
+                .default_duration = default_duration->value(),
+                .status_fmtstring = fmtstring->text().toStdString()
+            };
+            emit done(res);
+        }
+    });
 
     setLayout(make_layout<QVBoxLayout>(
         fade,
         label_pair("Fade seconds:", fade_secs),
         label_pair("Default duration:", default_duration),
+        label_pair("Status format string:", fmtstring),
         button_box
     ));
 }
@@ -426,7 +452,7 @@ VoicesTab::VoicesTab(gmplayer::Player *player, QWidget *parent)
 
 
 
-Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent)
+Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, const std::string &format_string, QWidget *parent)
     : QWidget(parent)
 {
     // duration slider
@@ -484,6 +510,10 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
     auto *volume = new VolumeWidget(options.volume, 0, MAX_VOLUME_VALUE);
     connect(volume, &VolumeWidget::volume_changed, this, [=, this] (auto value) { player->set_volume(value); });
 
+    // status message
+    status_format_string = format_string;
+    status = new QLabel;
+
     // player signals
     player->on_played([=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
     player->on_paused([=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
@@ -520,6 +550,8 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
         duration_slider->setRange(0, player->length());
         next_track->setEnabled(player->has_next());
         prev_track->setEnabled(player->has_prev());
+        this->metadata = metadata;
+        status->setText(QString::fromStdString(gmplayer::format_metadata(status_format_string, metadata)));
     });
     player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
     player->on_file_changed([=, this] (int) { stop_btn->setEnabled(true); });
@@ -557,6 +589,7 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
 
     setLayout(
         make_layout<QVBoxLayout>(
+            status,
             make_layout<QHBoxLayout>(
                 duration_slider,
                 duration_label
@@ -564,6 +597,12 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
             lt
         )
     );
+}
+
+void Controls::set_status_format_string(std::string &&s)
+{
+    status_format_string = std::move(s);
+    status->setText(QString::fromStdString(gmplayer::format_metadata(status_format_string, metadata)));
 }
 
 
@@ -684,6 +723,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     connect(recent_playlists, &RecentList::clicked, this, &MainWindow::open_playlist);
     load_shortcuts();
     last_file = load_last_dir();
+    auto status_format_string = load_status_format_string();
 
     player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
         player->start_or_resume();
@@ -708,7 +748,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     auto *playlist_tab      = new PlaylistTab(player, options);
     auto *voices_tab        = new VoicesTab(player);
     auto *visualizer_tab    = new VisualizerTab(player);
-    auto *controls = new Controls(player, options);
+    controls = new Controls(player, options, status_format_string.toStdString());
     auto *tabs = make_tabs(
         std::tuple { playlist_tab,   tr("&Playlists") },
         std::tuple { voices_tab,     tr("&Channels") },
@@ -876,13 +916,15 @@ void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> fla
 
 void MainWindow::edit_settings()
 {
-    auto *wnd = new SettingsWindow(player, this);
+    auto *wnd = new SettingsWindow(player, QString::fromStdString(controls->get_status_format_string()), this);
     wnd->open();
-    connect(wnd, &QDialog::finished, this, [=, this](int result) {
+    connect(wnd, &SettingsWindow::done, this, [=, this](SettingsResult r) {
+        player->set_fade(r.fade);
+        player->set_default_duration(r.default_duration);
+        controls->set_status_format_string(std::move(r.status_fmtstring));
         // reset song to start position
         // (this is due to the modified fade applying to the song)
-        if (result == QDialog::Accepted)
-            player->seek(0);
+        player->seek(0);
     });
 }
 
@@ -911,6 +953,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     save_recent(recent_playlists->filenames(), "recent_playlists");
     save_shortcuts(shortcuts);
     save_last_dir(last_file);
+    save_status_format_string(QString::fromStdString(controls->get_status_format_string()));
     event->accept();
 }
 
