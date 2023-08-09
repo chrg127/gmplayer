@@ -37,9 +37,10 @@ endif()
 add_executable(gmplayer
     src/main.cpp src/gui.cpp src/player.cpp src/keyrecorder.cpp src/io.cpp
     src/visualizer.cpp src/format.cpp src/mpris_server.cpp resources/icons.qrc
+    src/conf.cpp
 )
 
-target_link_libraries(gmplayer PRIVATE pthread Qt5::Widgets ${SDL2_LIBRARIES} ${GME_LIBRARIES} SDBusCpp::sdbus-c++)
+target_link_libraries(gmplayer PRIVATE pthread Qt5::Widgets ${SDL2_LIBRARIES} ${GME_LIBRARIES} SDBusCpp::sdbus-c++ fmt)
 
 install(FILES resources/linux/gmplayer.desktop DESTINATION share/applications/ COMPONENT desktop)
 install(FILES resources/linux/gmplayer.png DESTINATION share/icons/hicolor/256x256/apps COMPONENT desktop)

@@ -18,6 +18,7 @@
 #include "const.hpp"
 #include "player.hpp"
 #include "flags.hpp"
+#include "conf.hpp"
 
 class QShortcut;
 class QMenu;
@@ -30,30 +31,22 @@ class QGraphicsView;
 
 namespace gui {
 
-struct SettingsResult {
-    int fade;
-    int default_duration;
-    std::string status_fmtstring;
-};
-
 class SettingsWindow : public QDialog {
     Q_OBJECT
 public:
-    SettingsWindow(gmplayer::Player *player, const QString &status_format_string, QWidget *parent = nullptr);
-signals:
-    void done(SettingsResult r);
+    SettingsWindow(gmplayer::Player *player, QWidget *parent = nullptr);
 };
 
 struct Shortcut {
     QShortcut *shortcut;
-    QString name;
     QString display_name;
+    std::string key;
 };
 
 class ShortcutsWindow : public QDialog {
     Q_OBJECT
 public:
-    explicit ShortcutsWindow(const std::map<QString, Shortcut> &shortcuts);
+    explicit ShortcutsWindow(const std::vector<Shortcut> &shortcuts);
 };
 
 // a button that when clicked records a key sequence.
@@ -104,7 +97,7 @@ class PlaylistTab : public QWidget {
     Q_OBJECT
     Playlist *filelist, *tracklist;
 public:
-    PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent = nullptr);
+    PlaylistTab(gmplayer::Player *player, QWidget *parent = nullptr);
     int current_file()  const { return filelist->current(); }
     int current_track() const { return tracklist->current(); }
 
@@ -155,7 +148,7 @@ class Controls : public QWidget {
     QLabel *status;
 
 public:
-    Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, const std::string &format_string, QWidget *parent = nullptr);
+    Controls(gmplayer::Player *player, QWidget *parent = nullptr);
     void set_status_format_string(std::string &&s);
     std::string get_status_format_string() { return status_format_string; }
 };
@@ -177,7 +170,7 @@ class MainWindow : public QMainWindow {
 
     gmplayer::Player *player              = nullptr;
     QString last_file                     = ".";
-    std::map<QString, Shortcut> shortcuts = {};
+    std::vector<Shortcut> shortcuts = {};
     RecentList *recent_files              = nullptr,
                *recent_playlists          = nullptr;
     Controls *controls = nullptr;

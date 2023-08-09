@@ -4,42 +4,14 @@
 #include <QStandardPaths>
 #include <QSettings>
 #include <SDL.h>
+#include <fmt/core.h>
 #include "gui.hpp"
 #include "player.hpp"
 #include "mpris_server.hpp"
+#include "qtutils.hpp"
+#include "config.hpp"
 
-using namespace gmplayer::literals;
-
-gmplayer::PlayerOptions load_player_options()
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("player");
-    gmplayer::PlayerOptions options = {
-        .fade_out           = settings.value("fade_out",                               0).toInt(),
-        .autoplay           = settings.value("autoplay",                           false).toBool(),
-        .track_repeat       = settings.value("track_repeat",                       false).toBool(),
-        .file_repeat        = settings.value("file_repeat",                        false).toBool(),
-        .default_duration   = settings.value("default_duration",              int(3_min)).toInt(),
-        .tempo              = settings.value("tempo",                                1.0).toDouble(),
-        .volume             = settings.value("volume",                  MAX_VOLUME_VALUE).toInt(),
-    };
-    settings.endGroup();
-    return options;
-}
-
-void save_player_options(const gmplayer::PlayerOptions &options)
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("player");
-    settings.setValue("fade_out",          options.fade_out);
-    settings.setValue("autoplay",          options.autoplay);
-    settings.setValue("track_repeat",      options.track_repeat);
-    settings.setValue("file_repeat",       options.file_repeat);
-    settings.setValue("default_duration",  options.default_duration);
-    settings.setValue("tempo",             options.tempo);
-    settings.setValue("volume",            options.volume);
-    settings.endGroup();
-}
+Config config;
 
 #define USE_QT 1
 
@@ -47,18 +19,25 @@ void save_player_options(const gmplayer::PlayerOptions &options)
 
 int main(int argc, char *argv[])
 {
-    QApplication a(argc, argv);
     SDL_Init(SDL_INIT_AUDIO);
+    QApplication a(argc, argv);
 
-    gmplayer::Player player{load_player_options()};
+    auto errors = config.load();
+    if (errors.size() > 0) {
+        std::string errors_str;
+        for (auto e : errors)
+            errors_str += e.message() + "\n";
+        msgbox("Errors were found while parsing the configuration file.", QString::fromStdString(errors_str));
+    }
 
+    gmplayer::Player player;
     player.mpris_server().set_desktop_entry(QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "gmplayer.desktop").toStdString());
     player.mpris_server().set_identity("gmplayer");
     player.mpris_server().set_supported_uri_schemes({"file"});
     player.mpris_server().set_supported_mime_types({"application/x-pkcs7-certificates", "application/octet-stream", "text/plain"});
     player.mpris_server().on_quit([] { QApplication::quit(); });
 
-    gui::MainWindow mw{&player};
+    auto mw = gui::MainWindow(&player);
 
     bool sdl_running = true;
     std::thread sdl_thread([&]() {
@@ -90,7 +69,7 @@ int main(int argc, char *argv[])
 
     sdl_running = false;
     sdl_thread.join();
-    save_player_options(player.options());
+    config.save();
     SDL_Quit();
     return 0;
 }
@@ -102,7 +81,23 @@ int main()
 {
     SDL_Init(SDL_INIT_AUDIO);
 
-    gmplayer::Player player{load_player_options()};
+    auto [options, errors] = conf::parse_or_create("gmplayer", defaults);
+    std::string errors_str;
+    for (auto e : errors)
+        errors_str += e.message() + "\n";
+    if (errors.size() > 0)
+        msgbox("Errors were found while parsing the configuration file.", QString::fromStdString(errors_str));
+
+    gmplayer::Player player;
+    player.set_options({
+        .fade_out         = options["fade"]            .as<int>(),
+        .autoplay         = options["autoplay"]        .as<bool>(),
+        .track_repeat     = options["repeat_track"]    .as<bool>(),
+        .file_repeat      = options["repeat_file"]     .as<bool>(),
+        .default_duration = options["default_duration"].as<int>(),
+        .tempo            = options["tempo"]           .as<float>(),
+        .volume           = options["volume"]          .as<int>()
+    });
 
     player.mpris_server().set_desktop_entry(QStandardPaths::locate(QStandardPaths::ApplicationsLocation, "gmplayer.desktop").toStdString());
     player.mpris_server().set_identity("gmplayer");
@@ -110,16 +105,17 @@ int main()
     player.mpris_server().set_supported_mime_types({"application/x-pkcs7-certificates", "application/octet-stream", "text/plain"});
     player.mpris_server().on_quit([] { QApplication::quit(); });
 
+    player.on_error([&] (auto err) { printf("%s\n", err.code.message().c_str()); });
+
     auto err = player.add_file(std::filesystem::path{"test_files/smb3.nsf"});
     if (err) {
         printf("%s\n", err.message().c_str());
         return 1;
     }
 
-    player.on_error([&] (auto err) { printf("%s\n", err.code.message().c_str()); });
     player.load_file(0);
     player.load_track(0);
-    player.seek(1_sec);
+    // player.seek(1_sec);
     player.start_or_resume();
 
     bool sdl_running = true;

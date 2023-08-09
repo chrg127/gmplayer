@@ -8,6 +8,7 @@
 #include <SDL_audio.h> // SDL_AudioDeviceID
 #include "common.hpp"
 #include "format.hpp"
+#include "callback_handler.hpp"
 
 namespace mpris { struct Server; }
 namespace io { class File; class MappedFile; }
@@ -62,21 +63,6 @@ struct Playlist {
     std::optional<int> prev() const { return get(-1, -1, order.size()); }
 };
 
-template <typename T> class Signal;
-
-template <typename R, typename... P>
-class Signal<R(P...)> {
-    std::vector<std::function<R(P...)>> callbacks;
-public:
-    void add(auto &&fn) { callbacks.push_back(fn); }
-    void call(auto&&... args)
-    {
-        for (auto &f : callbacks)
-            f(std::forward<decltype(args)>(args)...);
-    }
-    void operator()(auto&&... args) { call(std::forward<decltype(args)>(args)...); }
-};
-
 class Player {
     std::unique_ptr<FormatInterface> format;
     std::vector<io::MappedFile> file_cache;
@@ -92,12 +78,17 @@ class Player {
     } audio;
 
     struct {
-        bool autoplay;
-        int default_duration;
-        int fade_out;
-        int volume;
-        double tempo;
-    } opts;
+        bool autoplay = false;
+        int volume = 0;
+    } options;
+
+//     struct {
+//         bool autoplay        = false;
+//         int default_duration = 0;
+//         int fade_out         = 0;
+//         int volume           = 0;
+//         double tempo         = 1.0;
+//     } opts;
 
     struct {
         std::array<int, NUM_VOICES> volume = { MAX_VOLUME_VALUE / 2, MAX_VOLUME_VALUE / 2,
@@ -112,7 +103,7 @@ class Player {
 public:
     enum class List { Track, File };
 
-    Player(PlayerOptions &&options);
+    Player();
     ~Player();
 
     Error add_file(std::filesystem::path path);
@@ -152,22 +143,22 @@ public:
     void mute_channel(int index, bool mute);
     void set_channel_volume(int index, int value);
 
-    PlayerOptions options();
-    void set_fade(int secs);
-    void set_tempo(double tempo);
-    void set_default_duration(int secs);
-    void set_autoplay(bool value);
-    void set_track_repeat(bool value);
-    void set_file_repeat(bool value);
-    void set_volume(int value);
-    void set_volume_relative(int offset);
-    void set_load_m3u(bool value);
+    // PlayerOptions options();
+    // void set_options(PlayerOptions options);
+    // void set_fade(int secs);
+    // void set_tempo(double tempo);
+    // void set_default_duration(int secs);
+    // void set_autoplay(bool value);
+    // void set_track_repeat(bool value);
+    // void set_file_repeat(bool value);
+    // void set_volume(int value);
+    // void set_volume_relative(int offset);
 
     mpris::Server &mpris_server();
 
 #define MAKE_SIGNAL(name, ...) \
 private:                                            \
-    Signal<void(__VA_ARGS__)> name;                 \
+    CallbackHandler<void(__VA_ARGS__)> name;        \
 public:                                             \
     void on_##name(auto &&fn) { name.add(fn); }     \
 

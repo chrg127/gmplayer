@@ -10,6 +10,7 @@
 #include "io.hpp"
 #include "mpris_server.hpp"
 #include "math.hpp"
+#include "config.hpp"
 
 namespace fs = std::filesystem;
 
@@ -19,15 +20,10 @@ void Playlist::regen()         { std::iota(order.begin(), order.end(), 0); }
 void Playlist::regen(int size) { order.resize(size); regen(); }
 void Playlist::shuffle()       { std::shuffle(order.begin(), order.end(), rng::rng); }
 
-Player::Player(PlayerOptions &&options)
+Player::Player()
 {
-    opts.fade_out           = options.fade_out;
-    opts.autoplay           = options.autoplay;
-    files.repeat            = options.file_repeat;
-    tracks.repeat           = options.track_repeat;
-    opts.default_duration   = options.default_duration;
-    opts.tempo              = options.tempo;
-    opts.volume             = options.volume;
+    options.autoplay = config.get<bool>("autoplay");
+    options.volume   = config.get<int>("volume");
 
     audio.spec.freq     = 44100;
     audio.spec.format   = AUDIO_F32;//*/ AUDIO_S16SYS;
@@ -45,8 +41,8 @@ Player::Player(PlayerOptions &&options)
     mpris = mpris::make_server("gmplayer");
     mpris->set_maximum_rate(4.0);
     mpris->set_minimum_rate(0.25);
-    mpris->set_rate(opts.tempo);
-    mpris->set_volume(opts.volume);
+    mpris->set_rate(config.get<float>("tempo"));
+    mpris->set_volume(config.get<int>("volume"));
     mpris->on_pause(           [=, this]                   { pause();               });
     mpris->on_play(            [=, this]                   { start_or_resume();     });
     mpris->on_play_pause(      [=, this]                   { play_pause();          });
@@ -54,7 +50,7 @@ Player::Player(PlayerOptions &&options)
     mpris->on_next(            [=, this]                   { next();                });
     mpris->on_previous(        [=, this]                   { prev();                });
     mpris->on_seek(            [=, this] (int64_t offset)  { seek_relative(offset); });
-    mpris->on_rate_changed(    [=, this] (double rate)     { set_tempo(rate);       });
+    mpris->on_rate_changed(    [=, this] (double rate)     { config.set<float>("tempo", rate); });
     mpris->on_set_position(    [=, this] (int64_t pos)     { seek(pos);             });
     mpris->on_shuffle_changed( [=, this] (bool do_shuffle) {
         if (do_shuffle)
@@ -64,27 +60,59 @@ Player::Player(PlayerOptions &&options)
         shuffled(List::File);
     });
     mpris->on_volume_changed(  [=, this] (double vol) {
-        set_volume(std::lerp(0.0, MAX_VOLUME_VALUE, vol));
+        config.set<int>("volume", std::lerp(0.0, MAX_VOLUME_VALUE, vol));
     });
     mpris->on_loop_status_changed([=, this] (mpris::LoopStatus status) {
-        switch (status) {
-        case mpris::LoopStatus::None:
-            set_track_repeat(false);
-            set_file_repeat(false);
-            break;
-        case mpris::LoopStatus::Track:
-            set_track_repeat(true);
-            set_file_repeat(true);
-            break;
-        case mpris::LoopStatus::Playlist:
-            set_track_repeat(false);
-            set_file_repeat(false);
+        config.set<bool>("repeat_track", status == mpris::LoopStatus::Track);
+        config.set<bool>("repeat_file",  status == mpris::LoopStatus::Track);
+        if (status == mpris::LoopStatus::Playlist)
             mpris->set_loop_status(mpris::LoopStatus::None);
-            break;
-        }
     });
 
     mpris->start_loop_async();
+
+    config.when_set("fade", [&](const conf::Value &v) {
+        auto fade = v.as<int>();
+        if (tracks.current != -1) {
+            // reset song to start position
+            // (this is due to the modified fade applying to the song)
+            seek(0);
+            format->set_fade(current_track().length, fade);
+        }
+        fade_changed(length());
+    });
+
+    config.when_set("autoplay", [&](const conf::Value &v) {
+        std::lock_guard<SDLMutex> lock(audio.mutex);
+        options.autoplay = v.as<bool>();
+    });
+
+    config.when_set("tempo", [&](const conf::Value &v) {
+        float tempo = v.as<float>();
+        format->set_tempo(tempo);
+        mpris->set_rate(tempo);
+    });
+
+    config.when_set("repeat_track", [&](const conf::Value &v) {
+        bool repeat = v.as<bool>();
+        tracks.repeat = repeat;
+        mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
+        repeat_changed(tracks.repeat, files.repeat);
+    });
+
+    config.when_set("repeat_file", [&](const conf::Value &v) {
+        bool repeat = v.as<bool>();
+        tracks.repeat = repeat;
+        mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
+        repeat_changed(tracks.repeat, files.repeat);
+    });
+
+    config.when_set("volume", [&](const conf::Value &v) {
+        std::lock_guard<SDLMutex> lock(audio.mutex);
+        options.volume = v.as<int>();
+        mpris->set_volume(double(options.volume) / double(MAX_VOLUME_VALUE));
+        volume_changed(options.volume);
+    });
 }
 
 Player::~Player()
@@ -101,7 +129,7 @@ void Player::audio_callback(std::span<u8> stream)
     if (format->track_ended()) {
         SDL_PauseAudioDevice(audio.dev_id, 1);
         track_ended();
-        if (opts.autoplay)
+        if (options.autoplay)
             next();
         return;
     }
@@ -115,7 +143,6 @@ void Player::audio_callback(std::span<u8> stream)
         error(err);
         return;
     }
-
     auto maxvol = 1.0f / float(MAX_VOLUME_VALUE);
     if (multi) {
         for (auto f = 0u; f < NUM_FRAMES; f += 2) {
@@ -129,7 +156,10 @@ void Player::audio_callback(std::span<u8> stream)
     } else
         for (auto i = 0u; i < samples.size(); i++)
             samples[i] = mixed[i] / 32768.f;
-    SDL_MixAudioFormat(stream.data(), (const u8 *) samples.data(), audio.spec.format, samples.size() * sizeof(f32), opts.volume);
+    SDL_MixAudioFormat(
+        stream.data(), (const u8 *) samples.data(), audio.spec.format,
+        samples.size() * sizeof(f32), options.volume
+    );
     samples_played(separated, samples);
 }
 
@@ -177,7 +207,7 @@ bool Player::load_file(int fileno)
     pause();
     track_cache.clear();
     files.current = fileno;
-    auto res = read_file(current_file(), 44100, opts.default_duration);
+    auto res = read_file(current_file(), 44100, config.get<int>("default_duration"));
     if (!res) {
         format = make_default_format();
         error(res.error());
@@ -202,8 +232,8 @@ bool Player::load_track(int trackno)
         return true;
     }
     auto &metadata = track_cache[num];
-    format->set_fade(metadata.length, opts.fade_out);
-    format->set_tempo(opts.tempo);
+    format->set_fade(metadata.length, config.get<int>("fade"));
+    format->set_tempo(config.get<float>("tempo"));
     mpris->set_metadata({
         { mpris::Field::TrackId, std::string("/") + std::to_string(files.current)
                                                   + std::to_string(tracks.current) },
@@ -251,7 +281,7 @@ const Metadata &        Player::track_info(int i) const { std::lock_guard<SDLMut
 
 const std::vector<Metadata> Player::file_info(int i) const
 {
-    auto format = gmplayer::read_file(file_cache[files.order[i]], 44100, opts.default_duration);
+    auto format = gmplayer::read_file(file_cache[files.order[i]], 44100, config.get<int>("default_duration"));
     if (!format)
         return {};
     std::vector<Metadata> v;
@@ -333,7 +363,7 @@ int Player::position()
 int Player::length() const
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    return tracks.current == -1 ? 0 : current_track().length + opts.fade_out;
+    return tracks.current == -1 ? 0 : current_track().length + config.get<int>("fade");
 }
 
 
@@ -425,82 +455,6 @@ void Player::set_channel_volume(int index, int value)
     std::lock_guard<SDLMutex> lock(audio.mutex);
     effects.volume[index] = value;
     channel_volume_changed(index, value);
-}
-
-
-PlayerOptions Player::options()
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    return PlayerOptions {
-        .fade_out          = opts.fade_out,
-        .autoplay          = opts.autoplay,
-        .track_repeat      = tracks.repeat,
-        .file_repeat       = files.repeat,
-        .default_duration  = opts.default_duration,
-        .tempo             = opts.tempo,
-        .volume            = opts.volume,
-    };
-}
-
-void Player::set_fade(int secs)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    opts.fade_out = secs * 1000;
-    if (tracks.current != -1)
-        format->set_fade(current_track().length, opts.fade_out);
-    fade_changed(length());
-}
-
-void Player::set_tempo(double tempo)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    opts.tempo = tempo;
-    format->set_tempo(tempo);
-    mpris->set_rate(tempo);
-    tempo_changed(tempo);
-}
-
-void Player::set_default_duration(int secs)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    opts.default_duration = secs * 1000;
-}
-
-void Player::set_autoplay(bool value)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    opts.autoplay = value;
-}
-
-void Player::set_track_repeat(bool value)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    tracks.repeat = value;
-    mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
-    repeat_changed(tracks.repeat, files.repeat);
-}
-
-void Player::set_file_repeat(bool value)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    files.repeat = value;
-    mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
-    repeat_changed(tracks.repeat, files.repeat);
-}
-
-void Player::set_volume(int value)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    opts.volume = value;
-    mpris->set_volume(double(opts.volume) / double(MAX_VOLUME_VALUE));
-    volume_changed(opts.volume);
-}
-
-void Player::set_volume_relative(int offset)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    opts.volume += offset;
-    volume_changed(opts.volume);
 }
 
 mpris::Server &Player::mpris_server() { return *mpris; }

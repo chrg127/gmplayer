@@ -2,6 +2,9 @@
 
 #include <SDL_audio.h>
 
+static const char *APP_NAME = "gmplayer";
+static const char *VERSION = "v0.1";
+
 inline constexpr int NUM_FRAMES         = 2048;
 inline constexpr int NUM_CHANNELS       = 2;
 inline constexpr int NUM_VOICES         = 8;

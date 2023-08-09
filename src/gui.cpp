@@ -34,12 +34,14 @@
 #include <QList>
 #include <QScrollArea>
 #include <QLineEdit>
+#include "conf.hpp"
 #include "format.hpp"
 #include "qtutils.hpp"
 #include "io.hpp"
 #include "appinfo.hpp"
 #include "math.hpp"
 #include "visualizer.hpp"
+#include "config.hpp"
 
 namespace fs = std::filesystem;
 using namespace gmplayer::literals;
@@ -47,9 +49,6 @@ using namespace gmplayer::literals;
 namespace gui {
 
 namespace {
-
-static const QString APP_NAME = "gmplayer";
-static const QString VERSION = "v0.1";
 
 constexpr auto MUSIC_FILE_FILTER =
     "All supported formats (*.spc *.nsf *.nsfe *.gbs *.gym *.ay *.kss *.hes *.vgm *.sap);;"
@@ -79,70 +78,9 @@ QString format_duration(int ms, int max)
         .arg(max / 1000 % 60, 2, 10, QChar('0'));
 };
 
-std::vector<fs::path> load_recent(const QString &name)
+std::vector<fs::path> load_recent(const std::string &key)
 {
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("recent");
-    auto files = settings.value(name).toStringList();
-    std::vector<fs::path> paths;
-    for (auto &file : files)
-        paths.push_back(fs::path(file.toStdString()));
-    settings.endGroup();
-    return paths;
-}
-
-void save_recent(std::span<fs::path> paths, const QString &name)
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("recent");
-    QStringList list;
-    for (auto &p : paths)
-        list.append(QString::fromStdString(p.string()));
-    settings.setValue(name, list);
-    settings.endGroup();
-}
-
-QString load_last_dir()
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("directories");
-    QString last_dir = settings.value("last_visited", ".").toString();
-    settings.endGroup();
-    return last_dir;
-}
-
-void save_last_dir(const QString &dir)
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("directories");
-    settings.setValue("last_visited", dir);
-    settings.endGroup();
-}
-
-void save_shortcuts(const std::map<QString, Shortcut> &shortcuts)
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("shortcuts");
-    for (auto [name, obj] : shortcuts)
-        settings.setValue(name, obj.shortcut->key().toString());
-    settings.endGroup();
-}
-
-QString load_status_format_string()
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("idk");
-    auto s = settings.value("metadata_format_string", "%s - %g - %a").toString();
-    settings.endGroup();
-    return s;
-}
-
-void save_status_format_string(const QString &s)
-{
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    settings.beginGroup("idk");
-    settings.setValue("metadata_format_string", s);
-    settings.endGroup();
+    return conf::convert_list_no_errors<fs::path, std::string>(config.get<conf::ValueList>(key));
 }
 
 int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
@@ -182,16 +120,15 @@ void RecentList::add(fs::path path)
 
 
 
-SettingsWindow::SettingsWindow(gmplayer::Player *player, const QString &status_format_string, QWidget *parent)
+SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
 {
-    auto options = player->options();
+    auto fade_val = config.get<int>("fade");
+    auto *fade_box          = make_checkbox(tr("Enable &fade-out"), fade_val != 0);
+    auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), fade_val / 1000, fade_box->isChecked());
+    auto *default_duration  = make_spinbox(10_min / 1000, config.get<int>("default_duration") / 1000);
+    auto *fmtstring         = new QLineEdit(QString::fromStdString(config.get<std::string>("status_format_string")));
 
-    auto *fade              = make_checkbox(tr("Enable &fade-out"), options.fade_out != 0);
-    auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), options.fade_out / 1000, fade->isChecked());
-    auto *default_duration  = make_spinbox(10_min / 1000, options.default_duration / 1000);
-    auto *fmtstring         = new QLineEdit(status_format_string);
-
-    connect(fade, &QCheckBox::stateChanged, this, [=, this](int state) {
+    connect(fade_box, &QCheckBox::stateChanged, this, [=, this](int state) {
         fade_secs->setEnabled(state);
         if (!state)
             fade_secs->setValue(0);
@@ -204,17 +141,14 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, const QString &status_f
 
     connect(this, &QDialog::finished, this, [=, this] (int r) {
         if (r == QDialog::Accepted) {
-            auto res = SettingsResult {
-                .fade = fade_secs->value(),
-                .default_duration = default_duration->value(),
-                .status_fmtstring = fmtstring->text().toStdString()
-            };
-            emit done(res);
+            config.set<int>("fade", fade_secs->value());
+            config.set<int>("default_duration", default_duration->value());
+            config.set<std::string>("status_format_string", fmtstring->text().toStdString());
         }
     });
 
     setLayout(make_layout<QVBoxLayout>(
-        fade,
+        fade_box,
         label_pair("Fade seconds:", fade_secs),
         label_pair("Default duration:", default_duration),
         label_pair("Status format string:", fmtstring),
@@ -224,10 +158,10 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, const QString &status_f
 
 
 
-ShortcutsWindow::ShortcutsWindow(const std::map<QString, Shortcut> &shortcuts)
+ShortcutsWindow::ShortcutsWindow(const std::vector<Shortcut> &shortcuts)
 {
     auto *layout = new QFormLayout;
-    for (auto [_, obj] : shortcuts) {
+    for (auto obj : shortcuts) {
         auto *edit = new RecorderButton(obj.shortcut->key().toString());
         layout->addRow(new QLabel(obj.display_name), edit);
         connect(edit, &RecorderButton::released,         this, [=, this] { edit->setText("..."); });
@@ -295,7 +229,9 @@ AboutDialog::AboutDialog(QWidget *parent)
 {
     auto *icon = new QLabel;
     icon->setPixmap(QPixmap((":/icons/gmplayer32.png")));
-    auto *label       = new QLabel(QString("<h2><b>%1 %2</b></h2>").arg(APP_NAME).arg(VERSION));
+    auto *label       = new QLabel(QString("<h2><b>%1 %2</b></h2>")
+                                    .arg(QString::fromStdString(APP_NAME))
+                                    .arg(QString::fromStdString(VERSION)));
     auto *about_label = new QLabel(ABOUT_TEXT);   about_label->setOpenExternalLinks(true);
     auto *lib_label   = new QLabel(LIBS_TEXT);    lib_label->setOpenExternalLinks(true);
     auto *tabs = make_tabs(
@@ -357,14 +293,14 @@ void Playlist::setup_context_menu(auto &&fn)
 
 
 
-PlaylistTab::PlaylistTab(gmplayer::Player *player, const gmplayer::PlayerOptions &options, QWidget *parent)
+PlaylistTab::PlaylistTab(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
     tracklist = new Playlist(gmplayer::Player::List::Track, player);
     filelist  = new Playlist(gmplayer::Player::List::File,  player);
-    auto *autoplay     = make_checkbox("Autoplay",     options.autoplay,     this, [=, this] (int state) { player->set_autoplay(state); });
-    auto *repeat_track = make_checkbox("Repeat track", options.track_repeat, this, [=, this] (int state) { player->set_track_repeat(state); });
-    auto *repeat_file  = make_checkbox("Repeat file",  options.file_repeat,  this, [=, this] (int state) { player->set_file_repeat(state); });
+    auto *autoplay     = make_checkbox("Autoplay",     config.get<bool>("autoplay"),     this, [=, this] (int state) { config.set<bool>("autoplay", state); });
+    auto *repeat_track = make_checkbox("Repeat track", config.get<bool>("repeat_track"), this, [=, this] (int state) { config.set<bool>("repeat_track", state); });
+    auto *repeat_file  = make_checkbox("Repeat file",  config.get<bool>("repeat_file"),  this, [=, this] (int state) { config.set<bool>("repeat_file", state); });
 
     player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
         tracklist->set_current(trackno);
@@ -452,7 +388,7 @@ VoicesTab::VoicesTab(gmplayer::Player *player, QWidget *parent)
 
 
 
-Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &options, const std::string &format_string, QWidget *parent)
+Controls::Controls(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
     // duration slider
@@ -484,13 +420,14 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
     prev_track->setEnabled(false);
 
     // tempo slider
-    auto *tempo = new QSlider(Qt::Horizontal);
-    auto *tempo_label = new QLabel(QString("%1x").arg(options.tempo, 4, 'f', 2));
-    tempo->setMinimum(0);
-    tempo->setMaximum(100);
-    tempo->setTickInterval(25);
-    tempo->setTickPosition(QSlider::TicksBelow);
-    tempo->setValue(tempo_to_int(options.tempo));
+    auto tempo = config.get<float>("tempo");
+    auto *tempo_slider = new QSlider(Qt::Horizontal);
+    auto *tempo_label = new QLabel(QString("%1x").arg(tempo, 4, 'f', 2));
+    tempo_slider->setMinimum(0);
+    tempo_slider->setMaximum(100);
+    tempo_slider->setTickInterval(25);
+    tempo_slider->setTickPosition(QSlider::TicksBelow);
+    tempo_slider->setValue(tempo_to_int(tempo));
 
     auto get_tempo_value = [=, this] (int value) {
         double r = int_to_tempo(value);
@@ -498,21 +435,22 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
         return r;
     };
 
-    connect(tempo, &QSlider::valueChanged, this, [=, this] (int value) {
-        auto r = get_tempo_value(value);
-        if (tempo->hasTracking())
-            player->set_tempo(r);
+    connect(tempo_slider, &QSlider::valueChanged, this, [=, this] (int value) {
+        if (tempo_slider->hasTracking())
+            config.set<float>("tempo", get_tempo_value(value));
     });
 
-    connect(tempo, &QSlider::sliderMoved, this, [=, this] { get_tempo_value(tempo->value()); });
+    connect(tempo_slider, &QSlider::sliderMoved, this, [=, this] { get_tempo_value(tempo_slider->value()); });
 
     // volume slider and button
-    auto *volume = new VolumeWidget(options.volume, 0, MAX_VOLUME_VALUE);
-    connect(volume, &VolumeWidget::volume_changed, this, [=, this] (auto value) { player->set_volume(value); });
+    auto *volume = new VolumeWidget(config.get<int>("volume"), 0, MAX_VOLUME_VALUE);
+    connect(volume, &VolumeWidget::volume_changed, this, [=, this] (auto value) { config.set<int>("volume", value); });
 
     // status message
-    status_format_string = format_string;
     status = new QLabel;
+    config.when_set("status_format_string", [=, this](const conf::Value &v) {
+        status->setText(QString::fromStdString(gmplayer::format_metadata(v.as<std::string>(), this->metadata)));
+    });
 
     // player signals
     player->on_played([=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
@@ -530,7 +468,7 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
 
     player->on_fade_changed(  [=, this] (int len)      { duration_slider->setRange(0, len); });
     player->on_volume_changed([=, this] (int value)    { volume->set_value(value); });
-    player->on_tempo_changed( [=, this] (double value) { tempo->setValue(tempo_to_int(value)); });
+    player->on_tempo_changed( [=, this] (double value) { tempo_slider->setValue(tempo_to_int(value)); });
 
     player->on_repeat_changed([=, this] (bool, bool) {
         next_track->setEnabled(player->has_next());
@@ -551,7 +489,7 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
         next_track->setEnabled(player->has_next());
         prev_track->setEnabled(player->has_prev());
         this->metadata = metadata;
-        status->setText(QString::fromStdString(gmplayer::format_metadata(status_format_string, metadata)));
+        status->setText(QString::fromStdString(gmplayer::format_metadata(config.get<std::string>("status_format_string"), metadata)));
     });
     player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
     player->on_file_changed([=, this] (int) { stop_btn->setEnabled(true); });
@@ -581,7 +519,7 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
         play_btn,
         next_track,
         stop_btn,
-        tempo,
+        tempo_slider,
         tempo_label,
         volume
     );
@@ -597,12 +535,6 @@ Controls::Controls(gmplayer::Player *player, const gmplayer::PlayerOptions &opti
             lt
         )
     );
-}
-
-void Controls::set_status_format_string(std::string &&s)
-{
-    status_format_string = std::move(s);
-    status->setText(QString::fromStdString(gmplayer::format_metadata(status_format_string, metadata)));
 }
 
 
@@ -685,11 +617,9 @@ Details::Details(std::span<const gmplayer::Metadata> metadata, QWidget *parent)
 MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     : QMainWindow(parent), player{player}
 {
-    setWindowTitle(APP_NAME);
+    setWindowTitle(QString::fromStdString(APP_NAME));
     setWindowIcon(QIcon(":/icons/gmplayer64.png"));
     setAcceptDrops(true);
-
-    auto options = player->options();
 
     // menus
     auto *file_menu = create_menu(this, "&File",
@@ -722,8 +652,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     connect(recent_files,     &RecentList::clicked, this, &MainWindow::open_file);
     connect(recent_playlists, &RecentList::clicked, this, &MainWindow::open_playlist);
     load_shortcuts();
-    last_file = load_last_dir();
-    auto status_format_string = load_status_format_string();
+    last_file = QString::fromStdString(config.get<std::string>("last_visited"));
 
     player->on_track_changed([=, this](int trackno, const gmplayer::Metadata &metadata) {
         player->start_or_resume();
@@ -745,10 +674,10 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     });
 
     // tabs
-    auto *playlist_tab      = new PlaylistTab(player, options);
+    auto *playlist_tab      = new PlaylistTab(player);
     auto *voices_tab        = new VoicesTab(player);
     auto *visualizer_tab    = new VisualizerTab(player);
-    controls = new Controls(player, options, status_format_string.toStdString());
+    controls = new Controls(player);
     auto *tabs = make_tabs(
         std::tuple { playlist_tab,   tr("&Playlists") },
         std::tuple { voices_tab,     tr("&Channels") },
@@ -817,28 +746,24 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
 
 void MainWindow::load_shortcuts()
 {
-    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "gmplayer", "gmplayer");
-    auto add_shortcut = [&](const QString &name, const QString &display_name,
-                            const QString &default_value, auto &&fn) {
-        auto value = settings.value(name, default_value).toString();
+    auto add_shortcut = [&](const std::string &key, const QString &display_name, auto &&fn) {
+        auto value = QString::fromStdString(config.get<std::string>(key));
         auto *shortcut = new QShortcut(QKeySequence(value), this);
         connect(shortcut, &QShortcut::activated, this, fn);
-        shortcuts[name] = {
+        shortcuts.push_back({
             .shortcut = shortcut,
-            .name = name,
-            .display_name = display_name
-        };
+            .display_name = display_name,
+            .key = key,
+        });
     };
-    settings.beginGroup("shortcuts");
-    add_shortcut("play",  "Play/Pause",     "Ctrl+Space",   [=, this] { player->play_pause();            });
-    add_shortcut("next",  "Next",           "Ctrl+Right",   [=, this] { player->next();                  });
-    add_shortcut("prev",  "Previous",       "Ctrl+Left",    [=, this] { player->prev();                  });
-    add_shortcut("stop",  "Stop",           "Ctrl+S",       [=, this] { player->stop();                  });
-    add_shortcut("seekf", "Seek forward",   "Right",        [=, this] { player->seek_relative(1_sec);    });
-    add_shortcut("seekb", "Seek backwards", "Left",         [=, this] { player->seek_relative(-1_sec);   });
-    add_shortcut("volup", "Volume up",      "0",            [=, this] { player->set_volume_relative( 2); });
-    add_shortcut("voldw", "Volume down",    "9",            [=, this] { player->set_volume_relative(-2); });
-    settings.endGroup();
+    add_shortcut("play_pause",      "Play/Pause",     [=, this] { player->play_pause();            });
+    add_shortcut("next",            "Next",           [=, this] { player->next();                  });
+    add_shortcut("prev",            "Previous",       [=, this] { player->prev();                  });
+    add_shortcut("stop",            "Stop",           [=, this] { player->stop();                  });
+    add_shortcut("seek_forward",    "Seek forward",   [=, this] { player->seek_relative(1_sec);    });
+    add_shortcut("seek_backward",   "Seek backwards", [=, this] { player->seek_relative(-1_sec);   });
+    add_shortcut("volume_up",       "Volume up",      [=, this] { config.set<int>("volume", config.get<int>("volume") + 2); });
+    add_shortcut("volume_down",     "Volume down",    [=, this] { config.set<int>("volume", config.get<int>("volume") - 2);});
 }
 
 std::optional<fs::path> MainWindow::file_dialog(const QString &window_name, const QString &filter)
@@ -916,16 +841,8 @@ void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> fla
 
 void MainWindow::edit_settings()
 {
-    auto *wnd = new SettingsWindow(player, QString::fromStdString(controls->get_status_format_string()), this);
+    auto *wnd = new SettingsWindow(player, this);
     wnd->open();
-    connect(wnd, &SettingsWindow::done, this, [=, this](SettingsResult r) {
-        player->set_fade(r.fade);
-        player->set_default_duration(r.default_duration);
-        controls->set_status_format_string(std::move(r.status_fmtstring));
-        // reset song to start position
-        // (this is due to the modified fade applying to the song)
-        player->seek(0);
-    });
 }
 
 void MainWindow::edit_shortcuts()
@@ -949,11 +866,17 @@ QString MainWindow::format_error(gmplayer::ErrType type)
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
-    save_recent(recent_files->filenames(), "recent_files");
-    save_recent(recent_playlists->filenames(), "recent_playlists");
-    save_shortcuts(shortcuts);
-    save_last_dir(last_file);
-    save_status_format_string(QString::fromStdString(controls->get_status_format_string()));
+    auto f = [&](const auto &paths) {
+        conf::ValueList v;
+        for (auto &p : paths)
+            v.push_back(conf::Value(p.string()));
+        return v;
+    };
+    config.set("recent_files",     f(recent_files->filenames()));
+    config.set("recent_playlists", f(recent_playlists->filenames()));
+    config.set("last_visited", last_file.toStdString());
+    for (auto &s : shortcuts)
+        config.set(s.key, s.shortcut->key().toString().toStdString());
     event->accept();
 }
 
