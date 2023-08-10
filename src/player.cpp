@@ -57,7 +57,7 @@ Player::Player()
             files.shuffle();
         else
             files.regen();
-        shuffled(List::File);
+        shuffled(Playlist::Type::File);
     });
     mpris->on_volume_changed(  [=, this] (double vol) {
         config.set<int>("volume", std::lerp(0.0, MAX_VOLUME_VALUE, vol));
@@ -178,7 +178,7 @@ Error Player::add_file(fs::path path)
     std::lock_guard<SDLMutex> lock(audio.mutex);
     if (auto err = add_file_internal(path); err)
         return err;
-    playlist_changed(List::File);
+    playlist_changed(Playlist::Type::File);
     return Error{};
 }
 
@@ -189,7 +189,7 @@ std::pair<std::vector<Error>, int> Player::add_files(std::span<std::filesystem::
     for (auto path : paths)
         if (auto err = add_file_internal(path); err)
             errors.push_back(err);
-    playlist_changed(List::File);
+    playlist_changed(Playlist::Type::File);
     return std::make_pair(errors, files.order.size());
 }
 
@@ -198,7 +198,7 @@ void Player::remove_file(int fileno)
     std::lock_guard<SDLMutex> lock(audio.mutex);
     files.remove(fileno);
     file_removed(fileno);
-    playlist_changed(List::File);
+    playlist_changed(Playlist::Type::File);
 }
 
 bool Player::load_file(int fileno)
@@ -217,7 +217,7 @@ bool Player::load_file(int fileno)
             track_cache.push_back(format->track_metadata(i));
     }
     tracks.regen(track_cache.size());
-    playlist_changed(List::Track);
+    playlist_changed(Playlist::Type::Track);
     file_changed(fileno);
     return !bool(res);
 }
@@ -253,10 +253,10 @@ void Player::load_pair(int file, int track)
     load_track(track);
 }
 
-void Player::save_playlist(List which, io::File &to)
+void Player::save_playlist(Playlist::Type which, io::File &to)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    for (auto i : (which == List::Track ? tracks.order : files.order))
+    for (auto i : (which == Playlist::Type::Track ? tracks.order : files.order))
         fprintf(to.data(), "%s\n", file_cache[i].path().c_str());
 }
 
@@ -270,8 +270,8 @@ void Player::clear()
     tracks.clear();
     files.clear();
     mpris->set_shuffle(false);
-    playlist_changed(List::Track);
-    playlist_changed(List::File);
+    playlist_changed(Playlist::Type::Track);
+    playlist_changed(Playlist::Type::File);
     cleared();
 }
 
@@ -400,10 +400,10 @@ bool Player::has_prev() const
     return tracks.prev() || files.prev();
 }
 
-void Player::shuffle(List which)
+void Player::shuffle(Playlist::Type which)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    if (which == List::Track)
+    if (which == Playlist::Type::Track)
         tracks.shuffle();
     else {
         files.shuffle();
@@ -413,18 +413,18 @@ void Player::shuffle(List which)
     shuffled(which);
 }
 
-int Player::move(List which, int n, int pos)
+int Player::move(Playlist::Type which, int n, int pos)
 {
-    auto r = which == List::Track ? tracks.move(n, pos) : files.move(n, pos);
+    auto r = which == Playlist::Type::Track ? tracks.move(n, pos) : files.move(n, pos);
     playlist_changed(which);
     return r;
 }
 
-std::vector<std::string> Player::names(List which) const
+std::vector<std::string> Player::names(Playlist::Type which) const
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     std::vector<std::string> names;
-    if (which == List::File)
+    if (which == Playlist::Type::File)
         for (auto i : files.order)
             names.push_back(file_cache[i].path().stem().string());
     else

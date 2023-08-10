@@ -86,6 +86,23 @@ std::vector<fs::path> load_recent(const std::string &key)
 int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
 double int_to_tempo(int value) { return std::exp2(math::map(double(value), 0.0, 100.0, -2.0, 2.0)); }
 
+QString format_error(gmplayer::Player *player, gmplayer::ErrType type)
+{
+    switch (type) {
+    case gmplayer::ErrType::Seek:      return QObject::tr("Got an error while seeking.");
+    case gmplayer::ErrType::LoadFile:  return QObject::tr("Got an error while loading file '%1'")
+                                                .arg(QString::fromStdString(player->current_file().name()));
+    case gmplayer::ErrType::LoadTrack: return QObject::tr("Got an error while loading track '%1' of file '%2'")
+                                                .arg(QString::fromStdString(player->current_track().info[gmplayer::Metadata::Song]));
+    case gmplayer::ErrType::Play:      return QObject::tr("Got an error while playing.");
+    case gmplayer::ErrType::Header:    return QObject::tr("Header of file '%1' is invalid.")
+                                                .arg(QString::fromStdString(player->current_file().name()));
+    case gmplayer::ErrType::FileType:  return QObject::tr("File %1 has an invalid file type.")
+                                                .arg(QString::fromStdString(player->current_file().name()));
+    default:                           return "";
+    }
+}
+
 } // namespace
 
 
@@ -121,6 +138,7 @@ void RecentList::add(fs::path path)
 
 
 SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
+    : QDialog(parent)
 {
     auto fade_val = config.get<int>("fade");
     auto *fade_box          = make_checkbox(tr("Enable &fade-out"), fade_val != 0);
@@ -158,7 +176,8 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
 
 
 
-ShortcutsWindow::ShortcutsWindow(const std::vector<Shortcut> &shortcuts)
+ShortcutsWindow::ShortcutsWindow(std::span<Shortcut> shortcuts, QWidget *parent)
+    : QDialog(parent)
 {
     auto *layout = new QFormLayout;
     for (auto obj : shortcuts) {
@@ -246,12 +265,12 @@ AboutDialog::AboutDialog(QWidget *parent)
 
 
 
-Playlist::Playlist(gmplayer::Player::List type, gmplayer::Player *player, QWidget *parent)
+Playlist::Playlist(gmplayer::Playlist::Type type, gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
     list = new QListWidget;
     connect(list, &QListWidget::itemActivated, this, [=, this] {
-        if (type == gmplayer::Player::List::Track)
+        if (type == gmplayer::Playlist::Type::Track)
             player->load_track(list->currentRow());
         else
             player->load_pair(list->currentRow(), 0);
@@ -262,7 +281,7 @@ Playlist::Playlist(gmplayer::Player::List type, gmplayer::Player *player, QWidge
     shuffle->setEnabled(false);
     up     ->setEnabled(false);
     down   ->setEnabled(false);
-    player->on_playlist_changed([=, this] (gmplayer::Player::List list_type) {
+    player->on_playlist_changed([=, this] (gmplayer::Playlist::Type list_type) {
         if (list_type == type) {
             list->clear();
             auto names = player->names(type);
@@ -275,7 +294,7 @@ Playlist::Playlist(gmplayer::Player::List type, gmplayer::Player *player, QWidge
     });
     setLayout(
         make_layout<QVBoxLayout>(
-            new QLabel(QString("%1 playlist").arg(type == gmplayer::Player::List::Track ? "Track" : "File")),
+            new QLabel(QString("%1 playlist").arg(type == gmplayer::Playlist::Type::Track ? "Track" : "File")),
             list,
             make_layout<QHBoxLayout>(shuffle, up, down)
         )
@@ -296,8 +315,8 @@ void Playlist::setup_context_menu(auto &&fn)
 PlaylistTab::PlaylistTab(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
-    tracklist = new Playlist(gmplayer::Player::List::Track, player);
-    filelist  = new Playlist(gmplayer::Player::List::File,  player);
+    tracklist = new Playlist(gmplayer::Playlist::Type::Track, player);
+    filelist  = new Playlist(gmplayer::Playlist::Type::File,  player);
     auto *autoplay     = make_checkbox("Autoplay",     config.get<bool>("autoplay"),     this, [=, this] (int state) { config.set<bool>("autoplay", state); });
     auto *repeat_track = make_checkbox("Repeat track", config.get<bool>("repeat_track"), this, [=, this] (int state) { config.set<bool>("repeat_track", state); });
     auto *repeat_file  = make_checkbox("Repeat file",  config.get<bool>("repeat_file"),  this, [=, this] (int state) { config.set<bool>("repeat_file", state); });
@@ -311,8 +330,8 @@ PlaylistTab::PlaylistTab(gmplayer::Player *player, QWidget *parent)
     setLayout(
         make_layout<QVBoxLayout>(
             make_layout<QHBoxLayout>(
-                tracklist,
-                filelist
+                filelist,
+                tracklist
             ),
             make_groupbox<QHBoxLayout>("Playlist settings",
                 autoplay, repeat_track, repeat_file
@@ -327,31 +346,36 @@ ChannelWidget::ChannelWidget(int index, gmplayer::Player *player, QWidget *paren
     : QWidget(parent), index{index}
 {
     label = new QLabel;
-    volume = new QSlider(Qt::Horizontal);
-    volume->setRange(0, MAX_VOLUME_VALUE);
-    volume->setValue(MAX_VOLUME_VALUE/2);
-    connect(volume, &QSlider::sliderMoved, this, [=, this] (int value) {
-        player->set_channel_volume(index, value);
-    });
     auto *checkbox = make_checkbox("Mute", false, this, [=, this] (int state) {
         player->mute_channel(index, bool(state));
     });
-    player->on_channel_volume_changed([=, this] (int i, int v) {
-        if (i == index)
-            volume->setValue(v);
+    player->on_track_changed([=, this] (int, const gmplayer::Metadata &) {
+        checkbox->setChecked(false);
     });
+
+    // volume = new QSlider(Qt::Horizontal);
+    // volume->setRange(0, MAX_VOLUME_VALUE);
+    // volume->setValue(MAX_VOLUME_VALUE/2);
+    // connect(volume, &QSlider::sliderMoved, this, [=, this] (int value) {
+    //     player->set_channel_volume(index, value);
+    // });
+    // player->on_channel_volume_changed([=, this] (int i, int v) {
+    //     if (i == index)
+    //         volume->setValue(v);
+    // });
+    //
+
     setLayout(
         make_layout<QVBoxLayout>(
-            label,
-            checkbox,
-            make_layout<QHBoxLayout>(new QLabel("Volume:"), volume)
+            label, checkbox
+            // make_layout<QHBoxLayout>(new QLabel("Volume:"), volume)
         )
     );
 }
 
 void ChannelWidget::set_name(const QString &name) { setEnabled(true);  label->setText(name);                             }
 void ChannelWidget::reset()                       { setEnabled(false); label->setText(QString("Channel %1").arg(index)); }
-void ChannelWidget::enable_volume(bool enable)    { volume->setEnabled(enable); }
+// void ChannelWidget::enable_volume(bool enable)    { volume->setEnabled(enable); }
 
 
 
@@ -372,7 +396,7 @@ VoicesTab::VoicesTab(gmplayer::Player *player, QWidget *parent)
             c->reset();
         for (int i = 0; i < names.size(); i++) {
             channels[i]->set_name(QString::fromStdString(names[i]));
-            channels[i]->enable_volume(multi);
+            // channels[i]->enable_volume(multi);
         }
     });
 
@@ -634,8 +658,14 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     );
 
     create_menu(this, tr("&Edit"),
-        std::make_tuple(tr("&Settings"),  &MainWindow::edit_settings),
-        std::make_tuple(tr("S&hortcuts"), &MainWindow::edit_shortcuts)
+        std::make_tuple(tr("&Settings"),  [&] {
+            auto *wnd = new SettingsWindow(player, this);
+            wnd->open();
+        }),
+        std::make_tuple(tr("S&hortcuts"), [&] {
+            auto *wnd = new ShortcutsWindow(shortcuts, this);
+            wnd->open();
+        })
     );
 
     create_menu(this, tr("&About"),
@@ -658,8 +688,8 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         player->start_or_resume();
     });
 
-    player->on_shuffled([=, this] (gmplayer::Player::List l) {
-        if (l == gmplayer::Player::List::Track)
+    player->on_shuffled([=, this] (gmplayer::Playlist::Type l) {
+        if (l == gmplayer::Playlist::Type::Track)
             player->load_track(0);
         else
             player->load_pair(0, 0);
@@ -668,7 +698,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     player->on_error([=, this] (gmplayer::Error error) {
         if (error)
             msgbox(
-                format_error(static_cast<gmplayer::ErrType>(error.code.value())),
+                format_error(player, static_cast<gmplayer::ErrType>(error.code.value())),
                 QString::fromStdString(error.details.data())
             );
     });
@@ -684,7 +714,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         std::tuple { visualizer_tab, tr("&Visualizer") }
     );
 
-    playlist_tab->setup_context_menu(gmplayer::Player::List::File, [=, this] (const QPoint &p) {
+    playlist_tab->setup_context_menu(gmplayer::Playlist::Type::File, [=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction(tr("&Add files"), [=, this] {
             if (auto files = multiple_file_dialog(tr("Add files"), tr(MUSIC_FILE_FILTER)); !files.empty())
@@ -706,7 +736,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
                         .arg(QString::fromStdString(f.error().message())));
                     return;
                 }
-                player->save_playlist(gmplayer::Player::List::File, f.value());
+                player->save_playlist(gmplayer::Playlist::Type::File, f.value());
             }
         });
         auto *action = menu.addAction(tr("&Details"), [=, this] {
@@ -720,7 +750,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         menu.exec(p);
     });
 
-    playlist_tab->setup_context_menu(gmplayer::Player::List::Track, [=, this] (const QPoint &p) {
+    playlist_tab->setup_context_menu(gmplayer::Playlist::Type::Track, [=, this] (const QPoint &p) {
         QMenu menu;
         auto *action = menu.addAction(tr("&Details"), [=, this] {
             if (auto trackno = playlist_tab->current_track(); trackno != -1) {
@@ -834,34 +864,8 @@ void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> fla
                         .arg(QString::fromStdString(e.details));
         msgbox(tr("Errors were found while opening files."), text);
     }
-    if (flags.contains(OpenFilesFlags::ClearAndPlay)) {
+    if (flags.contains(OpenFilesFlags::ClearAndPlay))
         player->load_pair(0, 0);
-    }
-}
-
-void MainWindow::edit_settings()
-{
-    auto *wnd = new SettingsWindow(player, this);
-    wnd->open();
-}
-
-void MainWindow::edit_shortcuts()
-{
-    auto *wnd = new ShortcutsWindow(shortcuts);
-    wnd->open();
-}
-
-QString MainWindow::format_error(gmplayer::ErrType type)
-{
-    switch (type) {
-    case gmplayer::ErrType::Seek:      return tr("Got an error while seeking.");
-    case gmplayer::ErrType::LoadFile:  return tr("Got an error while loading file '%1'").arg(QString::fromStdString(player->current_file().name()));
-    case gmplayer::ErrType::LoadTrack: return tr("Got an error while loading track '%1' of file '%2'").arg(QString::fromStdString(player->current_track().info[gmplayer::Metadata::Song]));
-    case gmplayer::ErrType::Play:      return tr("Got an error while playing.");
-    case gmplayer::ErrType::Header:    return tr("Header of file '%1' is invalid.").arg(QString::fromStdString(player->current_file().name()));
-    case gmplayer::ErrType::FileType:  return tr("File %1 has an invalid file type.").arg(QString::fromStdString(player->current_file().name()));
-    default:                           return "";
-    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -872,8 +876,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
             v.push_back(conf::Value(p.string()));
         return v;
     };
-    config.set("recent_files",     f(recent_files->filenames()));
-    config.set("recent_playlists", f(recent_playlists->filenames()));
+    config.set("recent_files",     f(recent_files->get_paths()));
+    config.set("recent_playlists", f(recent_playlists->get_paths()));
     config.set("last_visited", last_file.toStdString());
     for (auto &s : shortcuts)
         config.set(s.key, s.shortcut->key().toString().toStdString());

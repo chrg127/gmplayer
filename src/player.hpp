@@ -34,6 +34,8 @@ struct PlayerOptions {
 };
 
 struct Playlist {
+    enum class Type { Track, File };
+
     std::vector<int> order;
     int current = -1;
     bool repeat;
@@ -82,14 +84,6 @@ class Player {
         int volume = 0;
     } options;
 
-//     struct {
-//         bool autoplay        = false;
-//         int default_duration = 0;
-//         int fade_out         = 0;
-//         int volume           = 0;
-//         double tempo         = 1.0;
-//     } opts;
-
     struct {
         std::array<int, NUM_VOICES> volume = { MAX_VOLUME_VALUE / 2, MAX_VOLUME_VALUE / 2,
                                                MAX_VOLUME_VALUE / 2, MAX_VOLUME_VALUE / 2,
@@ -101,8 +95,6 @@ class Player {
     Error add_file_internal(std::filesystem::path path);
 
 public:
-    enum class List { Track, File };
-
     Player();
     ~Player();
 
@@ -112,7 +104,7 @@ public:
     bool load_file(int fileno);
     bool load_track(int num);
     void load_pair(int file, int track);
-    void save_playlist(List which, io::File &to);
+    void save_playlist(Playlist::Type which, io::File &to);
     void clear();
     const io::MappedFile & current_file()  const;
     const Metadata       & current_track() const;
@@ -135,24 +127,13 @@ public:
     void prev();
     bool has_next() const;
     bool has_prev() const;
-    void shuffle(List which);
-    int move(List which, int n, int pos);
-    std::vector<std::string> names(List which) const;
+    void shuffle(Playlist::Type which);
+    int move(Playlist::Type which, int n, int pos);
+    std::vector<std::string> names(Playlist::Type which) const;
 
     std::vector<std::string> channel_names();
     void mute_channel(int index, bool mute);
     void set_channel_volume(int index, int value);
-
-    // PlayerOptions options();
-    // void set_options(PlayerOptions options);
-    // void set_fade(int secs);
-    // void set_tempo(double tempo);
-    // void set_default_duration(int secs);
-    // void set_autoplay(bool value);
-    // void set_track_repeat(bool value);
-    // void set_file_repeat(bool value);
-    // void set_volume(int value);
-    // void set_volume_relative(int offset);
 
     mpris::Server &mpris_server();
 
@@ -173,10 +154,10 @@ public:                                             \
     MAKE_SIGNAL(tempo_changed, double)
     MAKE_SIGNAL(fade_changed, int);
     MAKE_SIGNAL(repeat_changed, bool, bool)
-    MAKE_SIGNAL(shuffled, List)
+    MAKE_SIGNAL(shuffled, Playlist::Type)
     MAKE_SIGNAL(error, Error)
     MAKE_SIGNAL(cleared, void)
-    MAKE_SIGNAL(playlist_changed, List)
+    MAKE_SIGNAL(playlist_changed, Playlist::Type)
     MAKE_SIGNAL(file_removed, int)
     MAKE_SIGNAL(samples_played, std::span<i16>, std::span<f32>)
     MAKE_SIGNAL(channel_volume_changed, int, int)

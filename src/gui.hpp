@@ -46,7 +46,7 @@ struct Shortcut {
 class ShortcutsWindow : public QDialog {
     Q_OBJECT
 public:
-    explicit ShortcutsWindow(const std::vector<Shortcut> &shortcuts);
+    explicit ShortcutsWindow(std::span<Shortcut> shortcuts, QWidget *parent = nullptr);
 };
 
 // a button that when clicked records a key sequence.
@@ -67,7 +67,7 @@ class RecentList : public QObject {
     QMenu *menu;
 public:
     RecentList(QMenu *menu, std::vector<std::filesystem::path> &&paths);
-    std::span<std::filesystem::path> filenames() { return paths; }
+    std::span<std::filesystem::path> get_paths() { return paths; }
     void add(std::filesystem::path path);
     void regen();
 signals:
@@ -84,7 +84,7 @@ class Playlist : public QWidget {
     Q_OBJECT
     QListWidget *list;
 public:
-    explicit Playlist(gmplayer::Player::List type, gmplayer::Player *player, QWidget *parent = nullptr);
+    explicit Playlist(gmplayer::Playlist::Type type, gmplayer::Player *player, QWidget *parent = nullptr);
     QListWidget *get_list() { return list; }
     void set_current(int n);
     int current() const;
@@ -101,9 +101,9 @@ public:
     int current_file()  const { return filelist->current(); }
     int current_track() const { return tracklist->current(); }
 
-    void setup_context_menu(gmplayer::Player::List which, auto &&fn)
+    void setup_context_menu(gmplayer::Playlist::Type which, auto &&fn)
     {
-        (which == gmplayer::Player::List::Track ? tracklist : filelist)->setup_context_menu(fn);
+        (which == gmplayer::Playlist::Type::Track ? tracklist : filelist)->setup_context_menu(fn);
     }
 };
 
@@ -127,7 +127,7 @@ public:
     ChannelWidget(int index, gmplayer::Player *player, QWidget *parent = nullptr);
     void set_name(const QString &name);
     void reset();
-    void enable_volume(bool enable);
+    // void enable_volume(bool enable);
 };
 
 class VoicesTab : public QWidget {
@@ -175,16 +175,11 @@ class MainWindow : public QMainWindow {
                *recent_playlists          = nullptr;
     Controls *controls = nullptr;
 
-    void update_next_prev_track();
     std::optional<std::filesystem::path> file_dialog(const QString &window_name, const QString &filter);
     std::vector<std::filesystem::path> multiple_file_dialog(const QString &window_name, const QString &filter);
     QString save_dialog(const QString &window_name, const QString &filter);
     void load_shortcuts();
-    std::optional<QString> add_files(std::span<std::filesystem::path> paths);
     void open_file(std::filesystem::path filename);
-    void edit_settings();
-    void edit_shortcuts();
-    QString format_error(gmplayer::ErrType type);
     void closeEvent(QCloseEvent *event);
     void dragEnterEvent(QDragEnterEvent *event);
     void dropEvent(QDropEvent *event);
