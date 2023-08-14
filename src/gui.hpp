@@ -103,7 +103,7 @@ public:
 
     void setup_context_menu(gmplayer::Playlist::Type which, auto &&fn)
     {
-        (which == gmplayer::Playlist::Type::Track ? tracklist : filelist)->setup_context_menu(fn);
+        (which == gmplayer::Playlist::Track ? tracklist : filelist)->setup_context_menu(fn);
     }
 };
 
@@ -153,12 +153,12 @@ public:
     std::string get_status_format_string() { return status_format_string; }
 };
 
-class Details : public QDialog {
+class DetailsWindow : public QDialog {
     Q_OBJECT
     std::vector<gmplayer::Metadata> ms;
 public:
-    Details(const gmplayer::Metadata &metadata, QWidget *parent = nullptr);
-    Details(std::span<const gmplayer::Metadata> metadata, QWidget *parent = nullptr);
+    DetailsWindow(const gmplayer::Metadata &metadata, QWidget *parent = nullptr);
+    DetailsWindow(std::span<const gmplayer::Metadata> metadata, QWidget *parent = nullptr);
 };
 
 enum class OpenFilesFlags {

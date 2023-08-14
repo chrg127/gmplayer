@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fmt/core.h>
 #include "gme/gme.h"
 #include "io.hpp"
 
@@ -14,6 +15,27 @@ namespace {
         return info->length      > 0 ? info->length
              : info->loop_length > 0 ? info->intro_length + info->loop_length * 2
              : default_length;
+    }
+
+    Metadata get_track_metadata(Music_Emu *emu, int default_length, int which)
+    {
+        gme_info_t *info;
+        gme_track_info(emu, &info, which);
+        auto data = Metadata {
+            .length = get_length(info, default_length),
+            .info = {
+                info->system,
+                info->game,
+                info->song[0] ? std::string(info->song)
+                              : fmt::format("Track {}", which + 1),
+                info->author,
+                info->copyright,
+                info->comment,
+                info->dumper,
+            }
+        };
+        gme_free_info(info);
+        return data;
     }
 } // namespace
 
@@ -45,8 +67,12 @@ auto read_file(const io::MappedFile &file, int frequency, int default_length)
     -> tl::expected<std::unique_ptr<FormatInterface>, Error>
 {
     if (auto gme = GME::make(file, frequency, default_length); gme)
-        return gme;
-    return tl::unexpected(Error{ErrType::LoadFile, "no suitable interface found"});
+        return std::move(gme.value());
+    return tl::unexpected(Error {
+        .code = make_errcond(Error::Type::LoadFile),
+        .details = "no suitable interface found",
+        .file_path = file.path(),
+    });
 }
 
 GME::~GME()
@@ -58,50 +84,59 @@ GME::~GME()
 }
 
 auto GME::make(const io::MappedFile &file, int frequency, int default_length)
-    -> tl::expected<std::unique_ptr<FormatInterface>, Error>
+    -> tl::expected<std::unique_ptr<FormatInterface>, const char *>
 {
     auto data = file.bytes();
     auto type_str = gme_identify_header(data.data());
     if (strcmp(type_str, "") == 0)
-        return tl::unexpected(Error(ErrType::Header, "invalid header"));
+        return tl::unexpected<const char *>("invalid header");
     auto emu = gme_new_emu_multi_channel(gme_identify_extension(type_str), frequency);
     if (!emu)
-        return tl::unexpected(Error(ErrType::LoadFile, "out of memory"));
+        return tl::unexpected<const char *>("out of memory");
     if (auto err = gme_load_data(emu, data.data(), data.size()); err)
-        return tl::unexpected(Error(ErrType::LoadFile, err));
+        return tl::unexpected(err);
     // load m3u file automatically. we don't care if it's found or not.
     if (auto err = gme_load_m3u(emu, file.path().replace_extension("m3u").c_str()); err) {
 #ifdef DEBUG
         printf("GME: %s\n", err);
 #endif
     }
-    return std::make_unique<GME>(emu, default_length);
+    return std::make_unique<GME>(emu, default_length, file.path());
 }
 
 Error GME::start_track(int which)
 {
     auto err = gme_start_track(emu, which);
-    gme_info_t *info;
-    gme_track_info(emu, &info, which);
-    track_len = get_length(info, default_length);
-    gme_free_info(info);
-    return err ? Error(ErrType::LoadTrack, err) : Error();
+    metadata = get_track_metadata(emu, default_length, which);
+    return !err ? Error{}
+                : Error { .code = make_errcond(Error::Type::LoadTrack),
+                          .details = err,
+                          .file_path = file_path,
+                          .track_name = metadata.info[Metadata::Song], };
 }
 
 Error GME::play(std::span<i16> out)
 {
     auto err = gme_play(emu, out.size(), out.data());
-    return err ? Error(ErrType::Play, err) : Error{};
+    return !err ? Error{}
+                : Error { .code = make_errcond(Error::Type::Play),
+                          .details = err,
+                          .file_path = file_path,
+                          .track_name = metadata.info[Metadata::Song] };
 }
 
 Error GME::seek(int n)
 {
+    fmt::print("seeking to {}\n", n);
     auto err = gme_seek(emu, n);
     if (err)
-        return Error(ErrType::Seek, err);
+        return Error { .code = make_errcond(Error::Type::Seek),
+                       .details = err,
+                       .file_path = file_path,
+                       .track_name = metadata.info[Metadata::Song] };
     // fade disappears on seek for some reason
     set_fade(fade_from, fade_len);
-    return Error();
+    return Error{};
 }
 
 int GME::position() const
@@ -114,31 +149,17 @@ int GME::track_count() const
     return gme_track_count(emu);
 }
 
-Metadata GME::track_metadata(int which)
+Metadata GME::track_metadata() const { return metadata; }
+
+Metadata GME::track_metadata(int which) const
 {
-    gme_info_t *info;
-    gme_track_info(emu, &info, which);
-    auto data = Metadata {
-        .length = get_length(info, default_length),
-        .info = {
-            info->system,
-            info->game,
-            info->song[0] ? std::string(info->song)
-                          : std::string("Track ") + std::to_string(which + 1),
-            info->author,
-            info->copyright,
-            info->comment,
-            info->dumper,
-        }
-    };
-    gme_free_info(info);
-    return data;
+    return get_track_metadata(emu, default_length, which);
 }
 
 bool GME::track_ended() const
 {
     // some songs don't have length information, hence the need for the second check.
-    return gme_track_ended(emu) || gme_tell(emu) > track_len + fade_len;
+    return gme_track_ended(emu) || gme_tell(emu) > metadata.length + fade_len;
 }
 
 int GME::channel_count() const

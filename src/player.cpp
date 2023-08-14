@@ -22,9 +22,6 @@ void Playlist::shuffle()       { std::shuffle(order.begin(), order.end(), rng::r
 
 Player::Player()
 {
-    options.autoplay = config.get<bool>("autoplay");
-    options.volume   = config.get<int>("volume");
-
     audio.spec.freq     = 44100;
     audio.spec.format   = AUDIO_F32;//*/ AUDIO_S16SYS;
     audio.spec.channels = NUM_CHANNELS;
@@ -77,11 +74,12 @@ Player::Player()
             // reset song to start position
             // (this is due to the modified fade applying to the song)
             seek(0);
-            format->set_fade(current_track().length, fade);
+            format->set_fade(length(), fade);
         }
         fade_changed(length());
     });
 
+    options.autoplay = config.get<bool>("autoplay");
     config.when_set("autoplay", [&](const conf::Value &v) {
         std::lock_guard<SDLMutex> lock(audio.mutex);
         options.autoplay = v.as<bool>();
@@ -93,20 +91,21 @@ Player::Player()
         mpris->set_rate(tempo);
     });
 
+    tracks.repeat = config.get<bool>("repeat_track");
     config.when_set("repeat_track", [&](const conf::Value &v) {
-        bool repeat = v.as<bool>();
-        tracks.repeat = repeat;
+        tracks.repeat = v.as<bool>();
         mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
         repeat_changed(tracks.repeat, files.repeat);
     });
 
+    files.repeat = config.get<bool>("repeat_track");
     config.when_set("repeat_file", [&](const conf::Value &v) {
-        bool repeat = v.as<bool>();
-        tracks.repeat = repeat;
+        tracks.repeat = v.as<bool>();
         mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
         repeat_changed(tracks.repeat, files.repeat);
     });
 
+    options.volume = config.get<int>("volume");
     config.when_set("volume", [&](const conf::Value &v) {
         std::lock_guard<SDLMutex> lock(audio.mutex);
         options.volume = v.as<int>();
@@ -127,7 +126,7 @@ void Player::audio_callback(std::span<u8> stream)
     mpris->set_position(pos * 1000);
     position_changed(pos);
     if (format->track_ended()) {
-        SDL_PauseAudioDevice(audio.dev_id, 1);
+        pause();
         track_ended();
         if (options.autoplay)
             next();
@@ -139,10 +138,8 @@ void Player::audio_callback(std::span<u8> stream)
     std::array<float, NUM_FRAMES * NUM_CHANNELS>              samples   = {};
     auto multi = format->is_multi_channel();
     auto err = multi ? format->play(separated) : format->play(mixed);
-    if (err) {
-        error(err);
-        return;
-    }
+    if (err)
+        fmt::print("got error while playing: {}\n", err.message());
     auto maxvol = 1.0f / float(MAX_VOLUME_VALUE);
     if (multi) {
         for (auto f = 0u; f < NUM_FRAMES; f += 2) {
@@ -163,101 +160,89 @@ void Player::audio_callback(std::span<u8> stream)
     samples_played(separated, samples);
 }
 
-Error Player::add_file_internal(fs::path path)
+std::vector<Error> Player::add_file(std::filesystem::path path)
 {
-    auto file = io::MappedFile::open(path, io::Access::Read);
-    if (!file)
-        return Error(file.error().default_error_condition(), path.filename().string());
-    file_cache.push_back(std::move(file.value()));
-    files.order.push_back(file_cache.size() - 1);
-    return Error{};
+    auto paths = std::array{path};
+    return add_files(paths);
 }
 
-Error Player::add_file(fs::path path)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    if (auto err = add_file_internal(path); err)
-        return err;
-    playlist_changed(Playlist::Type::File);
-    return Error{};
-}
-
-std::pair<std::vector<Error>, int> Player::add_files(std::span<std::filesystem::path> paths)
+std::vector<Error> Player::add_files(std::span<fs::path> paths)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     std::vector<Error> errors;
-    for (auto path : paths)
-        if (auto err = add_file_internal(path); err)
-            errors.push_back(err);
-    playlist_changed(Playlist::Type::File);
-    return std::make_pair(errors, files.order.size());
-}
-
-void Player::remove_file(int fileno)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    files.remove(fileno);
-    file_removed(fileno);
-    playlist_changed(Playlist::Type::File);
-}
-
-bool Player::load_file(int fileno)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    pause();
-    track_cache.clear();
-    files.current = fileno;
-    auto res = read_file(current_file(), 44100, config.get<int>("default_duration"));
-    if (!res) {
-        format = make_default_format();
-        error(res.error());
-    } else {
-        format = std::move(res.value());
-        for (int i = 0; i < format->track_count(); i++)
-            track_cache.push_back(format->track_metadata(i));
+    for (auto path : paths) {
+        auto file = io::MappedFile::open(path, io::Access::Read);
+        if (file) {
+            file_cache.push_back(std::move(file.value()));
+            files.order.push_back(file_cache.size() - 1);
+        } else {
+            errors.push_back(Error{file.error().default_error_condition(), path.filename().string()});
+        }
     }
-    tracks.regen(track_cache.size());
-    playlist_changed(Playlist::Type::Track);
-    file_changed(fileno);
-    return !bool(res);
+    playlist_changed(Playlist::File);
+    return errors;
 }
 
-bool Player::load_track(int trackno)
+void Player::remove_file(int id)
+{
+    auto ids = std::array{id};
+    remove_files(ids);
+}
+
+void Player::remove_files(std::span<int> ids)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    tracks.current = trackno;
-    auto num = tracks.order[tracks.current];
+    for (auto id : ids)
+        files.remove(id);
+    files_removed(ids);
+    playlist_changed(Playlist::File);
+}
+
+void Player::load_file(int id)
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    auto res = read_file(file_cache[files.order[id]], 44100, config.get<int>("default_duration"));
+    if (!res) {
+        error(res.error());
+        return;
+    }
+    format = std::move(res.value());
+    files.current = id;
+    track_cache.clear();
+    for (int i = 0; i < format->track_count(); i++)
+        track_cache.push_back(format->track_metadata(i));
+    tracks.regen(track_cache.size());
+    playlist_changed(Playlist::Track);
+    file_changed(id);
+}
+
+void Player::load_track(int id)
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    tracks.current = id;
+    auto num = tracks.order[id];
     if (auto err = format->start_track(num); err) {
         error(err);
-        return true;
+        return;
     }
     auto &metadata = track_cache[num];
     format->set_fade(metadata.length, config.get<int>("fade"));
     format->set_tempo(config.get<float>("tempo"));
     mpris->set_metadata({
-        { mpris::Field::TrackId, std::string("/") + std::to_string(files.current)
-                                                  + std::to_string(tracks.current) },
-        { mpris::Field::Length,              metadata.length                       },
-        { mpris::Field::Title,   std::string(metadata.info[Metadata::Song])        },
-        { mpris::Field::Album,   std::string(metadata.info[Metadata::Game])        },
-        { mpris::Field::Artist,  std::string(metadata.info[Metadata::Author])      }
+        { mpris::Field::TrackId, fmt::format("/{}{}", files.current, tracks.current)    },
+        { mpris::Field::Length,  metadata.length                                        },
+        { mpris::Field::Title,   std::string(metadata.info[Metadata::Song])             },
+        { mpris::Field::Album,   std::string(metadata.info[Metadata::Game])             },
+        { mpris::Field::Artist,  std::string(metadata.info[Metadata::Author])           }
     });
-    track_changed(trackno, metadata);
-    return false;
+    track_changed(id, metadata);
 }
 
 void Player::load_pair(int file, int track)
 {
-    if (load_file(file))
-        return;
-    load_track(track);
-}
-
-void Player::save_playlist(Playlist::Type which, io::File &to)
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    for (auto i : (which == Playlist::Type::Track ? tracks.order : files.order))
-        fprintf(to.data(), "%s\n", file_cache[i].path().c_str());
+    load_file(file);
+    if (files.current == file)
+        load_track(track);
 }
 
 void Player::clear()
@@ -266,42 +251,13 @@ void Player::clear()
     pause();
     format = make_default_format();
     track_cache.clear();
-    file_cache.clear();
     tracks.clear();
+    playlist_changed(Playlist::Track);
+    file_cache.clear();
     files.clear();
+    playlist_changed(Playlist::File);
     mpris->set_shuffle(false);
-    playlist_changed(Playlist::Type::Track);
-    playlist_changed(Playlist::Type::File);
     cleared();
-}
-
-const io::MappedFile &  Player::current_file()    const { std::lock_guard<SDLMutex> lock(audio.mutex); return  file_cache[ files.order[ files.current]]; }
-const Metadata &        Player::current_track()   const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[tracks.current]]; }
-const Metadata &        Player::track_info(int i) const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[             i]]; }
-
-const std::vector<Metadata> Player::file_info(int i) const
-{
-    auto format = gmplayer::read_file(file_cache[files.order[i]], 44100, config.get<int>("default_duration"));
-    if (!format)
-        return {};
-    std::vector<Metadata> v;
-    for (int i = 0; i < format.value()->track_count(); i++)
-        v.push_back(format.value()->track_metadata(i));
-    return v;
-}
-
-int Player::get_track_count() const
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    return tracks.order.size();
-}
-
-bool Player::is_multi_channel() const { return format->is_multi_channel(); }
-
-bool Player::is_playing() const
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    return SDL_GetAudioDeviceStatus(audio.dev_id) == SDL_AUDIO_PLAYING;
 }
 
 void Player::start_or_resume()
@@ -346,15 +302,54 @@ void Player::seek(int ms)
     if (auto err = format->seek(std::clamp(ms, 0, length())); err) {
         pause();
         error(err);
-        return;
     }
     seeked();
     position_changed(position());
 }
 
-void Player::seek_relative(int off) { return seek(position() + off); }
+void Player::seek_relative(int off) { seek(position() + off); }
 
-int Player::position()
+void Player::next()
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+         if (auto next = tracks.next(); next) load_track(next.value());
+    else if (auto next = files.next();  next) load_pair(next.value(), 0);
+}
+
+void Player::prev()
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+         if (auto prev = tracks.prev(); prev) load_track(prev.value());
+    else if (auto prev = files.prev();  prev) load_pair(prev.value(), tracks.order.size() - 1);
+}
+
+void Player::shuffle(Playlist::Type which)
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    if (which == Playlist::Track)
+        tracks.shuffle();
+    else {
+        files.shuffle();
+        mpris->set_shuffle(true);
+    }
+    playlist_changed(which);
+    shuffled(which);
+}
+
+int Player::move(Playlist::Type which, int n, int pos)
+{
+    auto r = which == Playlist::Track ? tracks.move(n, pos) : files.move(n, pos);
+    playlist_changed(which);
+    return r;
+}
+
+bool Player::is_playing() const
+{
+    std::lock_guard<SDLMutex> lock(audio.mutex);
+    return SDL_GetAudioDeviceStatus(audio.dev_id) == SDL_AUDIO_PLAYING;
+}
+
+int Player::position() const
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     return format->position();
@@ -363,30 +358,11 @@ int Player::position()
 int Player::length() const
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    return tracks.current == -1 ? 0 : current_track().length + config.get<int>("fade");
+    return tracks.current == -1 ? 0 : track_info(current_track()).length
+                                    + config.get<int>("fade");
 }
 
-
-
-void Player::next()
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    if (auto next = tracks.next(); next) {
-        load_track(next.value());
-    } else if (auto next = files.next(); next) {
-        load_pair(next.value(), 0);
-    }
-}
-
-void Player::prev()
-{
-    std::lock_guard<SDLMutex> lock(audio.mutex);
-    if (auto prev = tracks.prev(); prev) {
-        load_track(prev.value());
-    } else if (auto prev = files.prev(); prev) {
-        load_pair(prev.value(), tracks.order.size() - 1);
-    }
-}
+bool Player::is_multi_channel() const { return format->is_multi_channel(); }
 
 bool Player::has_next() const
 {
@@ -400,40 +376,49 @@ bool Player::has_prev() const
     return tracks.prev() || files.prev();
 }
 
-void Player::shuffle(Playlist::Type which)
+int Player::current_track() const { std::lock_guard<SDLMutex> lock(audio.mutex); return tracks.current; }
+int Player::current_file()  const { std::lock_guard<SDLMutex> lock(audio.mutex); return  files.current; }
+
+int Player::current_of(Playlist::Type type) const
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    if (which == Playlist::Type::Track)
-        tracks.shuffle();
-    else {
-        files.shuffle();
-        mpris->set_shuffle(true);
-    }
-    playlist_changed(which);
-    shuffled(which);
+    return (type == Playlist::Track ? tracks : files).current;
 }
 
-int Player::move(Playlist::Type which, int n, int pos)
-{
-    auto r = which == Playlist::Type::Track ? tracks.move(n, pos) : files.move(n, pos);
-    playlist_changed(which);
-    return r;
-}
+int Player::track_count() const { std::lock_guard<SDLMutex> lock(audio.mutex); return tracks.order.size(); }
+int Player::file_count()  const { std::lock_guard<SDLMutex> lock(audio.mutex); return  files.order.size(); }
 
-std::vector<std::string> Player::names(Playlist::Type which) const
+int Player::count_of(Playlist::Type type) const
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    std::vector<std::string> names;
-    if (which == Playlist::Type::File)
-        for (auto i : files.order)
-            names.push_back(file_cache[i].path().stem().string());
-    else
-        for (auto i : tracks.order)
-            names.push_back(track_cache[i].info[Metadata::Song]);
-    return names;
+    return (type == Playlist::Track ? tracks : files).order.size();
 }
 
+const Metadata &       Player::track_info(int id) const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[id]]; }
+const io::MappedFile & Player::file_info(int id)  const { std::lock_guard<SDLMutex> lock(audio.mutex); return  file_cache[ files.order[id]]; }
 
+const std::vector<Metadata> Player::file_tracks(int i) const
+{
+    auto format = gmplayer::read_file(file_cache[files.order[i]], 44100, config.get<int>("default_duration"));
+    if (!format)
+        return {};
+    std::vector<Metadata> v;
+    for (int i = 0; i < format.value()->track_count(); i++)
+        v.push_back(format.value()->track_metadata(i));
+    return v;
+}
+
+void Player::loop_tracks(std::function<void(int, const Metadata &)> fn) const
+{
+    for (auto i : tracks.order)
+        fn(i, track_info(i));
+}
+
+void Player::loop_files(std::function<void(int, const io::MappedFile &)> fn) const
+{
+    for (auto i : files.order)
+        fn(i, file_info(i));
+}
 
 std::vector<std::string> Player::channel_names()
 {

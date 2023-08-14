@@ -34,11 +34,11 @@ struct PlayerOptions {
 };
 
 struct Playlist {
-    enum class Type { Track, File };
+    enum Type { Track, File };
 
     std::vector<int> order;
     int current = -1;
-    bool repeat;
+    bool repeat = false;
 
     void regen();
     void regen(int size);
@@ -92,44 +92,48 @@ class Player {
     } effects;
 
     void audio_callback(std::span<u8> stream);
-    Error add_file_internal(std::filesystem::path path);
 
 public:
     Player();
     ~Player();
 
-    Error add_file(std::filesystem::path path);
-    std::pair<std::vector<Error>, int> add_files(std::span<std::filesystem::path> path);
-    void remove_file(int fileno);
-    bool load_file(int fileno);
-    bool load_track(int num);
-    void load_pair(int file, int track);
-    void save_playlist(Playlist::Type which, io::File &to);
-    void clear();
-    const io::MappedFile & current_file()  const;
-    const Metadata       & current_track() const;
-    const Metadata       & track_info(int i) const;
-    const std::vector<Metadata> file_info(int i) const;
-    int get_track_count() const;
+    std::vector<Error> add_file(std::filesystem::path path);
+    std::vector<Error> add_files(std::span<std::filesystem::path> paths);
+    void remove_file(int id);
+    void remove_files(std::span<int> ids);
 
-    bool is_playing() const;
+    void load_file(int id);
+    void load_track(int num);
+    void load_pair(int file, int track);
+    void clear();
     void start_or_resume();
     void pause();
     void play_pause();
     void stop();
     void seek(int ms);
     void seek_relative(int off);
-    int position();
-    int length() const;
-    bool is_multi_channel() const;
-
     void next();
     void prev();
-    bool has_next() const;
-    bool has_prev() const;
     void shuffle(Playlist::Type which);
     int move(Playlist::Type which, int n, int pos);
-    std::vector<std::string> names(Playlist::Type which) const;
+
+    bool is_playing() const;
+    int position() const;
+    int length() const;
+    bool is_multi_channel() const;
+    bool has_next() const;
+    bool has_prev() const;
+    int current_track() const;
+    int current_file() const;
+    int current_of(Playlist::Type type) const;
+    int track_count() const;
+    int file_count() const;
+    int count_of(Playlist::Type type) const;
+    const Metadata & track_info(int id) const;
+    const io::MappedFile & file_info(int id) const;
+    const std::vector<Metadata> file_tracks(int id) const;
+    void loop_tracks(std::function<void(int, const Metadata &)> fn) const;
+    void loop_files(std::function<void(int, const io::MappedFile &)> fn) const;
 
     std::vector<std::string> channel_names();
     void mute_channel(int index, bool mute);
@@ -158,7 +162,7 @@ public:                                             \
     MAKE_SIGNAL(error, Error)
     MAKE_SIGNAL(cleared, void)
     MAKE_SIGNAL(playlist_changed, Playlist::Type)
-    MAKE_SIGNAL(file_removed, int)
+    MAKE_SIGNAL(files_removed, std::span<int>)
     MAKE_SIGNAL(samples_played, std::span<i16>, std::span<f32>)
     MAKE_SIGNAL(channel_volume_changed, int, int)
 

@@ -86,21 +86,41 @@ std::vector<fs::path> load_recent(const std::string &key)
 int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
 double int_to_tempo(int value) { return std::exp2(math::map(double(value), 0.0, 100.0, -2.0, 2.0)); }
 
-QString format_error(gmplayer::Player *player, gmplayer::ErrType type)
+QString format_error(const gmplayer::Error &error)
 {
-    switch (type) {
-    case gmplayer::ErrType::Seek:      return QObject::tr("Got an error while seeking.");
-    case gmplayer::ErrType::LoadFile:  return QObject::tr("Got an error while loading file '%1'")
-                                                .arg(QString::fromStdString(player->current_file().name()));
-    case gmplayer::ErrType::LoadTrack: return QObject::tr("Got an error while loading track '%1' of file '%2'")
-                                                .arg(QString::fromStdString(player->current_track().info[gmplayer::Metadata::Song]));
-    case gmplayer::ErrType::Play:      return QObject::tr("Got an error while playing.");
-    case gmplayer::ErrType::Header:    return QObject::tr("Header of file '%1' is invalid.")
-                                                .arg(QString::fromStdString(player->current_file().name()));
-    case gmplayer::ErrType::FileType:  return QObject::tr("File %1 has an invalid file type.")
-                                                .arg(QString::fromStdString(player->current_file().name()));
-    default:                           return "";
+    using enum gmplayer::Error::Type;
+    switch (error.type()) {
+    case Seek:      return QObject::tr("Got an error while seeking.");
+    case LoadFile:  return QObject::tr("Got an error while loading file '%1'")
+                                   .arg(QString::fromStdString(error.file_path.filename().string()));
+    case LoadTrack: return QObject::tr("Got an error while loading track '%1' of file '%2'")
+                                   .arg(QString::fromStdString(error.track_name));
+    default:        return "";
     }
+}
+
+void handle_error(const gmplayer::Error &error)
+{
+    if (error)
+        msgbox(
+            format_error(error),
+            QString::fromStdString(error.details.data())
+        );
+}
+
+std::vector<QString> get_names(gmplayer::Player *player, gmplayer::Playlist::Type type)
+{
+    std::vector<QString> names;
+    if (type == gmplayer::Playlist::Track) {
+        player->loop_tracks([&](int, const gmplayer::Metadata &m) {
+            names.push_back(QString::fromStdString(m.info[gmplayer::Metadata::Song]));
+        });
+    } else {
+        player->loop_files([&](int, const io::MappedFile &f) {
+            names.push_back(QString::fromStdString(f.path().stem().string()));
+        });
+    }
+    return names;
 }
 
 } // namespace
@@ -270,7 +290,7 @@ Playlist::Playlist(gmplayer::Playlist::Type type, gmplayer::Player *player, QWid
 {
     list = new QListWidget;
     connect(list, &QListWidget::itemActivated, this, [=, this] {
-        if (type == gmplayer::Playlist::Type::Track)
+        if (type == gmplayer::Playlist::Track)
             player->load_track(list->currentRow());
         else
             player->load_pair(list->currentRow(), 0);
@@ -284,9 +304,9 @@ Playlist::Playlist(gmplayer::Playlist::Type type, gmplayer::Player *player, QWid
     player->on_playlist_changed([=, this] (gmplayer::Playlist::Type list_type) {
         if (list_type == type) {
             list->clear();
-            auto names = player->names(type);
+            auto names = get_names(player, type);
             for (auto &name : names)
-                new QListWidgetItem(QString::fromStdString(name), list);
+                new QListWidgetItem(name, list);
             shuffle->setEnabled(names.size() != 0);
             up     ->setEnabled(names.size() != 0);
             down   ->setEnabled(names.size() != 0);
@@ -315,8 +335,8 @@ void Playlist::setup_context_menu(auto &&fn)
 PlaylistTab::PlaylistTab(gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
 {
-    tracklist = new Playlist(gmplayer::Playlist::Type::Track, player);
-    filelist  = new Playlist(gmplayer::Playlist::Type::File,  player);
+    tracklist = new Playlist(gmplayer::Playlist::Track, player);
+    filelist  = new Playlist(gmplayer::Playlist::File,  player);
     auto *autoplay     = make_checkbox("Autoplay",     config.get<bool>("autoplay"),     this, [=, this] (int state) { config.set<bool>("autoplay", state); });
     auto *repeat_track = make_checkbox("Repeat track", config.get<bool>("repeat_track"), this, [=, this] (int state) { config.set<bool>("repeat_track", state); });
     auto *repeat_file  = make_checkbox("Repeat file",  config.get<bool>("repeat_file"),  this, [=, this] (int state) { config.set<bool>("repeat_file", state); });
@@ -436,8 +456,8 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     // playback buttons
     auto *play_btn   = make_tool_btn(this, QStyle::SP_MediaPlay,         [=, this] { player->play_pause(); });
     auto *stop_btn   = make_tool_btn(this, QStyle::SP_MediaStop,         [=, this] { player->stop();       });
-    auto *next_track = make_tool_btn(this, QStyle::SP_MediaSkipForward,  [=, this] { player->next();       });
-    auto *prev_track = make_tool_btn(this, QStyle::SP_MediaSkipBackward, [=, this] { player->prev();       });
+    auto *next_track = make_tool_btn(this, QStyle::SP_MediaSkipForward,  [=, this] { player->next(); });
+    auto *prev_track = make_tool_btn(this, QStyle::SP_MediaSkipBackward, [=, this] { player->prev(); });
     play_btn->setEnabled(false);
     stop_btn->setEnabled(false);
     next_track->setEnabled(false);
@@ -517,23 +537,19 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     });
     player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
     player->on_file_changed([=, this] (int) { stop_btn->setEnabled(true); });
-    player->on_file_removed([=, this] (int) {
+    player->on_files_removed([=, this] (std::span<int>) {
         next_track->setEnabled(player->has_next());
         prev_track->setEnabled(player->has_prev());
     });
 
     player->on_error([=, this] (gmplayer::Error error) {
-        switch (static_cast<gmplayer::ErrType>(error.code.value())) {
-        case gmplayer::ErrType::LoadFile:
-        case gmplayer::ErrType::Header:
-        case gmplayer::ErrType::FileType:
-        case gmplayer::ErrType::LoadTrack:
-            duration_slider->setRange(0, 0);
-            duration_slider->setValue(0);
-        case gmplayer::ErrType::Seek:
-        case gmplayer::ErrType::Play:
+        switch (static_cast<gmplayer::Error::Type>(error.code.value())) {
+        case gmplayer::Error::Type::LoadTrack:
+        case gmplayer::Error::Type::Seek:
             play_btn->setEnabled(false);
             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+            duration_slider->setRange(0, 0);
+            duration_slider->setValue(0);
             duration_slider->setEnabled(false);
         }
     });
@@ -589,7 +605,7 @@ void VolumeWidget::set_value(int value)
 
 
 
-Details::Details(const gmplayer::Metadata &metadata, QWidget *parent)
+DetailsWindow::DetailsWindow(const gmplayer::Metadata &metadata, QWidget *parent)
 {
     std::array<QLabel *, 7> labels;
     for (int i = 0; i < labels.size(); i++) {
@@ -606,7 +622,7 @@ Details::Details(const gmplayer::Metadata &metadata, QWidget *parent)
     ));
 }
 
-Details::Details(std::span<const gmplayer::Metadata> metadata, QWidget *parent)
+DetailsWindow::DetailsWindow(std::span<const gmplayer::Metadata> metadata, QWidget *parent)
 {
     ms.assign(metadata.begin(), metadata.end());
     std::array<QLabel *, 7> labels;
@@ -689,19 +705,13 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
     });
 
     player->on_shuffled([=, this] (gmplayer::Playlist::Type l) {
-        if (l == gmplayer::Playlist::Type::Track)
+        if (l == gmplayer::Playlist::Track)
             player->load_track(0);
         else
             player->load_pair(0, 0);
     });
 
-    player->on_error([=, this] (gmplayer::Error error) {
-        if (error)
-            msgbox(
-                format_error(player, static_cast<gmplayer::ErrType>(error.code.value())),
-                QString::fromStdString(error.details.data())
-            );
-    });
+    player->on_error([=, this] (gmplayer::Error error) { handle_error(error); });
 
     // tabs
     auto *playlist_tab      = new PlaylistTab(player);
@@ -714,7 +724,7 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         std::tuple { visualizer_tab, tr("&Visualizer") }
     );
 
-    playlist_tab->setup_context_menu(gmplayer::Playlist::Type::File, [=, this] (const QPoint &p) {
+    playlist_tab->setup_context_menu(gmplayer::Playlist::File, [=, this] (const QPoint &p) {
         QMenu menu;
         menu.addAction(tr("&Add files"), [=, this] {
             if (auto files = multiple_file_dialog(tr("Add files"), tr(MUSIC_FILE_FILTER)); !files.empty())
@@ -729,20 +739,26 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         menu.addAction(tr("&Save playlist"), [=, this] {
             if (auto filename = save_dialog(tr("Save playlist"), tr("Playlist files (*.playlist)")); !filename.isEmpty()) {
                 auto file_path = fs::path(filename.toStdString());
-                auto f = io::File::open(file_path, io::Access::Write);
-                if (!f) {
+                auto savefile = io::File::open(file_path, io::Access::Write);
+                if (!savefile) {
                     msgbox(tr("Couldn't open file %1. (%2)")
                         .arg(QString::fromStdString(file_path.filename().string()))
-                        .arg(QString::fromStdString(f.error().message())));
+                        .arg(QString::fromStdString(savefile.error().message())));
                     return;
                 }
-                player->save_playlist(gmplayer::Playlist::Type::File, f.value());
+                player->loop_files([&](int, const io::MappedFile &f) {
+                    fmt::print(savefile.value().data(), "{}\n", f.path().string());
+                });
             }
         });
         auto *action = menu.addAction(tr("&Details"), [=, this] {
-            if (auto fileno = playlist_tab->current_file(); fileno != -1) {
-                auto mds = player->file_info(fileno);
-                auto *wnd = new Details(mds);
+            if (auto id = playlist_tab->current_file(); id != -1) {
+                auto mds = player->file_tracks(id);
+                if (mds.empty()) {
+                    msgbox("Can't get contents of this file.");
+                    return;
+                }
+                auto *wnd = new DetailsWindow(mds);
                 wnd->open();
             }
         });
@@ -750,12 +766,11 @@ MainWindow::MainWindow(gmplayer::Player *player, QWidget *parent)
         menu.exec(p);
     });
 
-    playlist_tab->setup_context_menu(gmplayer::Playlist::Type::Track, [=, this] (const QPoint &p) {
+    playlist_tab->setup_context_menu(gmplayer::Playlist::Track, [=, this] (const QPoint &p) {
         QMenu menu;
         auto *action = menu.addAction(tr("&Details"), [=, this] {
             if (auto trackno = playlist_tab->current_track(); trackno != -1) {
-                auto metadata = player->track_info(trackno);
-                auto *wnd = new Details(metadata);
+                auto *wnd = new DetailsWindow(player->track_info(player->current_track()));
                 wnd->open();
             }
         });
@@ -855,7 +870,7 @@ void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> fla
             recent_files->add(p);
     if (flags.contains(OpenFilesFlags::ClearAndPlay))
         player->clear();
-    auto [errors, num_files] = player->add_files(paths);
+    auto errors = player->add_files(paths);
     if (errors.size() > 0) {
         QString text;
         for (auto &e : errors)

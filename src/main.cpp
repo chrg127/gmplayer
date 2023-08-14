@@ -107,14 +107,13 @@ int main()
 
     player.on_error([&] (auto err) { printf("%s\n", err.code.message().c_str()); });
 
-    auto err = player.add_file(std::filesystem::path{"test_files/smb3.nsf"});
+    auto err = player.add_files(std::array{std::filesystem::path{"test_files/smb3.nsf"}});
     if (err) {
         printf("%s\n", err.message().c_str());
         return 1;
     }
 
-    player.load_file(0);
-    player.load_track(0);
+    player.load_pair(0, 0);
     // player.seek(1_sec);
     player.start_or_resume();
 

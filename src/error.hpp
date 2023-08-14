@@ -1,11 +1,19 @@
 #pragma once
 
 #include <system_error>
+#include <filesystem>
 
 namespace gmplayer {
 
-enum class ErrType {
-    None, FileType, Header, Play, Seek, LoadFile, LoadTrack, LoadM3U,
+struct Error {
+    enum class Type { None, Play, Seek, LoadFile, LoadTrack };
+    std::error_condition code       = {};
+    std::string details             = {};
+    std::filesystem::path file_path = {};
+    std::string track_name          = {};
+    operator bool() const { return static_cast<bool>(code); }
+    auto message() const { return code.message(); }
+    Type type() const { return static_cast<Type>(code.value()); }
 };
 
 struct ErrorCategory : public std::error_category {
@@ -13,30 +21,19 @@ struct ErrorCategory : public std::error_category {
     const char *name() const noexcept { return "gme error"; }
     std::string message(int n) const
     {
-        switch (static_cast<ErrType>(n)) {
-        case ErrType::None:           return "Success";
-        case ErrType::FileType:       return "Invalid music file type";
-        case ErrType::Header:         return "Invalid music file header";
-        case ErrType::Play:           return "Found an error while playing";
-        case ErrType::Seek:           return "Seek error";
-        case ErrType::LoadFile:       return "Couldn't load file";
-        case ErrType::LoadTrack:      return "Couldn't load track";
-        case ErrType::LoadM3U:        return "Couldn't load m3u file";
-        default:                      return "Unknown error";
+        switch (static_cast<Error::Type>(n)) {
+        case Error::Type::None:      return "Success";
+        case Error::Type::Play:      return "Found an error while playing";
+        case Error::Type::Seek:      return "Seek error";
+        case Error::Type::LoadFile:  return "Couldn't load file";
+        case Error::Type::LoadTrack: return "Couldn't load track";
+        default:                     return "Unknown error";
         }
     }
 };
 
 inline ErrorCategory error_category;
 
-struct Error {
-    std::error_condition code;
-    std::string details;
-    Error() = default;
-    Error(std::error_condition e, std::string_view s) : code{e}, details{s} { }
-    Error(ErrType e, std::string_view s) : code{static_cast<int>(e), error_category}, details{s} { }
-    operator bool() const { return static_cast<bool>(code); }
-    auto message() const { return code.message(); }
-};
+inline std::error_condition make_errcond(Error::Type type) { return { static_cast<int>(type), error_category }; }
 
 } // namespace gmplayer
