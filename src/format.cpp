@@ -39,39 +39,16 @@ namespace {
     }
 } // namespace
 
-std::string format_metadata(std::string_view fmt, const Metadata &m)
-{
-    auto get_info = [&](char c) -> std::string {
-        switch (c) {
-        case 's': return m.info[Metadata::Song];
-        case 'a': return m.info[Metadata::Author];
-        case 'g': return m.info[Metadata::Game];
-        case 'b': return m.info[Metadata::System];
-        case 'c': return m.info[Metadata::Comment];
-        case 'd': return m.info[Metadata::Dumper];
-        case 'l': return std::to_string(m.length);
-        default: return "";
-        }
-    };
-    std::string out;
-    for (int i = 0; i < fmt.size(); i++) {
-        if (fmt[i] != '%')
-            out += fmt[i];
-        else
-            out += get_info(fmt[++i]);
-    }
-    return out;
-}
-
 auto read_file(const io::MappedFile &file, int frequency, int default_length)
     -> tl::expected<std::unique_ptr<FormatInterface>, Error>
 {
     if (auto gme = GME::make(file, frequency, default_length); gme)
         return std::move(gme.value());
-    return tl::unexpected(Error {
-        .code = make_errcond(Error::Type::LoadFile),
+    return tl::unexpected<Error>({
+        .code = Error::Type::LoadFile,
         .details = "no suitable interface found",
         .file_path = file.path(),
+        .track_name = "",
     });
 }
 
@@ -109,7 +86,7 @@ Error GME::start_track(int which)
     auto err = gme_start_track(emu, which);
     metadata = get_track_metadata(emu, default_length, which);
     return !err ? Error{}
-                : Error { .code = make_errcond(Error::Type::LoadTrack),
+                : Error { .code = Error::Type::LoadTrack,
                           .details = err,
                           .file_path = file_path,
                           .track_name = metadata.info[Metadata::Song], };
@@ -119,7 +96,7 @@ Error GME::play(std::span<i16> out)
 {
     auto err = gme_play(emu, out.size(), out.data());
     return !err ? Error{}
-                : Error { .code = make_errcond(Error::Type::Play),
+                : Error { .code = Error::Type::Play,
                           .details = err,
                           .file_path = file_path,
                           .track_name = metadata.info[Metadata::Song] };
@@ -130,7 +107,7 @@ Error GME::seek(int n)
     fmt::print("seeking to {}\n", n);
     auto err = gme_seek(emu, n);
     if (err)
-        return Error { .code = make_errcond(Error::Type::Seek),
+        return Error { .code = Error::Type::Seek,
                        .details = err,
                        .file_path = file_path,
                        .track_name = metadata.info[Metadata::Song] };

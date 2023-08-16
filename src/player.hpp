@@ -97,8 +97,10 @@ public:
     Player();
     ~Player();
 
-    std::vector<Error> add_file(std::filesystem::path path);
-    std::vector<Error> add_files(std::span<std::filesystem::path> paths);
+    using AddFileError = std::pair<std::filesystem::path, std::error_code>;
+
+    std::vector<AddFileError> add_file(std::filesystem::path path);
+    std::vector<AddFileError> add_files(std::span<std::filesystem::path> paths);
     void remove_file(int id);
     void remove_files(std::span<int> ids);
 

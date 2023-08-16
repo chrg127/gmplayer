@@ -5,9 +5,9 @@
 #include <mutex>
 #include "common.hpp"
 #include "const.hpp"
+#include "types.hpp"
 #include "conf.hpp"
 #include "callback_handler.hpp"
-#include "format.hpp"
 
 namespace detail {
 

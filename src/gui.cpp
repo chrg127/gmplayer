@@ -34,8 +34,6 @@
 #include <QList>
 #include <QScrollArea>
 #include <QLineEdit>
-#include "conf.hpp"
-#include "format.hpp"
 #include "qtutils.hpp"
 #include "io.hpp"
 #include "appinfo.hpp"
@@ -543,7 +541,7 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     });
 
     player->on_error([=, this] (gmplayer::Error error) {
-        switch (static_cast<gmplayer::Error::Type>(error.code.value())) {
+        switch (error.type()) {
         case gmplayer::Error::Type::LoadTrack:
         case gmplayer::Error::Type::Seek:
             play_btn->setEnabled(false);
@@ -875,8 +873,8 @@ void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> fla
         QString text;
         for (auto &e : errors)
             text += QString("%1: %2\n")
-                        .arg(QString::fromStdString(e.code.message()))
-                        .arg(QString::fromStdString(e.details));
+                        .arg(QString::fromStdString(e.first.string()))
+                        .arg(QString::fromStdString(e.second.message()));
         msgbox(tr("Errors were found while opening files."), text);
     }
     if (flags.contains(OpenFilesFlags::ClearAndPlay))

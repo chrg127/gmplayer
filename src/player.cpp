@@ -5,7 +5,6 @@
 #include <mutex>
 #include <span>
 #include <SDL.h>
-#include "format.hpp"
 #include "random.hpp"
 #include "io.hpp"
 #include "mpris_server.hpp"
@@ -139,7 +138,7 @@ void Player::audio_callback(std::span<u8> stream)
     auto multi = format->is_multi_channel();
     auto err = multi ? format->play(separated) : format->play(mixed);
     if (err)
-        fmt::print("got error while playing: {}\n", err.message());
+        fmt::print("got error while playing: {}\n", err.details);
     auto maxvol = 1.0f / float(MAX_VOLUME_VALUE);
     if (multi) {
         for (auto f = 0u; f < NUM_FRAMES; f += 2) {
@@ -160,25 +159,24 @@ void Player::audio_callback(std::span<u8> stream)
     samples_played(separated, samples);
 }
 
-std::vector<Error> Player::add_file(std::filesystem::path path)
+std::vector<Player::AddFileError> Player::add_file(std::filesystem::path path)
 {
     auto paths = std::array{path};
     return add_files(paths);
 }
 
-std::vector<Error> Player::add_files(std::span<fs::path> paths)
+std::vector<Player::AddFileError> Player::add_files(std::span<fs::path> paths)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    std::vector<Error> errors;
-    for (auto path : paths) {
-        auto file = io::MappedFile::open(path, io::Access::Read);
-        if (file) {
-            file_cache.push_back(std::move(file.value()));
-            files.order.push_back(file_cache.size() - 1);
-        } else {
-            errors.push_back(Error{file.error().default_error_condition(), path.filename().string()});
-        }
-    }
+    std::vector<Player::AddFileError> errors;
+    for (const auto &p : paths)
+        io::MappedFile::open(p, io::Access::Read)
+            .map([&](auto &&file) {
+                file_cache.push_back(std::move(file));
+                files.order.push_back(file_cache.size() - 1);
+            }).or_else([&](auto err) {
+                errors.push_back(std::make_pair(p.filename(), err));
+            });
     playlist_changed(Playlist::File);
     return errors;
 }

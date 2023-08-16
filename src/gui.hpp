@@ -13,12 +13,12 @@
 #include <QStringList>
 #include <QGraphicsView>
 #include "common.hpp"
-#include "keyrecorder.hpp"
-#include "error.hpp"
+#include "types.hpp"
 #include "const.hpp"
 #include "player.hpp"
 #include "flags.hpp"
-#include "conf.hpp"
+#include "keyrecorder.hpp"
+
 
 class QShortcut;
 class QMenu;

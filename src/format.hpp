@@ -5,7 +5,7 @@
 #include <memory>
 #include <expected.hpp>
 #include "common.hpp"
-#include "error.hpp"
+#include "types.hpp"
 #include "const.hpp"
 
 namespace io { class MappedFile; }
@@ -13,19 +13,6 @@ namespace io { class MappedFile; }
 class Music_Emu;
 
 namespace gmplayer {
-
-namespace literals {
-    inline constexpr long long operator"" _sec(unsigned long long secs) { return secs * 1000ull; }
-    inline constexpr long long operator"" _min(unsigned long long mins) { return mins * 60_sec; }
-}
-
-struct Metadata {
-    enum { System = 0, Game, Song, Author, Copyright, Comment, Dumper };
-    int length;
-    std::array<std::string, 7> info;
-};
-
-std::string format_metadata(std::string_view fmt, const Metadata &m);
 
 struct FormatInterface {
     virtual ~FormatInterface() = default;
