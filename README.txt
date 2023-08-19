@@ -28,7 +28,6 @@ when installing:
     - Qt5 (base, gui, widgets, dbus): https://www.qt.io/
     - Game_Music_Emu (GME): https://bitbucket.org/mpyne/game-music-emu/wiki/Home
     - SDL2: https://www.libsdl.org
-    - QtMpris: https://github.com/chrg127/qtmpris
 
 Assuming you are in a debian-based distribution, Qt 5, SDL2 and QtMpris can be
 installed with the following command:
@@ -44,7 +43,7 @@ On Windows, the program should be built using MSYS2 (MSVC/Visual Studio may
 work but has not been tested). No packages exists for QtMpris in MSYS2,
 therefore it must be built and installed manually too.
 
-INSTALLING
+COMPILING AND INSTALLING
 
 Once the dependencies above have been installed, the project can simply be
 built using CMake:
@@ -59,6 +58,14 @@ The commands should be run under the project's root directory. For cmake:
     - -DCMAKE_CXX_FLAGS="-mwindows" should be added in case you are doing a
       windows build: it will cause not to spanw a useless cmd window when
       running the program
+
+When running CMake, you can also choose what interface to compile using
+-DGMP_INTERFACE=[interfacename]. [interfacename] can be:
+
+    - qt: the default interface. The program will use a full GUI interface that
+      should be fully cross-platform.
+    - console: a more minimal interface, intended for console/terminal/headless
+      interfaces. It probably won't work on non-linux OSes.
 
 For make, -C specifies where to find the Makefile.
 After the commands are done, the executable should be found inside build/.
