@@ -155,7 +155,7 @@ public:                                             \
     MAKE_SIGNAL(track_ended, void)
     MAKE_SIGNAL(paused, void)
     MAKE_SIGNAL(played, void)
-    MAKE_SIGNAL(seeked, void)
+    MAKE_SIGNAL(seeked, int)
     MAKE_SIGNAL(volume_changed, int)
     MAKE_SIGNAL(tempo_changed, double)
     MAKE_SIGNAL(fade_changed, int);

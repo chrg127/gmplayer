@@ -1,6 +1,11 @@
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.5)
 
 project(gmplayer VERSION 1.0.0 LANGUAGES CXX)
+
+# default interface
+if (NOT DEFINED GMP_INTERFACE)
+    SET(GMP_INTERFACE "qt")
+endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
@@ -34,11 +39,21 @@ if (WIN32)
     add_compile_definitions(MPRIS_SERVER_NO_IMPL)
 endif()
 
-add_executable(gmplayer
-    src/main.cpp src/gui.cpp src/player.cpp src/keyrecorder.cpp src/io.cpp
-    src/visualizer.cpp src/format.cpp src/mpris_server.cpp resources/icons.qrc
-    src/conf.cpp
+set(SOURCE_FILES
+    src/main.cpp src/player.cpp src/io.cpp src/format.cpp
+    src/mpris_server.cpp src/conf.cpp
 )
+
+if (GMP_INTERFACE STREQUAL "qt")
+    add_compile_definitions(INTERFACE_QT)
+    set(SOURCE_FILES ${SOURCE_FILES}
+        src/gui.cpp src/keyrecorder.cpp src/visualizer.cpp resources/icons.qrc
+    )
+elseif (GMP_INTERFACE STREQUAL "console")
+    add_compile_definitions(INTERFACE_CONSOLE)
+endif()
+
+add_executable(gmplayer ${SOURCE_FILES})
 
 target_link_libraries(gmplayer PRIVATE pthread Qt5::Widgets ${SDL2_LIBRARIES} ${GME_LIBRARIES} SDBusCpp::sdbus-c++ fmt)
 

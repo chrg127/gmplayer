@@ -498,7 +498,7 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     player->on_played([=, this] { play_btn->setEnabled(true); play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPause)); });
     player->on_paused([=, this] {                             play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
 
-    player->on_seeked([=, this] {
+    player->on_seeked([=, this] (int) {
         if (history == SliderHistory::WasPlaying)
             player->start_or_resume();
         history = SliderHistory::DontKnow;

@@ -301,8 +301,9 @@ void Player::seek(int ms)
         pause();
         error(err);
     }
-    seeked();
-    position_changed(position());
+    auto newpos = position();
+    seeked(newpos);
+    position_changed(newpos);
 }
 
 void Player::seek_relative(int off) { seek(position() + off); }
