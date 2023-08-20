@@ -135,8 +135,7 @@ void RecentList::regen()
 {
     menu->clear();
     for (auto &p : paths) {
-        auto filename = p.filename();
-        auto *act     = new QAction(QString::fromStdString(filename), this);
+        auto *act = new QAction(QString::fromStdString(p.filename().string()), this);
         connect(act, &QAction::triggered, this, [=, this] { emit clicked(p); });
         menu->addAction(act);
     }
@@ -254,7 +253,6 @@ gmplayer uses the following libraries:
     <li><a href="https://www.qt.io/">Qt5 (Base, GUI, Widgets, DBus)</a></li>
     <li><a href="https://bitbucket.org/mpyne/game-music-emu/wiki/Home">Game_Music_Emu</a></li>
     <li><a href="https://www.libsdl.org">SDL2</a></li>
-    <li><a href="https://github.com/sailfishos/qtmpris">MprisQt</a></li>
 </ul>
 
 <p style="white-space: pre-wrap; margin: 25px;">

@@ -1,8 +1,12 @@
 #include "mpris_server.hpp"
 
-#include <sdbus-c++/sdbus-c++.h>
+#ifndef MPRIS_SERVER_NO_IMPL
+    #include <sdbus-c++/sdbus-c++.h>
+#endif
 
 namespace mpris {
+
+#ifndef MPRIS_SERVER_NO_IMPL
 
 struct SDBusServer : public Server {
     explicit SDBusServer(std::string_view name) : Server(name)
@@ -159,6 +163,8 @@ struct SDBusServer : public Server {
     }
 };
 
+#endif
+
 struct EmptyServer : public Server {
     explicit EmptyServer(std::string_view name) : Server(name) { }
     void prop_changed(const std::string &interface, const std::string &name, sdbus::Variant value) { }
@@ -177,12 +183,16 @@ struct EmptyServer : public Server {
 
 std::unique_ptr<Server> make_server(std::string_view name, bool create_empty)
 {
+#ifdef MPRIS_SERVER_NO_IMPL
+    return std::make_unique<EmptyServer>(name);
+#else
     try {
         auto s = std::make_unique<SDBusServer>(name);
         return s;
     } catch (const sdbus::Error &error) {
         return std::make_unique<EmptyServer>(name);
     }
+#endif
 }
 
 } // namespace mpris

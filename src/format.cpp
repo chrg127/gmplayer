@@ -73,7 +73,7 @@ auto GME::make(const io::MappedFile &file, int frequency, int default_length)
     if (auto err = gme_load_data(emu, data.data(), data.size()); err)
         return tl::unexpected(err);
     // load m3u file automatically. we don't care if it's found or not.
-    if (auto err = gme_load_m3u(emu, file.path().replace_extension("m3u").c_str()); err) {
+    if (auto err = gme_load_m3u(emu, file.path().replace_extension("m3u").string().c_str()); err) {
 #ifdef DEBUG
         printf("GME: %s\n", err);
 #endif

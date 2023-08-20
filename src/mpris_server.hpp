@@ -13,13 +13,13 @@
 #include <initializer_list>
 
 #ifdef _WIN32
-#define MPRIS_SERVER_NO_IMPL
+    #define MPRIS_SERVER_NO_IMPL
 #endif
 
 #ifndef MPRIS_SERVER_NO_IMPL
-#include <sdbus-c++/Types.h>
-#include <sdbus-c++/IObject.h>
-#include <sdbus-c++/IConnection.h>
+    #include <sdbus-c++/Types.h>
+    #include <sdbus-c++/IObject.h>
+    #include <sdbus-c++/IConnection.h>
 #else
 
 namespace sdbus {

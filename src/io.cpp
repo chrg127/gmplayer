@@ -2,8 +2,17 @@
 
 #include <tuple>
 #ifdef PLATFORM_WINDOWS
-    #define WIN32_LEAN_AND_MEAN
+    #define NO_MIN_MAX
+    #include <initguid.h>
+    #include <cguid.h>
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
     #include <windows.h>
+    #include <direct.h>
+    #include <io.h>
+    #include <wchar.h>
+    #include <shlobj.h>
+    #include <shellapi.h>
 #elif defined(PLATFORM_LINUX) || defined(PLATFORM_MACOS)
     #include <fcntl.h>
     #include <sys/mman.h>
@@ -102,7 +111,7 @@ std::filesystem::path home()
 {
 #ifdef PLATFORM_WINDOWS
     wchar_t path_string[PATH_MAX] = L"";
-    SHGetFolderPathW(nullptr, CSIDL_PROFILE | CSIDL_FLAG_CREATE, nullptr, 0, path);
+    SHGetFolderPathW(nullptr, CSIDL_PROFILE | CSIDL_FLAG_CREATE, nullptr, 0, path_string);
     return fs::path(path_string);
 #else
     auto *userinfo = getpwuid(getuid());
@@ -114,7 +123,7 @@ std::filesystem::path config()
 {
 #ifdef PLATFORM_WINDOWS
     wchar_t path_string[PATH_MAX] = L"";
-    SHGetFolderPathW(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path);
+    SHGetFolderPathW(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path_string);
     return fs::path(path_string);
 #elif defined(PLATFORM_MACOS)
     return home() / "Library/Application Support";
@@ -129,7 +138,7 @@ std::filesystem::path data()
 {
 #ifdef PLATFORM_WINDOWS
     wchar_t path_string[PATH_MAX] = L"";
-    SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path);
+    SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path_string);
     return fs::path(path_string);
 #elif defined(PLATFORM_MACOS)
     return home() / "Library/Application Support";
