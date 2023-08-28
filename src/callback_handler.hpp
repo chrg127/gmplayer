@@ -1,5 +1,8 @@
 #pragma once
 
+#include <vector>
+#include <functional>
+
 template <typename T> class CallbackHandler;
 
 template <typename R, typename... P>

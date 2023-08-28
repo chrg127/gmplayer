@@ -92,7 +92,7 @@ namespace detail {
 
 } // namespace detail
 
-class Server {
+struct Server {
 protected:
     std::string service_name;
     std::unique_ptr<sdbus::IConnection> connection;

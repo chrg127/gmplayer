@@ -1,17 +1,20 @@
 #include <thread>
-#include <QApplication>
-#include <QDebug>
-#include <QStandardPaths>
-#include <QSettings>
 #include <SDL.h>
 #include <fmt/core.h>
-#include "gui.hpp"
 #include "player.hpp"
 #include "mpris_server.hpp"
-#include "qtutils.hpp"
 #include "config.hpp"
 #include "types.hpp"
 #include "io.hpp"
+
+#if defined(INTERFACE_QT)
+    #include <QApplication>
+    #include <QDebug>
+    #include <QStandardPaths>
+    #include <QSettings>
+    #include "gui.hpp"
+    #include "qtutils.hpp"
+#endif
 
 namespace fs = std::filesystem;
 
@@ -101,7 +104,7 @@ int main(int argc, char *argv[])
         std::string errors_str;
         for (auto e : errors)
             errors_str += e.message() + "\n";
-        msgbox("Errors were found while parsing the configuration file.", QString::fromStdString(errors_str));
+        fmt::print("Errors were found while parsing the configuration file.", errors_str);
     }
 
     gmplayer::Player player;
@@ -124,7 +127,7 @@ int main(int argc, char *argv[])
             player.load_pair(0, 0);
             player.start_or_resume();
         } else {
-            fmt::print("Listening...");
+            fmt::print("Listening...\n");
         }
     });
 
@@ -133,7 +136,7 @@ int main(int argc, char *argv[])
     });
 
     player.on_track_changed([&] (int id, const gmplayer::Metadata &metadata) {
-        fmt::print("Playing track {}\n", metadata.info[gmplayer::Metadata::Song]);
+        //fmt::print("Playing track {}\n", metadata.info[gmplayer::Metadata::Song]);
     });
 
     player.on_track_ended([&] {
@@ -187,6 +190,6 @@ int main(int argc, char *argv[])
 
 #else
 
-#error "You must specify an interface. Did you make an error in CMakeLists.txt?"
+#error "You must specify an interface. Possible interfaces are 'qt' and 'console'."
 
 #endif

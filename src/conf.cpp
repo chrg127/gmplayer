@@ -50,6 +50,8 @@ struct Lexer {
 
     void skip()
     {
+        if (at_end())
+            return;
         for (;;) {
             switch (peek()) {
             case ' ': case '\r': case '\t': cur++; break;

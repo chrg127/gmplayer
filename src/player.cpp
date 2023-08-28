@@ -169,14 +169,23 @@ std::vector<Player::AddFileError> Player::add_files(std::span<fs::path> paths)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
     std::vector<Player::AddFileError> errors;
-    for (const auto &p : paths)
-        io::MappedFile::open(p, io::Access::Read)
-            .map([&](auto &&file) {
-                file_cache.push_back(std::move(file));
+    for (const auto& p : paths) {
+        auto file = io::MappedFile::open(p, io::Access::Read);
+        if (file) {
+            file_cache.push_back(std::move(file.value()));
+            files.order.push_back(file_cache.size() - 1);
+        }
+        else {
+            errors.push_back(std::make_pair(p.filename(), file.error()));
+        }
+    }
+        /*.map([&](auto&& file) {
+                file_cache.emplace_back(file);
                 files.order.push_back(file_cache.size() - 1);
             }).or_else([&](auto err) {
                 errors.push_back(std::make_pair(p.filename(), err));
             });
+            */
     playlist_changed(Playlist::File);
     return errors;
 }

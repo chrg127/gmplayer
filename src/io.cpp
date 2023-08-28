@@ -110,7 +110,7 @@ namespace directory {
 std::filesystem::path home()
 {
 #ifdef PLATFORM_WINDOWS
-    wchar_t path_string[PATH_MAX] = L"";
+    wchar_t path_string[MAX_PATH] = L"";
     SHGetFolderPathW(nullptr, CSIDL_PROFILE | CSIDL_FLAG_CREATE, nullptr, 0, path_string);
     return fs::path(path_string);
 #else
@@ -122,7 +122,7 @@ std::filesystem::path home()
 std::filesystem::path config()
 {
 #ifdef PLATFORM_WINDOWS
-    wchar_t path_string[PATH_MAX] = L"";
+    wchar_t path_string[MAX_PATH] = L"";
     SHGetFolderPathW(nullptr, CSIDL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path_string);
     return fs::path(path_string);
 #elif defined(PLATFORM_MACOS)
@@ -137,7 +137,7 @@ std::filesystem::path config()
 std::filesystem::path data()
 {
 #ifdef PLATFORM_WINDOWS
-    wchar_t path_string[PATH_MAX] = L"";
+    wchar_t path_string[MAX_PATH] = L"";
     SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA | CSIDL_FLAG_CREATE, nullptr, 0, path_string);
     return fs::path(path_string);
 #elif defined(PLATFORM_MACOS)

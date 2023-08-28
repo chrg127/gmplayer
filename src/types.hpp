@@ -2,6 +2,7 @@
 
 #include <system_error>
 #include <filesystem>
+#include <array>
 
 namespace gmplayer {
 
