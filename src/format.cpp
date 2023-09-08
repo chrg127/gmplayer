@@ -104,7 +104,6 @@ Error GME::play(std::span<i16> out)
 
 Error GME::seek(int n)
 {
-    fmt::print("seeking to {}\n", n);
     auto err = gme_seek(emu, n);
     if (err)
         return Error { .code = Error::Type::Seek,

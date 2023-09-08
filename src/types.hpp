@@ -22,7 +22,7 @@ struct Error {
 };
 
 struct Metadata {
-    enum { System = 0, Game, Song, Author, Copyright, Comment, Dumper };
+    enum Field { System = 0, Game, Song, Author, Copyright, Comment, Dumper };
     int length;
     std::array<std::string, 7> info;
 };
