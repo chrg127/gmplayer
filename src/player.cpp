@@ -94,14 +94,12 @@ Player::Player()
     config.when_set("repeat_track", [&](const conf::Value &v) {
         tracks.repeat = v.as<bool>();
         mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
-        repeat_changed(tracks.repeat, files.repeat);
     });
 
     files.repeat = config.get<bool>("repeat_track");
     config.when_set("repeat_file", [&](const conf::Value &v) {
         tracks.repeat = v.as<bool>();
         mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
-        repeat_changed(tracks.repeat, files.repeat);
     });
 
     options.volume = config.get<int>("volume");
@@ -109,7 +107,6 @@ Player::Player()
         std::lock_guard<SDLMutex> lock(audio.mutex);
         options.volume = v.as<int>();
         mpris->set_volume(double(options.volume) / double(MAX_VOLUME_VALUE));
-        volume_changed(options.volume);
     });
 }
 
@@ -178,7 +175,6 @@ std::vector<Player::AddFileError> Player::add_files(std::span<fs::path> paths)
         else {
             errors.push_back(std::make_pair(p.filename(), file.error()));
         }
-    }
         /*.map([&](auto&& file) {
                 file_cache.emplace_back(file);
                 files.order.push_back(file_cache.size() - 1);
@@ -186,7 +182,9 @@ std::vector<Player::AddFileError> Player::add_files(std::span<fs::path> paths)
                 errors.push_back(std::make_pair(p.filename(), err));
             });
             */
-    playlist_changed(Playlist::File);
+    }
+    if (paths.size() > 0)
+        playlist_changed(Playlist::File);
     return errors;
 }
 
@@ -214,6 +212,8 @@ void Player::load_file(int id)
         return;
     }
     format = std::move(res.value());
+    if (files.current == -1)
+        first_file_load();
     files.current = id;
     track_cache.clear();
     for (int i = 0; i < format->track_count(); i++)
@@ -257,12 +257,8 @@ void Player::clear()
     std::lock_guard<SDLMutex> lock(audio.mutex);
     pause();
     format = make_default_format();
-    track_cache.clear();
-    tracks.clear();
-    playlist_changed(Playlist::Track);
-    file_cache.clear();
-    files.clear();
-    playlist_changed(Playlist::File);
+    track_cache.clear(); if (tracks.size() > 0) { tracks.clear(); playlist_changed(Playlist::Track); }
+    file_cache .clear(); if (files .size() > 0) {  files.clear(); playlist_changed(Playlist::File);  }
     mpris->set_shuffle(false);
     cleared();
 }

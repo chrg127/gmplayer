@@ -63,6 +63,7 @@ struct Playlist {
 
     std::optional<int> next() const { return get(+1, -1, order.size()); }
     std::optional<int> prev() const { return get(-1, -1, order.size()); }
+    std::size_t size() const { return order.size(); }
 };
 
 class Player {
@@ -156,10 +157,8 @@ public:                                             \
     MAKE_SIGNAL(paused, void)
     MAKE_SIGNAL(played, void)
     MAKE_SIGNAL(seeked, int)
-    MAKE_SIGNAL(volume_changed, int)
     MAKE_SIGNAL(tempo_changed, double)
     MAKE_SIGNAL(fade_changed, int);
-    MAKE_SIGNAL(repeat_changed, bool, bool)
     MAKE_SIGNAL(shuffled, Playlist::Type)
     MAKE_SIGNAL(error, Error)
     MAKE_SIGNAL(cleared, void)
@@ -167,6 +166,7 @@ public:                                             \
     MAKE_SIGNAL(files_removed, std::span<int>)
     MAKE_SIGNAL(samples_played, std::span<i16>, std::span<f32>)
     MAKE_SIGNAL(channel_volume_changed, int, int)
+    MAKE_SIGNAL(first_file_load, void)
 
 #undef MAKE_SIGNAL
 };

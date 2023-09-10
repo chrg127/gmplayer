@@ -510,10 +510,17 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     player->on_volume_changed([=, this] (int value)    { volume->set_value(value); });
     player->on_tempo_changed( [=, this] (double value) { tempo_slider->setValue(tempo_to_int(value)); });
 
-    player->on_repeat_changed([=, this] (bool, bool) {
+    config.when_set("volume", [=, this] (const conf::Value &value) {
+        volume->set_value(value.as<int>());
+    });
+
+    auto enable_next_buttons = [=, this] {
         next_track->setEnabled(player->has_next());
         prev_track->setEnabled(player->has_prev());
-    });
+    };
+
+    config.when_set("repeat_file",  [=, this] (const conf::Value &_) { enable_next_buttons(); });
+    config.when_set("repeat_track", [=, this] (const conf::Value &_) { enable_next_buttons(); });
 
     player->on_cleared([=, this] {
         duration_slider->setEnabled(false);
@@ -526,17 +533,13 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
         play_btn->setEnabled(true);
         duration_slider->setEnabled(true);
         duration_slider->setRange(0, player->length());
-        next_track->setEnabled(player->has_next());
-        prev_track->setEnabled(player->has_prev());
+        enable_next_buttons();
         this->metadata = metadata;
         status->setText(QString::fromStdString(gmplayer::format_metadata(config.get<std::string>("status_format_string"), metadata)));
     });
     player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
     player->on_file_changed([=, this] (int) { stop_btn->setEnabled(true); });
-    player->on_files_removed([=, this] (std::span<int>) {
-        next_track->setEnabled(player->has_next());
-        prev_track->setEnabled(player->has_prev());
-    });
+    player->on_files_removed([=, this] (std::span<int>) { enable_next_buttons(); });
 
     player->on_error([=, this] (gmplayer::Error error) {
         switch (error.type()) {

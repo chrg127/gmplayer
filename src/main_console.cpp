@@ -35,9 +35,12 @@ std::string make_slider(int pos, int length, int term_width)
     return s;
 }
 
+int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
+double int_to_tempo(int value) { return std::exp2(math::map(double(value), 0.0, 100.0, -2.0, 2.0)); }
+
 struct Status {
     bool paused;
-    float tempo;
+    int tempo;
     int volume;
     bool autoplay;
     bool repeat_file;
@@ -49,7 +52,7 @@ struct Status {
 void print_file_info(const io::MappedFile &f)
 {
     fmt::print("\r\e[9A"
-               "File: {}\n"
+               "\e[KFile: {}\n"
                "\n\n\n\n\n\n\n\n",
                f.name());
     std::fflush(stdout);
@@ -59,12 +62,12 @@ void print_metadata(const gmplayer::Metadata &m)
 {
     using enum gmplayer::Metadata::Field;
     fmt::print("\r\e[8A"
-               "Song: {}\n"
-               "Author: {}\n"
-               "Game: {}\n"
-               "System: {}\n"
-               "Comment: {}\n"
-               "Dumper: {}\n"
+               "\e[KSong: {}\n"
+               "\e[KAuthor: {}\n"
+               "\e[KGame: {}\n"
+               "\e[KSystem: {}\n"
+               "\e[KComment: {}\n"
+               "\e[KDumper: {}\n"
                "\n\n",
                m.info[Song], m.info[Author], m.info[Game],
                m.info[System], m.info[Comment], m.info[Dumper]);
@@ -74,11 +77,12 @@ void print_metadata(const gmplayer::Metadata &m)
 void update_status(const Status &status) {
     auto [width, _] = get_terminal_size();
     fmt::print("\r\e[2A"
-               "{}{} Tempo: {} Volume: {} [{}] Autoplay [{}] Repeat file [{}] Repeat track\n"
-               "[{}]\n",
+               "\e[K{}{} Tempo: {:.03}x Volume: {} [{}] Autoplay [{}] Repeat file [{}] Repeat track\n"
+               "\e[K[{}]\n",
                status.paused ? "(Paused) " : "",
                format_position(status.position, status.length),
-               status.tempo, status.volume,
+               int_to_tempo(status.tempo),
+               status.volume,
                status.autoplay     ? "X" : " ",
                status.repeat_file  ? "X" : " ",
                status.repeat_track ? "X" : " ",
@@ -106,19 +110,51 @@ int main(int argc, char *argv[])
     player.mpris_server().set_supported_uri_schemes({"file"});
     player.mpris_server().set_supported_mime_types({"application/x-pkcs7-certificates", "application/octet-stream", "text/plain"});
     player.mpris_server().on_quit([] { });
+    player.mpris_server().on_open_uri([&] (std::string_view uri) {
+        if (uri.size() < 7 || uri.substr(0, 7) != "file://") {
+            fmt::print(stderr, "error: only local files are supported\n");
+            return;
+        }
+        player.add_file(fs::path(uri.substr(7)));
+    });
 
     bool running = true;
     Status status = {
-        .paused = true,
-        .tempo = config.get<float>("tempo"),
-        .volume = config.get<int>("volume"),
-        .autoplay = config.get<bool>("autoplay"),
-        .repeat_file = config.get<bool>("repeat_file"),
-        .repeat_track = config.get<bool>("repeat_file"),
-        .position = 0,
-        .length = 0,
+        .paused       = true,
+        .tempo        = tempo_to_int(config.get<float>("tempo")),
+        .volume       = config.get<int>("volume"),
+        .autoplay     = config.get<bool>("autoplay"),
+        .repeat_file  = config.get<bool>("repeat_file"),
+        .repeat_track = config.get<bool>("repeat_track"),
+        .position     = 0,
+        .length       = 0,
     };
     Terminal term;
+
+    config.when_set("volume", [&] (const conf::Value &value) {
+        status.volume = value.as<int>();
+        update_status(status);
+    });
+
+    config.when_set("tempo", [&] (const conf::Value &value) {
+        status.tempo = tempo_to_int(value.as<float>());
+        update_status(status);
+    });
+
+    config.when_set("autoplay", [&] (const conf::Value &value) {
+        status.autoplay = value.as<bool>();
+        update_status(status);
+    });
+
+    config.when_set("repeat_file", [&] (const conf::Value &value) {
+        status.repeat_file = value.as<bool>();
+        update_status(status);
+    });
+
+    config.when_set("repeat_track", [&] (const conf::Value &value) {
+        status.repeat_track = value.as<bool>();
+        update_status(status);
+    });
 
     player.on_error([&] (gmplayer::Error error) {
         fmt::print("got error\n");
@@ -126,11 +162,9 @@ int main(int argc, char *argv[])
     });
 
     player.on_playlist_changed([&] (gmplayer::Playlist::Type type) {
-        if (type == gmplayer::Playlist::File && player.file_count() != 0) {
+        if (type == gmplayer::Playlist::Type::File) {
             player.load_pair(0, 0);
             player.start_or_resume();
-        } else {
-            // fmt::print("Listening...\n");
         }
     });
 
@@ -163,15 +197,14 @@ int main(int argc, char *argv[])
         update_status(status);
     });
 
-    player.on_volume_changed([&] (int value) {
-        status.volume = value;
-        update_status(status);
+    player.on_first_file_load([&] {
+        fmt::print("\e[A\n\n\n\n\n\n\n\n\n");
+        std::fflush(stdout);
     });
 
-    fmt::print("\n\n\n\n\n\n\n\n\n");
-    std::fflush(stdout);
+    fmt::print("Listening...\n");
     auto files = args_to_paths(argc, argv);
-    if (auto file_errors = player.add_files(files);!file_errors.empty())
+    if (auto file_errors = player.add_files(files); !file_errors.empty())
         for (auto &e : file_errors)
             fmt::print("error: {}: {}\n", e.first.string(), e.second.message());
 
@@ -198,12 +231,39 @@ int main(int argc, char *argv[])
             case 'k':
                 player.prev();
                 break;
-            case '9':
-                config.set<int>("volume", config.get<int>("volume") - 2);
+            case 'a':
+                config.set<bool>("autoplay", !config.get<bool>("autoplay"));
                 break;
-            case '0':
-                config.set<int>("volume", config.get<int>("volume") + 2);
+            case 's':
+                config.set<bool>("repeat_file", !config.get<bool>("repeat_file"));
                 break;
+            case 'd':
+                config.set<bool>("repeat_track", !config.get<bool>("repeat_track"));
+                break;
+            // case '7': {
+            //     auto tempo = status.tempo - 1;
+            //     if (tempo >= 0)
+            //         config.set<float>("tempo", int_to_tempo(tempo));
+            //     break;
+            // }
+            // case '8':{
+            //     auto tempo = status.tempo + 1;
+            //     if (tempo <= 100)
+            //         config.set<float>("tempo", int_to_tempo(tempo));
+            //     break;
+            // }
+            case '9': {
+                auto volume = config.get<int>("volume") - 1;
+                if (volume >= 0)
+                    config.set<int>("volume", volume);
+                break;
+            }
+            case '0': {
+                auto volume = config.get<int>("volume") + 1;
+                if (volume <= MAX_VOLUME_VALUE)
+                    config.set<int>("volume", volume);
+                break;
+            }
             case ' ':
                 player.play_pause();
                 break;
