@@ -3,6 +3,7 @@
 #include <system_error>
 #include <filesystem>
 #include <array>
+#include "math.hpp"
 
 namespace gmplayer {
 
@@ -50,5 +51,8 @@ inline std::string format_metadata(std::string_view fmt, const Metadata &m)
     }
     return out;
 }
+
+inline int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
+inline double int_to_tempo(int value) { return std::exp2(math::map(double(value), 0.0, 100.0, -2.0, 2.0)); }
 
 } // namespace gmplayer

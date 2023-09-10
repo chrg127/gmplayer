@@ -21,7 +21,7 @@ const conf::Data defaults = {
     { "repeat_track",           conf::Value(false) },
     { "default_duration",       conf::Value(3_min) },
     { "fade",                   0_v },
-    { "tempo",                  1.0_v },
+    { "tempo",                  50_v },
     { "volume",                 conf::Value(MAX_VOLUME_VALUE) },
     // gui options
     { "last_visited",           ""_v },

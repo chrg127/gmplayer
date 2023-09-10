@@ -35,9 +35,6 @@ std::string make_slider(int pos, int length, int term_width)
     return s;
 }
 
-int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
-double int_to_tempo(int value) { return std::exp2(math::map(double(value), 0.0, 100.0, -2.0, 2.0)); }
-
 struct Status {
     bool paused;
     int tempo;
@@ -81,7 +78,7 @@ void update_status(const Status &status) {
                "\e[K[{}]\n",
                status.paused ? "(Paused) " : "",
                format_position(status.position, status.length),
-               int_to_tempo(status.tempo),
+               gmplayer::int_to_tempo(status.tempo),
                status.volume,
                status.autoplay     ? "X" : " ",
                status.repeat_file  ? "X" : " ",
@@ -99,10 +96,9 @@ int main(int argc, char *argv[])
 
     auto errors = config.load();
     if (errors.size() > 0) {
-        std::string errors_str;
+        fmt::print("Errors were found while parsing the configuration file:\n");
         for (auto e : errors)
-            errors_str += e.message() + "\n";
-        fmt::print("Errors were found while parsing the configuration file.", errors_str);
+            fmt::print("{}\n", e.message());
     }
 
     gmplayer::Player player;
@@ -121,7 +117,7 @@ int main(int argc, char *argv[])
     bool running = true;
     Status status = {
         .paused       = true,
-        .tempo        = tempo_to_int(config.get<float>("tempo")),
+        .tempo        = config.get<int>("tempo"),
         .volume       = config.get<int>("volume"),
         .autoplay     = config.get<bool>("autoplay"),
         .repeat_file  = config.get<bool>("repeat_file"),
@@ -137,7 +133,7 @@ int main(int argc, char *argv[])
     });
 
     config.when_set("tempo", [&] (const conf::Value &value) {
-        status.tempo = tempo_to_int(value.as<float>());
+        status.tempo = value.as<int>();
         update_status(status);
     });
 
@@ -240,18 +236,18 @@ int main(int argc, char *argv[])
             case 'd':
                 config.set<bool>("repeat_track", !config.get<bool>("repeat_track"));
                 break;
-            // case '7': {
-            //     auto tempo = status.tempo - 1;
-            //     if (tempo >= 0)
-            //         config.set<float>("tempo", int_to_tempo(tempo));
-            //     break;
-            // }
-            // case '8':{
-            //     auto tempo = status.tempo + 1;
-            //     if (tempo <= 100)
-            //         config.set<float>("tempo", int_to_tempo(tempo));
-            //     break;
-            // }
+            case '7': {
+                auto tempo = config.get<int>("tempo") - 1;
+                if (tempo >= 0)
+                    config.set<int>("tempo", tempo);
+                break;
+            }
+            case '8':{
+                auto tempo = config.get<int>("tempo") + 1;
+                if (tempo <= MAX_TEMPO_VALUE)
+                    config.set<int>("tempo", tempo);
+                break;
+            }
             case '9': {
                 auto volume = config.get<int>("volume") - 1;
                 if (volume >= 0)

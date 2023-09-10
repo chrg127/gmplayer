@@ -37,7 +37,7 @@ Player::Player()
     mpris = mpris::make_server("gmplayer");
     mpris->set_maximum_rate(4.0);
     mpris->set_minimum_rate(0.25);
-    mpris->set_rate(config.get<float>("tempo"));
+    mpris->set_rate(int_to_tempo(config.get<int>("tempo")));
     mpris->set_volume(config.get<int>("volume"));
     mpris->on_pause(           [=, this]                   { pause();               });
     mpris->on_play(            [=, this]                   { start_or_resume();     });
@@ -46,7 +46,7 @@ Player::Player()
     mpris->on_next(            [=, this]                   { next();                });
     mpris->on_previous(        [=, this]                   { prev();                });
     mpris->on_seek(            [=, this] (int64_t offset)  { seek_relative(offset); });
-    mpris->on_rate_changed(    [=, this] (double rate)     { config.set<float>("tempo", rate); });
+    mpris->on_rate_changed(    [=, this] (double rate)     { config.set<int>("tempo", int_to_tempo(rate)); });
     mpris->on_set_position(    [=, this] (int64_t pos)     { seek(pos);             });
     mpris->on_shuffle_changed( [=, this] (bool do_shuffle) {
         if (do_shuffle)
@@ -75,7 +75,6 @@ Player::Player()
             seek(0);
             format->set_fade(length(), fade);
         }
-        fade_changed(length());
     });
 
     options.autoplay = config.get<bool>("autoplay");
@@ -85,7 +84,7 @@ Player::Player()
     });
 
     config.when_set("tempo", [&](const conf::Value &v) {
-        float tempo = v.as<float>();
+        float tempo = int_to_tempo(v.as<int>());
         format->set_tempo(tempo);
         mpris->set_rate(tempo);
     });
@@ -234,7 +233,7 @@ void Player::load_track(int id)
     }
     auto &metadata = track_cache[num];
     format->set_fade(metadata.length, config.get<int>("fade"));
-    format->set_tempo(config.get<float>("tempo"));
+    format->set_tempo(int_to_tempo(config.get<int>("tempo")));
     mpris->set_metadata({
         { mpris::Field::TrackId, fmt::format("/{}{}", files.current, tracks.current)    },
         { mpris::Field::Length,  metadata.length                                        },
