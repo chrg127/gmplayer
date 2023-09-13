@@ -172,5 +172,6 @@ public:                                             \
 };
 
 inline bool is_playlist(std::filesystem::path filename) { return filename.extension() == ".playlist"; }
+tl::expected<std::vector<std::filesystem::path>, std::error_code> open_playlist(std::filesystem::path file_path);
 
 } // namespace gmplayer

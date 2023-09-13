@@ -182,7 +182,7 @@ std::vector<Player::AddFileError> Player::add_files(std::span<fs::path> paths)
             });
             */
     }
-    if (paths.size() > 0)
+    if (files.size() > 0)
         playlist_changed(Playlist::File);
     return errors;
 }
@@ -446,5 +446,20 @@ void Player::set_channel_volume(int index, int value)
 }
 
 mpris::Server &Player::mpris_server() { return *mpris; }
+
+tl::expected<std::vector<fs::path>, std::error_code> open_playlist(fs::path file_path)
+{
+    auto file = io::File::open(file_path, io::Access::Read);
+    if (!file)
+        return tl::unexpected(file.error());
+    std::vector<std::filesystem::path> paths;
+    for (std::string line; file.value().get_line(line); ) {
+        auto p = fs::path(line);
+        if (p.is_relative())
+            p = file_path.parent_path() / p;
+        paths.push_back(p);
+    }
+    return paths;
+}
 
 } // namespace gmplayer

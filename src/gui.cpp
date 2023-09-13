@@ -81,9 +81,6 @@ std::vector<fs::path> load_recent(const std::string &key)
     return conf::convert_list_no_errors<fs::path, std::string>(config.get<conf::ValueList>(key));
 }
 
-int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
-double int_to_tempo(int value) { return std::exp2(math::map(double(value), 0.0, 100.0, -2.0, 2.0)); }
-
 QString format_error(const gmplayer::Error &error)
 {
     using enum gmplayer::Error::Type;
