@@ -459,7 +459,7 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     // tempo slider
     auto tempo = config.get<int>("tempo");
     auto *tempo_slider = new QSlider(Qt::Horizontal);
-    auto *tempo_label = new QLabel(QString("%1x").arg(int_to_tempo(tempo), 4, 'f', 2));
+    auto *tempo_label = new QLabel(QString("%1x").arg(gmplayer::int_to_tempo(tempo), 4, 'f', 2));
     tempo_slider->setMinimum(0);
     tempo_slider->setMaximum(100);
     tempo_slider->setTickInterval(25);
@@ -467,7 +467,7 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     tempo_slider->setValue(tempo);
 
     auto get_tempo_value = [=, this] (int value) {
-        tempo_label->setText(QString("%1x").arg(int_to_tempo(value), 4, 'f', 2));
+        tempo_label->setText(QString("%1x").arg(gmplayer::int_to_tempo(value), 4, 'f', 2));
         return value;
     };
 
@@ -502,9 +502,9 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
         duration_slider->setValue(ms);
     });
 
-    config.when_set("fade", (const conf::Value &value) { duration_slider->setRange(0, player.length()); }
-    config.when_set("tempo", [=, this] (const conf::Value &value) { tempo_slider->setValue(value.as<int>()); });
-    config.when_set("volume", [=, this] (const conf::Value &value) { volume->set_value(value.as<int>()); });
+    config.when_set("fade",   [=, this](const conf::Value &value) { duration_slider->setRange(0, player->length()); });
+    config.when_set("tempo",  [=, this](const conf::Value &value) { tempo_slider->setValue(value.as<int>()); });
+    config.when_set("volume", [=, this](const conf::Value &value) { volume->set_value(value.as<int>()); });
 
     auto enable_next_buttons = [=, this] {
         next_track->setEnabled(player->has_next());
