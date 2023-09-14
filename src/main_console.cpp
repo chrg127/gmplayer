@@ -222,7 +222,9 @@ int main(int argc, char *argv[])
     });
 
     player.on_track_ended([&] {
-        // fmt::print("Track ended.\n");
+        if (config.get<bool>("autoplay")) {
+            player.next();
+        }
     });
 
     player.on_paused([&] (void) {

@@ -529,7 +529,12 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
         this->metadata = metadata;
         status->setText(QString::fromStdString(gmplayer::format_metadata(config.get<std::string>("status_format_string"), metadata)));
     });
-    player->on_track_ended([=, this] { play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));  });
+    player->on_track_ended([=, this] {
+        play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+        if (config.get<bool>("autoplay")) {
+            player->next();
+        }
+    });
     player->on_file_changed([=, this] (int) { stop_btn->setEnabled(true); });
     player->on_files_removed([=, this] (std::span<int>) { enable_next_buttons(); });
 

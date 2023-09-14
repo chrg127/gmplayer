@@ -79,11 +79,11 @@ Player::Player()
         }
     });
 
-    options.autoplay = config.get<bool>("autoplay");
-    config.when_set("autoplay", [&](const conf::Value &v) {
-        std::lock_guard<SDLMutex> lock(audio.mutex);
-        options.autoplay = v.as<bool>();
-    });
+    // options.autoplay = config.get<bool>("autoplay");
+    // config.when_set("autoplay", [&](const conf::Value &v) {
+    //     std::lock_guard<SDLMutex> lock(audio.mutex);
+    //     options.autoplay = v.as<bool>();
+    // });
 
     config.when_set("tempo", [&](const conf::Value &v) {
         float tempo = int_to_tempo(v.as<int>());
@@ -125,8 +125,8 @@ void Player::audio_callback(std::span<u8> stream)
     if (format->track_ended()) {
         pause();
         track_ended();
-        if (options.autoplay)
-            next();
+        // if (options.autoplay)
+        //     next();
         return;
     }
     std::fill(stream.begin(), stream.end(), 0); // fill stream with silence

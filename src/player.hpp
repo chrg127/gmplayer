@@ -25,7 +25,7 @@ struct SDLMutex {
 
 struct PlayerOptions {
     int fade_out;
-    bool autoplay;
+    // bool autoplay;
     bool track_repeat;
     bool file_repeat;
     int default_duration;
