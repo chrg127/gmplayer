@@ -190,10 +190,18 @@ int main(int argc, char *argv[])
     });
 
     player.on_playlist_changed([&] (gmplayer::Playlist::Type type) {
-        if (player.is_playing() && type == gmplayer::Playlist::Type::File) {
+        if (type == gmplayer::Playlist::Type::File && player.file_count() > 0) {
             player.load_pair(0, 0);
             player.start_or_resume();
         }
+    });
+
+    player.on_shuffled([&] (gmplayer::Playlist::Type type) {
+        if (player.is_playing())
+            if (type == gmplayer::Playlist::Track)
+                player.load_track(0);
+            else
+                player.load_pair(0, 0);
     });
 
     player.on_position_changed([&] (int pos) {

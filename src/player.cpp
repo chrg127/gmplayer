@@ -49,10 +49,12 @@ Player::Player()
     mpris->on_rate_changed(    [=, this] (double rate)     { config.set<int>("tempo", int_to_tempo(rate)); });
     mpris->on_set_position(    [=, this] (int64_t pos)     { seek(pos);             });
     mpris->on_shuffle_changed( [=, this] (bool do_shuffle) {
+        std::lock_guard<SDLMutex> lock(audio.mutex);
         if (do_shuffle)
             files.shuffle();
         else
             files.regen();
+        playlist_changed(Playlist::Type::File);
         shuffled(Playlist::Type::File);
     });
     mpris->on_volume_changed(  [=, this] (double vol) {
