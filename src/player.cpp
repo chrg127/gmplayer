@@ -70,12 +70,11 @@ Player::Player()
     mpris->start_loop_async();
 
     config.when_set("fade", [&](const conf::Value &v) {
-        auto fade = v.as<int>();
         if (tracks.current != -1) {
+            format->set_fade(length(), v.as<int>());
             // reset song to start position
             // (this is due to the modified fade applying to the song)
             seek(0);
-            format->set_fade(length(), fade);
         }
     });
 

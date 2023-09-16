@@ -155,6 +155,7 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
     : QDialog(parent)
 {
     auto fade_val = config.get<int>("fade");
+    fmt::print("fade = {}\n", fade_val);
     auto *fade_box          = make_checkbox(tr("Enable &fade-out"), fade_val != 0);
     auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), fade_val / 1000, fade_box->isChecked());
     auto *default_duration  = make_spinbox(10_min / 1000, config.get<int>("default_duration") / 1000);
@@ -173,7 +174,7 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
 
     connect(this, &QDialog::finished, this, [=, this] (int r) {
         if (r == QDialog::Accepted) {
-            config.set<int>("fade", fade_secs->value());
+            config.set<int>("fade", fade_secs->value() * 1000);
             config.set<int>("default_duration", default_duration->value());
             config.set<std::string>("status_format_string", fmtstring->text().toStdString());
         }
@@ -502,7 +503,10 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
         duration_slider->setValue(ms);
     });
 
-    config.when_set("fade",   [=, this](const conf::Value &value) { duration_slider->setRange(0, player->length()); });
+    config.when_set("fade",   [=, this](const conf::Value &value) {
+        duration_slider->setRange(0, player->length());
+
+    });
     config.when_set("tempo",  [=, this](const conf::Value &value) { tempo_slider->setValue(value.as<int>()); });
     config.when_set("volume", [=, this](const conf::Value &value) { volume->set_value(value.as<int>()); });
 

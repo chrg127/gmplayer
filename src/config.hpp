@@ -68,8 +68,8 @@ struct Config {
     {
         // std::lock_guard<std::mutex> lock(mut);
         auto v = conf::Value(value);
-        callbacks[key](v);
         data[key] = v;
+        callbacks[key](v);
     }
 
     void when_set(const std::string &key, auto &&fn)
