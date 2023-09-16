@@ -70,6 +70,7 @@ Player::Player()
     mpris->start_loop_async();
 
     config.when_set("fade", [&](const conf::Value &v) {
+        std::lock_guard<SDLMutex> lock(audio.mutex);
         if (tracks.current != -1) {
             format->set_fade(length(), v.as<int>());
             // reset song to start position
@@ -78,13 +79,8 @@ Player::Player()
         }
     });
 
-    // options.autoplay = config.get<bool>("autoplay");
-    // config.when_set("autoplay", [&](const conf::Value &v) {
-    //     std::lock_guard<SDLMutex> lock(audio.mutex);
-    //     options.autoplay = v.as<bool>();
-    // });
-
     config.when_set("tempo", [&](const conf::Value &v) {
+        std::lock_guard<SDLMutex> lock(audio.mutex);
         float tempo = int_to_tempo(v.as<int>());
         format->set_tempo(tempo);
         mpris->set_rate(tempo);
@@ -92,14 +88,16 @@ Player::Player()
 
     tracks.repeat = config.get<bool>("repeat_track");
     config.when_set("repeat_track", [&](const conf::Value &v) {
+        std::lock_guard<SDLMutex> lock(audio.mutex);
         tracks.repeat = v.as<bool>();
         mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
     });
 
     files.repeat = config.get<bool>("repeat_track");
     config.when_set("repeat_file", [&](const conf::Value &v) {
-        tracks.repeat = v.as<bool>();
-        mpris->set_loop_status(tracks.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
+        std::lock_guard<SDLMutex> lock(audio.mutex);
+        files.repeat = v.as<bool>();
+        mpris->set_loop_status(files.repeat ? mpris::LoopStatus::Track : mpris::LoopStatus::None);
     });
 
     options.volume = config.get<int>("volume");
@@ -450,17 +448,16 @@ mpris::Server &Player::mpris_server() { return *mpris; }
 
 tl::expected<std::vector<fs::path>, std::error_code> open_playlist(fs::path file_path)
 {
-    auto file = io::File::open(file_path, io::Access::Read);
-    if (!file)
-        return tl::unexpected(file.error());
-    std::vector<std::filesystem::path> paths;
-    for (std::string line; file.value().get_line(line); ) {
-        auto p = fs::path(line);
-        if (p.is_relative())
-            p = file_path.parent_path() / p;
-        paths.push_back(p);
-    }
-    return paths;
+    return io::File::open(file_path, io::Access::Read).map([&](io::File &&file) {
+        std::vector<std::filesystem::path> paths;
+        for (std::string line; file.get_line(line); ) {
+            auto p = fs::path(line);
+            if (p.is_relative())
+                p = file_path.parent_path() / p;
+            paths.push_back(p);
+        }
+        return paths;
+    });
 }
 
 } // namespace gmplayer

@@ -67,7 +67,7 @@ constexpr auto PLAYLIST_FILTER =
     "Text files (*.txt);;"
     "All files (*.*)";
 
-QString format_duration(int ms, int max)
+QString format_position(int ms, int max)
 {
     return QString("%1:%2/%3:%4")
         .arg(ms  / 1000 / 60, 2, 10, QChar('0'))
@@ -435,7 +435,7 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     duration_slider->setEnabled(false);
 
     connect(duration_slider, &QSlider::valueChanged, this, [=, this] (int ms) {
-        duration_label->setText(format_duration(ms, duration_slider->maximum()));
+        duration_label->setText(format_position(ms, duration_slider->maximum()));
     });
 
     connect(duration_slider, &QSlider::sliderPressed,  this, [=, this]() {

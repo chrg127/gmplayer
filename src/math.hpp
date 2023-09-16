@@ -29,4 +29,7 @@ T avg(std::span<T> ns)
     return r;
 }
 
+template <typename T>
+T percent_of(T x, T max) { return x * 100 / max; }
+
 } // namespace math

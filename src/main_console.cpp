@@ -1,5 +1,6 @@
 #include <SDL.h>
 #include <fmt/core.h>
+#include <system_error>
 #include "player.hpp"
 #include "mpris_server.hpp"
 #include "config.hpp"
@@ -10,6 +11,21 @@
 
 namespace fs = std::filesystem;
 using namespace gmplayer::literals;
+
+struct Status {
+    bool paused;
+    int tempo;
+    int volume;
+    bool autoplay;
+    bool repeat_file;
+    bool repeat_track;
+    int position;
+    int length;
+};
+
+const int FILE_INFO_HEIGHT = 10;
+const int TRACK_INFO_HEIGHT = 8;
+const int STATUS_HEIGHT = 2;
 
 Config config;
 
@@ -34,21 +50,6 @@ std::string make_slider(int pos, int length, int term_width)
     s[math::map(pos, 0, length, 0, term_width)] = '+';
     return s;
 }
-
-struct Status {
-    bool paused;
-    int tempo;
-    int volume;
-    bool autoplay;
-    bool repeat_file;
-    bool repeat_track;
-    int position;
-    int length;
-};
-
-const int FILE_INFO_HEIGHT = 10;
-const int TRACK_INFO_HEIGHT = 8;
-const int STATUS_HEIGHT = 2;
 
 std::string make_space(int newlines) { return std::string(newlines, '\n'); }
 
@@ -82,8 +83,6 @@ void print_metadata(const gmplayer::Metadata &m)
     std::fflush(stdout);
 }
 
-int percent_of(int x, int max) { return x * 100 / max; }
-
 void update_status(const Status &status) {
     auto [width, _] = get_terminal_size();
     fmt::print("\r\e[{}A"
@@ -93,7 +92,7 @@ void update_status(const Status &status) {
                status.paused ? "(Paused) " : "",
                format_position(status.position, status.length),
                gmplayer::int_to_tempo(status.tempo),
-               percent_of(status.volume, MAX_VOLUME_VALUE),
+               math::percent_of(status.volume, MAX_VOLUME_VALUE),
                status.autoplay     ? "X" : " ",
                status.repeat_file  ? "X" : " ",
                status.repeat_track ? "X" : " ",
@@ -101,15 +100,13 @@ void update_status(const Status &status) {
     std::fflush(stdout);
 }
 
-auto get_files(int argc, char *argv[])
+std::vector<fs::path> get_files(int argc, char *argv[])
 {
     if (auto p = fs::path(argv[1]); gmplayer::is_playlist(p)) {
-        auto contents = gmplayer::open_playlist(p);
-        if (!contents) {
-            fmt::print("{}\n", contents.error().message());
+        return gmplayer::open_playlist(p).map_error([&](std::error_code error) {
+            fmt::print("{}\n", error.message());
             return std::vector<fs::path>{};
-        }
-        return contents.value();
+        }).value();
     }
     return args_to_paths(argc, argv);
 }
