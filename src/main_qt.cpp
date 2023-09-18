@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QStandardPaths>
 #include <QSettings>
+#include <QUrl>
 #include "player.hpp"
 #include "mpris_server.hpp"
 #include "config.hpp"
@@ -50,6 +51,11 @@ int main(int argc, char *argv[])
     player.mpris_server().on_quit([] { QApplication::quit(); });
 
     auto main_window = gui::MainWindow(&player);
+
+    player.mpris_server().on_open_uri([&] (std::string_view uri) {
+        main_window.open_url(QUrl(QString::fromStdString(std::string(uri))));
+    });
+
 
     bool sdl_running = true;
     std::thread sdl_thread([&]() {

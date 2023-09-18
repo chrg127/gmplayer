@@ -191,6 +191,7 @@ public:
     MainWindow(gmplayer::Player *player, QWidget *parent = nullptr);
     void open_playlist(std::filesystem::path file_path);
     void open_files(std::span<std::filesystem::path> paths, Flags<OpenFilesFlags> flags = {});
+    void open_url(const QUrl &url);
 };
 
 } // namespace gui

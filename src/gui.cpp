@@ -932,6 +932,21 @@ void MainWindow::open_files(std::span<fs::path> paths, Flags<OpenFilesFlags> fla
         player->load_pair(0, 0);
 }
 
+void MainWindow::open_url(const QUrl &url)
+{
+    if (!url.isValid()) {
+        msgbox(QString("Url \"%1\" is not valid.").arg(url.toDisplayString()));
+        return;
+    }
+    if (!url.isLocalFile()) {
+        msgbox(QString("gmplayer doesn't accept urls for non-local files (non-file:// urls)."));
+        return;
+    }
+    auto p = fs::path(url.toLocalFile().toStdString());
+    auto arr = std::array{p};
+    open_files(arr);
+}
+
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     auto f = [&](const auto &paths) {
