@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <system_error>
 #include <filesystem>
 #include <array>
@@ -27,30 +28,6 @@ struct Metadata {
     int length;
     std::array<std::string, 7> info;
 };
-
-inline std::string format_metadata(std::string_view fmt, const Metadata &m)
-{
-    auto get_info = [&](char c) -> std::string {
-        switch (c) {
-        case 's': return m.info[Metadata::Song];
-        case 'a': return m.info[Metadata::Author];
-        case 'g': return m.info[Metadata::Game];
-        case 'b': return m.info[Metadata::System];
-        case 'c': return m.info[Metadata::Comment];
-        case 'd': return m.info[Metadata::Dumper];
-        case 'l': return std::to_string(m.length);
-        default: return "";
-        }
-    };
-    std::string out;
-    for (int i = 0; i < fmt.size(); i++) {
-        if (fmt[i] != '%')
-            out += fmt[i];
-        else
-            out += get_info(fmt[++i]);
-    }
-    return out;
-}
 
 inline int tempo_to_int(double value) { return math::map(std::log2(value), -2.0, 2.0, 0.0, 100.0); }
 inline double int_to_tempo(int value) { return std::exp2(math::map(double(value), 0.0, 100.0, -2.0, 2.0)); }

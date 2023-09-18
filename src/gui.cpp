@@ -67,6 +67,62 @@ constexpr auto PLAYLIST_FILTER =
     "Text files (*.txt);;"
     "All files (*.*)";
 
+constexpr auto FADE_HELP = "This sets a fade out time for the song once it ends. This value is taken as seconds.";
+
+constexpr auto DEFAULT_DURATION_HELP =
+    "This is the default duration of the track, used if no length information was found in the metadata."
+    "Note that some formats can't have metadata at all and require an .m3u file in order to work."
+    "Despite using this duration, some tracks may end earlier anyway. This value is taken as seconds.";
+
+const auto FORMAT_STRING_HELP_HEADER = QStringLiteral("<p>Format string for %1. Possible values are:</p><ul>\n");
+
+constexpr auto TRACK_FORMAT_STRING_HELP =
+R"(    <li><tt>%n</tt>: The track ID. Usually its index into the playlist.
+    <li><tt>%m</tt>: Number of tracks in the playlist.
+    <li><tt>%s</tt>: Track name.
+    <li><tt>%a</tt>: Track author.
+    <li><tt>%g</tt>: Name of the game from which it is from.
+    <li><tt>%y</tt>: Game system name. In other words, the console/platform of the game.
+    <li><tt>%c</tt>: A comment for the track.
+    <li><tt>%d</tt>: Name of the dumper.
+    <li><tt>%l</tt>: Length, or duration, of the track.
+)";
+
+constexpr auto FILE_FORMAT_STRING_HELP =
+R"(    <li><tt>%f</tt>: The file's name.
+    <li><tt>%v</tt>: The file'd ID. Usually its index into the playlist.
+    <li><tt>%b</tt>: Number of files in the playlist.
+)";
+
+static const QString ABOUT_TEXT = R"(
+<p style="white-space: pre-wrap; margin: 25px;">
+
+A music player for retro game music.
+Supports the following file formats: SPC, GYM, NSF, NSFE, GBS, AY, KSS, HES, VGM, SAP.
+</p>
+<p style="white-space: pre-wrap; margin: 25px;">
+gmplayer is distributed under the GNU GPLv3 license.
+
+<a href="https://github.com/chrg127/gmplayer">Home page</a>.
+</p>
+)";
+
+static const QString LIBS_TEXT = R"(
+<p style="white-space: pre-wrap; margin: 25px;">
+
+gmplayer uses the following libraries:
+</p>
+<ul>
+    <li><a href="https://www.qt.io/">Qt5 (Base, GUI, Widgets, DBus)</a></li>
+    <li><a href="https://bitbucket.org/mpyne/game-music-emu/wiki/Home">Game_Music_Emu</a></li>
+    <li><a href="https://www.libsdl.org">SDL2</a></li>
+</ul>
+
+<p style="white-space: pre-wrap; margin: 25px;">
+
+</p>
+)";
+
 QString format_position(int ms, int max)
 {
     return QString("%1:%2/%3:%4")
@@ -107,12 +163,14 @@ std::vector<QString> get_names(gmplayer::Player *player, gmplayer::Playlist::Typ
 {
     std::vector<QString> names;
     if (type == gmplayer::Playlist::Track) {
-        player->loop_tracks([&](int, const gmplayer::Metadata &m) {
-            names.push_back(QString::fromStdString(m.info[gmplayer::Metadata::Song]));
+        auto fmt = config.get<std::string>("track_format_string");
+        player->loop_tracks([&](int id, const gmplayer::Metadata &m) {
+            names.push_back(QString::fromStdString(gmplayer::format_metadata(fmt, id, m, player->track_count())));
         });
     } else {
-        player->loop_files([&](int, const io::MappedFile &f) {
-            names.push_back(QString::fromStdString(f.path().stem().string()));
+        auto fmt = config.get<std::string>("file_format_string");
+        player->loop_files([&](int id, const io::MappedFile &f) {
+            names.push_back(QString::fromStdString(gmplayer::format_file(fmt, id, f, player->file_count())));
         });
     }
     return names;
@@ -154,18 +212,11 @@ void RecentList::add(fs::path path)
 SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
     : QDialog(parent)
 {
-    auto fade_val = config.get<int>("fade");
-    fmt::print("fade = {}\n", fade_val);
-    auto *fade_box          = make_checkbox(tr("Enable &fade-out"), fade_val != 0);
-    auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), fade_val / 1000, fade_box->isChecked());
+    auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), config.get<int>("fade") / 1000);
     auto *default_duration  = make_spinbox(10_min / 1000, config.get<int>("default_duration") / 1000);
-    auto *fmtstring         = new QLineEdit(QString::fromStdString(config.get<std::string>("status_format_string")));
-
-    connect(fade_box, &QCheckBox::stateChanged, this, [=, this](int state) {
-        fade_secs->setEnabled(state);
-        if (!state)
-            fade_secs->setValue(0);
-    });
+    auto *status_format     = new QLineEdit(QString::fromStdString(config.get<std::string>("status_format_string")));
+    auto *file_format       = new QLineEdit(QString::fromStdString(config.get<std::string>("file_format_string")));
+    auto *track_format      = new QLineEdit(QString::fromStdString(config.get<std::string>("track_format_string")));
 
     auto *button_box = new QDialogButtonBox(QDialogButtonBox::Ok
                                           | QDialogButtonBox::Cancel);
@@ -176,17 +227,39 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
         if (r == QDialog::Accepted) {
             config.set<int>("fade", fade_secs->value() * 1000);
             config.set<int>("default_duration", default_duration->value());
-            config.set<std::string>("status_format_string", fmtstring->text().toStdString());
+            config.set<std::string>("status_format_string", status_format->text().toStdString());
+            config.set<std::string>("file_format_string",   file_format  ->text().toStdString());
+            config.set<std::string>("track_format_string",  track_format ->text().toStdString());
         }
     });
 
-    setLayout(make_layout<QVBoxLayout>(
-        fade_box,
-        label_pair("Fade seconds:", fade_secs),
-        label_pair("Default duration:", default_duration),
-        label_pair("Status format string:", fmtstring),
-        button_box
-    ));
+    auto get_help_fn = [=, this] (auto... s) {
+        return [=, this] { msgbox((QString(s) + ...)); };
+    };
+    auto status_help = get_help_fn(FORMAT_STRING_HELP_HEADER.arg("player status"), TRACK_FORMAT_STRING_HELP, FILE_FORMAT_STRING_HELP, "</ul>");
+
+    setLayout(
+        make_layout<QVBoxLayout>(
+            make_layout<QGridLayout>(
+                std::tuple { new QLabel("Fade seconds:"), 0, 0 },
+                std::tuple { fade_secs, 0, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FADE_HELP)), 0, 2 },
+                std::tuple { new QLabel("Default duration:"), 1, 0 },
+                std::tuple { default_duration, 1, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(DEFAULT_DURATION_HELP)), 1, 2 },
+                std::tuple { new QLabel("Status format string:"), 2, 0 },
+                std::tuple { status_format, 2, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FORMAT_STRING_HELP_HEADER.arg("track metadata"), TRACK_FORMAT_STRING_HELP, "</ul>")), 2, 2 },
+                std::tuple { new QLabel("File playlist item format string: "), 3, 0 },
+                std::tuple { file_format, 3, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FORMAT_STRING_HELP_HEADER.arg("files"), FILE_FORMAT_STRING_HELP, "</ul>")), 3, 2 },
+                std::tuple { new QLabel("Track playlist item format string: "), 4, 0 },
+                std::tuple { track_format, 4, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, status_help), 4, 2 }
+            ),
+            button_box
+        )
+    );
 }
 
 
@@ -229,35 +302,6 @@ RecorderButton::RecorderButton(const QString &text, int key_count, QWidget *pare
 
 
 
-static const QString ABOUT_TEXT = R"(
-<p style="white-space: pre-wrap; margin: 25px;">
-
-A music player for retro game music.
-Supports the following file formats: SPC, GYM, NSF, NSFE, GBS, AY, KSS, HES, VGM, SAP.
-</p>
-<p style="white-space: pre-wrap; margin: 25px;">
-gmplayer is distributed under the GNU GPLv3 license.
-
-<a href="https://github.com/chrg127/gmplayer">Home page</a>.
-</p>
-)";
-
-static const QString LIBS_TEXT = R"(
-<p style="white-space: pre-wrap; margin: 25px;">
-
-gmplayer uses the following libraries:
-</p>
-<ul>
-    <li><a href="https://www.qt.io/">Qt5 (Base, GUI, Widgets, DBus)</a></li>
-    <li><a href="https://bitbucket.org/mpyne/game-music-emu/wiki/Home">Game_Music_Emu</a></li>
-    <li><a href="https://www.libsdl.org">SDL2</a></li>
-</ul>
-
-<p style="white-space: pre-wrap; margin: 25px;">
-
-</p>
-)";
-
 AboutDialog::AboutDialog(QWidget *parent)
 {
     auto *icon = new QLabel;
@@ -281,31 +325,23 @@ AboutDialog::AboutDialog(QWidget *parent)
 
 Playlist::Playlist(gmplayer::Playlist::Type type, gmplayer::Player *player, QWidget *parent)
     : QWidget(parent)
+    , list{new QListWidget}
+    , shuffle{make_button("Shuffle", this, [=, this] { player->shuffle(type); })}
+    , up     {make_button("Up",      this, [=, this] { list->setCurrentRow(player->move(type, list->currentRow(), -1)); })}
+    , down   {make_button("Down",    this, [=, this] { list->setCurrentRow(player->move(type, list->currentRow(), +1)); })}
+    , type{type}
+    , player{player}
 {
-    list = new QListWidget;
     connect(list, &QListWidget::itemActivated, this, [=, this] {
         if (type == gmplayer::Playlist::Track)
             player->load_track(list->currentRow());
         else
             player->load_pair(list->currentRow(), 0);
     });
-    auto *shuffle = make_button("Shuffle",    this, [=, this] { player->shuffle(type); });
-    auto *up      = make_button("Up",         this, [=, this] { list->setCurrentRow(player->move(type, list->currentRow(), -1)); });
-    auto *down    = make_button("Down",       this, [=, this] { list->setCurrentRow(player->move(type, list->currentRow(), +1)); });
     shuffle->setEnabled(false);
     up     ->setEnabled(false);
     down   ->setEnabled(false);
-    player->on_playlist_changed([=, this] (gmplayer::Playlist::Type list_type) {
-        if (list_type == type) {
-            list->clear();
-            auto names = get_names(player, type);
-            for (auto &name : names)
-                new QListWidgetItem(name, list);
-            shuffle->setEnabled(names.size() != 0);
-            up     ->setEnabled(names.size() != 0);
-            down   ->setEnabled(names.size() != 0);
-        }
-    });
+    player->on_playlist_changed([=, this] (auto type) { if (type == this->type) this->refresh_list(); });
     setLayout(
         make_layout<QVBoxLayout>(
             new QLabel(QString("%1 playlist").arg(type == gmplayer::Playlist::Type::Track ? "Track" : "File")),
@@ -324,6 +360,16 @@ void Playlist::setup_context_menu(auto &&fn)
     connect(list, &QWidget::customContextMenuRequested, this, [=, this] (const QPoint &p) { fn(list->mapToGlobal(p)); });
 }
 
+void Playlist::refresh_list() {
+    list->clear();
+    auto names = get_names(player, type);
+    for (auto &name : names)
+        new QListWidgetItem(name, list);
+    shuffle->setEnabled(names.size() != 0);
+    up     ->setEnabled(names.size() != 0);
+    down   ->setEnabled(names.size() != 0);
+}
+
 
 
 PlaylistTab::PlaylistTab(gmplayer::Player *player, QWidget *parent)
@@ -340,6 +386,9 @@ PlaylistTab::PlaylistTab(gmplayer::Player *player, QWidget *parent)
     });
 
     player->on_file_changed([=, this] (int fileno) { filelist->set_current(fileno); });
+
+    config.when_set("file_format_string",  [=, this] (const auto &_) { filelist->refresh_list(); });
+    config.when_set("track_format_string", [=, this] (const auto &_) { tracklist->refresh_list(); });
 
     setLayout(
         make_layout<QVBoxLayout>(
@@ -486,7 +535,7 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
     // status message
     status = new QLabel;
     config.when_set("status_format_string", [=, this](const conf::Value &v) {
-        status->setText(QString::fromStdString(gmplayer::format_metadata(v.as<std::string>(), this->metadata)));
+        status->setText(QString::fromStdString(gmplayer::format_status(v.as<std::string>(), *player)));
     });
 
     // player signals
@@ -525,13 +574,13 @@ Controls::Controls(gmplayer::Player *player, QWidget *parent)
         play_btn->setEnabled(false);
     });
 
-    player->on_track_changed([=, this] (int trackno, const gmplayer::Metadata &metadata) {
+    player->on_track_changed([=, this] (int id, const gmplayer::Metadata &_) {
         play_btn->setEnabled(true);
         duration_slider->setEnabled(true);
         duration_slider->setRange(0, player->length());
         enable_next_buttons();
-        this->metadata = metadata;
-        status->setText(QString::fromStdString(gmplayer::format_metadata(config.get<std::string>("status_format_string"), metadata)));
+        auto fmt = config.get<std::string>("status_format_string");
+        status->setText(QString::fromStdString(gmplayer::format_status(fmt, *player)));
     });
     player->on_track_ended([=, this] {
         play_btn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));

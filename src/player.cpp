@@ -460,4 +460,76 @@ tl::expected<std::vector<fs::path>, std::error_code> open_playlist(fs::path file
     });
 }
 
+auto format(std::string_view fmt, auto &&get_info)
+{
+    std::string out;
+    for (int i = 0; i < fmt.size(); i++) {
+        if (fmt[i] != '%')
+            out += fmt[i];
+        else
+            out += get_info(fmt[++i]);
+    }
+    return out;
+}
+
+std::string format_metadata(
+    std::string_view fmt,
+    int track_id,
+    const Metadata &m,
+    int track_count
+)
+{
+    return format(fmt, [&](char c) -> std::string {
+        switch (c) {
+        case 'n': return fmt::format("{}", track_id);
+        case 'm': return fmt::format("{}", track_count);
+        case 's': return m.info[Metadata::Song];
+        case 'a': return m.info[Metadata::Author];
+        case 'g': return m.info[Metadata::Game];
+        case 'y': return m.info[Metadata::System];
+        case 'c': return m.info[Metadata::Comment];
+        case 'd': return m.info[Metadata::Dumper];
+        case 'l': return fmt::format("{}", m.length);
+        default: return "";
+        }
+    });
+}
+
+std::string format_file(std::string_view fmt, int file_id, const io::MappedFile &file, int file_count)
+{
+    return format(fmt, [&](char c) -> std::string {
+        switch (c) {
+        case 'f': return file.name();
+        case 'v': return fmt::format("{}", file_id);
+        case 'b': return fmt::format("{}", file_count);
+        default: return "";
+        }
+    });
+}
+
+std::string format_status(std::string_view fmt, const gmplayer::Player &player)
+{
+    auto file_id = player.current_file();
+    auto track_id = player.current_track();
+    const auto &file = player.file_info(file_id);
+    const auto &m = player.track_info(track_id);
+    return format(fmt, [&](char c) -> std::string {
+        switch (c) {
+        case 'n': return fmt::format("{}", track_id);
+        case 'm': return fmt::format("{}", player.track_count());
+        case 's': return m.info[Metadata::Song];
+        case 'a': return m.info[Metadata::Author];
+        case 'g': return m.info[Metadata::Game];
+        case 'y': return m.info[Metadata::System];
+        case 'c': return m.info[Metadata::Comment];
+        case 'd': return m.info[Metadata::Dumper];
+        case 'l': return fmt::format("{}", m.length);
+        case 'f': return file.name();
+        case 'v': return fmt::format("{}", file_id);
+        case 'b': return fmt::format("{}", player.file_count());
+        default: return "";
+        }
+    });
+}
+
 } // namespace gmplayer

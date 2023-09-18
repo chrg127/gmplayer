@@ -83,12 +83,16 @@ public:
 class Playlist : public QWidget {
     Q_OBJECT
     QListWidget *list;
+    QPushButton *shuffle, *up, *down;
+    gmplayer::Playlist::Type type;
+    gmplayer::Player *player;
 public:
     explicit Playlist(gmplayer::Playlist::Type type, gmplayer::Player *player, QWidget *parent = nullptr);
     QListWidget *get_list() { return list; }
     void set_current(int n);
     int current() const;
     void setup_context_menu(auto &&fn);
+    void refresh_list();
 signals:
     void context_menu(const QPoint &p);
 };
@@ -144,7 +148,6 @@ class Controls : public QWidget {
         WasPlaying,
     } history = SliderHistory::DontKnow;
     std::string status_format_string;
-    gmplayer::Metadata metadata;
     QLabel *status;
 
 public:

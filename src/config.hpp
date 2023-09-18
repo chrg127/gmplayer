@@ -26,6 +26,8 @@ const conf::Data defaults = {
     // gui options
     { "last_visited",           ""_v },
     { "status_format_string",   "%s - %g - %a"_v },
+    { "file_format_string",     "%f"_v },
+    { "track_format_string",    "%s"_v },
     { "recent_files",           conf::Value{ conf::ValueList{} } },
     { "recent_playlists",       conf::Value{ conf::ValueList{} } },
     // shortcuts
