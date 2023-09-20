@@ -126,6 +126,7 @@ int main(int argc, char *argv[])
     }
 
     gmplayer::Player player;
+    player.mpris_server().set_desktop_entry(io::directory::applications() / "gmplayer.desktop");
     player.mpris_server().set_identity("gmplayer");
     player.mpris_server().set_supported_uri_schemes({"file"});
     player.mpris_server().set_supported_mime_types({"application/x-pkcs7-certificates", "application/octet-stream", "text/plain"});

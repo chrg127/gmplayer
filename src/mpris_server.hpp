@@ -11,6 +11,7 @@
 #include <vector>
 #include <memory>
 #include <initializer_list>
+#include <filesystem>
 
 #ifdef _WIN32
     #define MPRIS_SERVER_NO_IMPL
@@ -178,6 +179,7 @@ public:
     void set_fullscreen(bool value)                         { fullscreen            = value; prop_changed(MP2,  "Fullscreen"          , fullscreen);                                         }
     void set_identity(std::string_view value)               { identity              = value; prop_changed(MP2,  "Identity"            , identity);                                           }
     void set_desktop_entry(std::string_view value)          { desktop_entry         = value; prop_changed(MP2,  "DesktopEntry"        , desktop_entry);                                      }
+    void set_desktop_entry(std::filesystem::path value)     { set_desktop_entry(std::string_view(value.string())); }
     void set_supported_uri_schemes(const StringList &value) { supported_uri_schemes = value; prop_changed(MP2,  "SupportedUriSchemes" , supported_uri_schemes );                             }
     void set_supported_mime_types(const StringList &value)  { supported_mime_types  = value; prop_changed(MP2,  "SupportedMimeTypes"  , supported_mime_types);                               }
     void set_playback_status(PlaybackStatus value)          { playback_status       = value; prop_changed(MP2P, "PlaybackStatus"      , detail::playback_status_to_string(playback_status)); }

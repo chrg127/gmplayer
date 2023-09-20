@@ -226,6 +226,7 @@ namespace directory {
 std::filesystem::path home();
 std::filesystem::path config();
 std::filesystem::path data();
+std::filesystem::path applications();
 
 } // namespace directory
 

@@ -149,6 +149,20 @@ std::filesystem::path data()
 #endif
 }
 
+std::filesystem::path applications()
+{
+#ifdef PLATFORM_WINDOWS
+    wchar_t path_string[MAX_PATH] = L"";
+    // CSIDL_STARTMENU is likely wrong
+    SHGetFolderPathW(nullptr, CSIDL_STARTMENU | CSIDL_FLAG_CREATE, nullptr, 0, path_string);
+    return fs::path(path_string);
+#elif defined(PLATFORM_MACOS)
+    return "/Applications";
+#else
+    return data() / "applications";
+#endif
+}
+
 } // namespace directory
 
 } // namespace io
