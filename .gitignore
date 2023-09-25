@@ -9,6 +9,7 @@ external/features
 external/bin
 external/include/gme
 external/include/MprisQt
+external/gme
 .cache
 .vs
 CMakeSettings.json
