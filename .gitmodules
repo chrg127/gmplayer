@@ -1,0 +1,3 @@
+[submodule "external/libgsf"]
+	path = external/libgsf
+	url = https://github.com/chrg127/libgsf

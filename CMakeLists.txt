@@ -2,68 +2,83 @@ cmake_minimum_required(VERSION 3.27)
 
 project(gmplayer VERSION 1.0.0 LANGUAGES CXX)
 
-if (NOT DEFINED GMP_INTERFACE)
-    SET(GMP_INTERFACE "qt")
-endif()
-
-if (NOT DEFINED BUILD_MPRIS)
-    SET(BUILD_MPRIS ON)
-endif()
+option(BUILD_MPRIS "Build with or without MPRIS support." ON)
+set(GMP_INTERFACE "qt" CACHE STRING "Selects what interface to build. Valid options are: qt, console.")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set(CMAKE_VERBOSE_MAKEFILE ON)
-set(GME_DIR external/cmake)
 
 if(CMAKE_VERSION VERSION_LESS "3.7.0")
     set(CMAKE_INCLUDE_CURRENT_DIR ON)
 endif()
 
 find_package(SDL2 REQUIRED)
+set(GME_DIR external/cmake)
 find_package(GME REQUIRED)
 find_package(fmt REQUIRED)
 
-include_directories(${SDL2_INCLUDE_DIRS})
-include_directories(${GME_INCLUDE_DIRS})
-include_directories(external/expected/include)
+add_subdirectory(external/libgsf)
 
-link_directories(${SDL2_LIBRARY_DIRS})
-link_directories(${GME_LIBRARY_DIRS})
-
-add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-
-set(SOURCE_FILES src/player.cpp src/io.cpp src/format.cpp src/conf.cpp src/mpris_server.cpp)
-set(LIBS ${SDL2_LIBRARIES} ${GME_LIBRARIES} fmt::fmt)
-
+# put this right after the libraries and before add_executable so that we may get
+# qt to work correctly and won't have warnings from libraries
 if (GMP_INTERFACE STREQUAL "qt")
-    message("gmplayer interface set to \"qt\" -- will compile using QT")
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTORCC ON)
     set(CMAKE_AUTOUIC ON)
-    find_package(Qt5 COMPONENTS Widgets REQUIRED)
-    add_compile_definitions(INTERFACE_QT)
-    set(SOURCE_FILES ${SOURCE_FILES} src/main_qt.cpp src/gui.cpp src/keyrecorder.cpp src/visualizer.cpp resources/icons.qrc)
-    set(LIBS ${LIBS} Qt5::Widgets)
+endif()
+
+add_executable(gmplayer
+    src/player.cpp src/io.cpp src/format.cpp src/conf.cpp src/mpris_server.cpp
+)
+
+target_include_directories(gmplayer
+    PRIVATE
+        ${SDL2_INCLUDE_DIRS} ${GME_INCLUDE_DIRS} external/expected/include
+)
+
+target_link_directories(gmplayer
+    PRIVATE
+        ${SDL2_LIBRARY_DIRS}
+        ${GME_LIBRARY_DIRS}
+)
+
+target_compile_features(gmplayer PRIVATE cxx_std_20)
+
+target_compile_definitions(gmplayer PRIVATE _CRT_SECURE_NO_WARNINGS)
+
+target_link_libraries(gmplayer
+    ${SDL2_LIBRARIES} ${GME_LIBRARIES} fmt::fmt libgsf::libgsf
+)
+
+if (GMP_INTERFACE STREQUAL "qt")
+    message("gmplayer interface set to \"qt\" -- will compile using Qt")
+    find_package(Qt5 REQUIRED COMPONENTS Core Widgets)
+    target_sources(gmplayer
+        PRIVATE
+            src/main_qt.cpp src/gui.cpp src/keyrecorder.cpp
+            src/visualizer.cpp resources/icons.qrc
+    )
+    target_link_libraries(gmplayer Qt5::Widgets)
+    target_compile_definitions(gmplayer PRIVATE INTERFACE_QT)
 elseif (GMP_INTERFACE STREQUAL "console")
     message("gmplayer interface set to \"console\" -- will compile console/headless/terminal version")
-    set(SOURCE_FILES ${SOURCE_FILES} src/main_console.cpp)
+    target_sources(gmplayer PRIVATE src/main_console.cpp)
+    target_compile_definitions(gmplayer PRIVATE INTERFACE_CONSOLE)
 else()
     message(FATAL_ERROR "Unrecognized interface -- recognized ones are \"qt\" and \"console\"")
 endif()
 
-if (BUILD_MPRIS STREQUAL ON)
+if (BUILD_MPRIS)
     message("BUILD_MPRIS is ON -- Will compile with MPRIS support")
     find_package(sdbus-c++ REQUIRED)
-    set(LIBS ${LIBS} SDBusCpp::sdbus-c++)
+    target_link_libraries(gmplayer SDBusCpp::sdbus-c++)
 else()
     message("MPRIS support is off")
-    add_compile_definitions(MPRIS_SERVER_NO_IMPL)
+    target_compile_definitions(gmplayer PRIVATE MPRIS_SERVER_NO_IMPL)
 endif()
 
-add_executable(gmplayer ${SOURCE_FILES})
-target_link_libraries(gmplayer PRIVATE ${LIBS})
-
-install(FILES resources/linux/gmplayer.desktop DESTINATION share/applications/ COMPONENT desktop)
-install(FILES resources/linux/gmplayer.png DESTINATION share/icons/hicolor/256x256/apps COMPONENT desktop)
-install(TARGETS gmplayer DESTINATION bin COMPONENT binaries)
+# install(FILES resources/linux/gmplayer.desktop DESTINATION share/applications/ COMPONENT desktop)
+# install(FILES resources/linux/gmplayer.png DESTINATION share/icons/hicolor/256x256/apps COMPONENT desktop)
+# install(TARGETS gmplayer DESTINATION bin COMPONENT binaries)
