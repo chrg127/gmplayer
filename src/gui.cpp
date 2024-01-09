@@ -49,7 +49,7 @@ namespace gui {
 namespace {
 
 constexpr auto MUSIC_FILE_FILTER =
-    "All supported formats (*.spc *.nsf *.nsfe *.gbs *.gym *.ay *.kss *.hes *.vgm *.sap);;"
+    "All supported formats (*.spc *.nsf *.nsfe *.gbs *.gym *.ay *.kss *.hes *.vgm *.sap *.gsf *.minigsf);;"
     "All files (*.*)"
     "SPC - SNES SPC700 Files (*.spc);;"
     "NSF - Nintendo Sound Format (*.nsf);;"
@@ -60,7 +60,8 @@ constexpr auto MUSIC_FILE_FILTER =
     "KSS - Konami Sound System (*.kss);;"
     "HES - NEC Home Entertainment System (*.hes);;"
     "VGM - Video Game Music (*.vgm);;"
-    "SAP - Slight Atari Player (*.sap);;";
+    "SAP - Slight Atari Player (*.sap);;"
+    "GSF - Gameboy Sound File (*.gsf *.minigsf)";
 
 constexpr auto PLAYLIST_FILTER =
     "Playlist files (*.playlist);;"

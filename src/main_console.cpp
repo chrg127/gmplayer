@@ -9,6 +9,8 @@
 #include "terminal.hpp"
 #include "math.hpp"
 
+#include "gsf.h"
+
 namespace fs = std::filesystem;
 using namespace gmplayer::literals;
 
@@ -46,6 +48,8 @@ std::string format_position(int ms, int max)
 
 std::string make_slider(int pos, int length, int term_width)
 {
+    if (length == 0)
+        return "";
     std::string s(term_width, '-');
     s[math::map(pos, 0, length, 0, term_width)] = '+';
     return s;
@@ -113,6 +117,10 @@ std::vector<fs::path> get_files(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+    GsfEmu *emu;
+    gsf_new(&emu, 44100, 0);
+    gsf_delete(emu);
+
     if (SDL_Init(SDL_INIT_AUDIO) < 0) {
         fmt::print("error: cannot initialize SDL: {}\n", SDL_GetError());
         return 1;

@@ -134,7 +134,7 @@ public:
     int count_of(Playlist::Type type) const;
     const Metadata & track_info(int id) const;
     const io::MappedFile & file_info(int id) const;
-    const std::vector<Metadata> file_tracks(int id) const;
+    const std::vector<Metadata> file_tracks(int id);
     void loop_tracks(std::function<void(int, const Metadata &)> fn) const;
     void loop_files(std::function<void(int, const io::MappedFile &)> fn) const;
 

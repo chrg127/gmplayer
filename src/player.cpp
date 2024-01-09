@@ -204,7 +204,7 @@ void Player::remove_files(std::span<int> ids)
 void Player::load_file(int id)
 {
     std::lock_guard<SDLMutex> lock(audio.mutex);
-    auto res = read_file(file_cache[files.order[id]], 44100, config.get<int>("default_duration"));
+    auto res = read_file(file_cache[files.order[id]], file_cache, 44100, config.get<int>("default_duration"));
     if (!res) {
         error(res.error());
         return;
@@ -399,9 +399,9 @@ int Player::count_of(Playlist::Type type) const
 const Metadata &       Player::track_info(int id) const { std::lock_guard<SDLMutex> lock(audio.mutex); return track_cache[tracks.order[id]]; }
 const io::MappedFile & Player::file_info(int id)  const { std::lock_guard<SDLMutex> lock(audio.mutex); return  file_cache[ files.order[id]]; }
 
-const std::vector<Metadata> Player::file_tracks(int i) const
+const std::vector<Metadata> Player::file_tracks(int i)
 {
-    auto format = gmplayer::read_file(file_cache[files.order[i]], 44100, config.get<int>("default_duration"));
+    auto format = gmplayer::read_file(file_cache[files.order[i]], file_cache, 44100, config.get<int>("default_duration"));
     if (!format)
         return {};
     std::vector<Metadata> v;

@@ -11,6 +11,7 @@
 namespace io { class MappedFile; }
 
 class Music_Emu;
+class GsfEmu;
 
 namespace gmplayer {
 
@@ -80,9 +81,33 @@ public:
         -> tl::expected<std::unique_ptr<FormatInterface>, const char *>;
 };
 
+class GSF : public FormatInterface {
+    GsfEmu *emu;
+public:
+    explicit GSF(GsfEmu *emu) : emu{emu} {}
+    ~GSF();
+    Error       start_track(int n)                       override;
+    Error       play(std::span<i16> out)                 override;
+    Error       seek(int n)                              override;
+    void        mute_channel(int index, bool mute)       override;
+    void        set_fade(int from, int length)           override;
+    void        set_tempo(double tempo)                  override;
+    int         position()                         const override;
+    int         track_count()                      const override;
+    Metadata    track_metadata()                   const override;
+    Metadata    track_metadata(int which)          const override;
+    bool        track_ended()                      const override;
+    int         channel_count()                    const override;
+    std::string channel_name(int index)            const override;
+    bool        is_multi_channel()                 const override;
+    static auto make(std::filesystem::path path, std::vector<io::MappedFile> &cache,
+        int frequency, int default_length)
+        -> tl::expected<std::unique_ptr<FormatInterface>, int>;
+};
+
 inline std::unique_ptr<FormatInterface> make_default_format() { return std::make_unique<Default>(); }
 
-auto read_file(const io::MappedFile &file, int frequency, int default_length)
+auto read_file(const io::MappedFile &file, std::vector<io::MappedFile> &cache, int frequency, int default_length)
     -> tl::expected<std::unique_ptr<FormatInterface>, Error>;
 
 } // namespace gmplayer
