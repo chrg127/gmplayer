@@ -13,7 +13,7 @@
 #include <QStringList>
 #include <QGraphicsView>
 #include "common.hpp"
-#include "types.hpp"
+#include "audio.hpp"
 #include "const.hpp"
 #include "player.hpp"
 #include "flags.hpp"

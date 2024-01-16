@@ -4,7 +4,7 @@
 #include "player.hpp"
 #include "mpris_server.hpp"
 #include "config.hpp"
-#include "types.hpp"
+#include "audio.hpp"
 #include "io.hpp"
 #include "terminal.hpp"
 #include "math.hpp"

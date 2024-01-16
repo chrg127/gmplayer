@@ -5,7 +5,7 @@
 #include <mutex>
 #include "common.hpp"
 #include "const.hpp"
-#include "types.hpp"
+#include "audio.hpp"
 #include "conf.hpp"
 #include "callback_handler.hpp"
 

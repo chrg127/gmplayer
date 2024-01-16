@@ -5,7 +5,7 @@
 #include "gsf.h"
 #include "io.hpp"
 #include "tl/expected.hpp"
-#include "types.hpp"
+#include "audio.hpp"
 #include "fs.hpp"
 
 namespace gmplayer {

@@ -5,7 +5,7 @@
 #include <memory>
 #include <tl/expected.hpp>
 #include "common.hpp"
-#include "types.hpp"
+#include "audio.hpp"
 #include "const.hpp"
 
 namespace io { class MappedFile; }
