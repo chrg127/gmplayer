@@ -14,34 +14,43 @@ auto GSF::make(fs::path path, std::vector<io::MappedFile> &cache,
     int frequency, int default_length)
     -> tl::expected<std::unique_ptr<FormatInterface>, int>
 {
-    auto read_file = [] (void *userdata, const char *pathname, unsigned char **buf, long *size) {
-        std::vector<io::MappedFile> *cache = (std::vector<io::MappedFile> *) userdata;
-        auto path = fs::path{pathname};
-        auto it = std::find_if(cache->begin(), cache->end(), [&](const auto &f) {
-            return (f.path() == path);
-        });
-        if (it != cache->end()) {
-            *buf = it->bytes().data();
-            *size = it->size();
-            return 0;
-        }
-        auto f = io::MappedFile::open(path, io::Access::Read);
-        if (!f)
-            return 1;
-        cache->push_back(std::move(f.value()));
-        *buf = cache->back().bytes().data();
-        *size = cache->back().size();
-        return 0;
-    };
-    auto delete_file = [] (unsigned char *buf) {};
-
     GsfEmu *emu;
-    if (auto new_err = gsf_new(&emu, frequency, 0); new_err != 0)
-        return tl::unexpected(new_err);
+    if (auto err = gsf_new(&emu, frequency, 0); err.code != 0)
+        return tl::unexpected(err.code);
+    auto reader = GsfReader {
+        .read = [] (const char *pathname, void *userdata, const GsfAllocators *) -> GsfReadResult {
+            std::vector<io::MappedFile> *cache = (std::vector<io::MappedFile> *) userdata;
+            auto path = fs::path{pathname};
+            auto it = std::find_if(cache->begin(), cache->end(), [&](const auto &f) {
+                return (f.path() == path);
+            });
+            if (it != cache->end()) {
+                return {
+                    .buf  = it->bytes().data(),
+                    .size = static_cast<long>(it->size()),
+                    .err  = { .code = 0, .from = 0 }
+                };
+            }
+            auto f = io::MappedFile::open(path, io::Access::Read);
+            if (!f)
+                return {
+                    .buf  = nullptr,
+                    .size = 0,
+                    .err  = { .code = f.error().value(), .from = 0 }
+                };
+            cache->push_back(std::move(f.value()));
+            return {
+                .buf  = cache->back().bytes().data(),
+                .size = static_cast<long>(cache->back().size()),
+                .err  = { .code = 0, .from = 0 },
+            };
+        },
+        .delete_data = [] (unsigned char *, long, void *, const GsfAllocators *) {},
+        .userdata = static_cast<void *>(&cache),
+    };
+    if (auto err = gsf_load_file_with_reader(emu, path.string().c_str(), &reader); err.code != 0)
+        return tl::unexpected(err.code);
     gsf_set_default_length(emu, default_length);
-    if (auto load_err = gsf_load_file_custom(emu, path.string().c_str(), &cache, read_file, delete_file);
-        load_err != 0)
-        return tl::unexpected(load_err);
     return std::make_unique<GSF>(emu);
 }
 
