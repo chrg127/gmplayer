@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <vector>
+#include <fmt/core.h>
 #include "gsf.h"
 #include "io.hpp"
 #include "tl/expected.hpp"
@@ -51,6 +52,7 @@ auto GSF::make(fs::path path, std::vector<io::MappedFile> &cache,
     if (auto err = gsf_load_file_with_reader(emu, path.string().c_str(), &reader); err.code != 0)
         return tl::unexpected(err.code);
     gsf_set_default_length(emu, default_length);
+    gsf_set_infinite(emu, true);
     return std::make_unique<GSF>(emu);
 }
 
@@ -64,6 +66,10 @@ Error GSF::start_track(int) { return Error{}; }
 Error GSF::play(std::span<i16> out)
 {
     gsf_play(emu, out.data(), out.size());
+    auto num_samples = gsf_tell_samples(emu);
+    if (fade_out.is_set() && num_samples >= fade_out.get_start()) {
+        fade_out.put_in(out, num_samples);
+    }
     return Error{};
 }
 
@@ -80,7 +86,14 @@ void GSF::mute_channel(int index, bool mute)
 
 void GSF::set_fade(int from, int length)
 {
-
+    fade_out.set(from, length, gsf_sample_rate(emu), gsf_num_channels(emu));
+    // auto sample_rate  = gsf_sample_rate(emu);
+    // auto num_channels = gsf_num_channels(emu);
+    // fade_step = sample_rate * (length / 1000) * num_channels
+    //           / (FADE_BLOCK_SIZE * FADE_SHIFT);
+    // fade_start  = millis_to_samples(from,   sample_rate, num_channels);
+    // // fade_length = millis_to_samples(length, sample_rate, num_channels);
+    // fade_length = length;
 }
 
 void GSF::set_tempo(double tempo)
@@ -103,7 +116,7 @@ Metadata GSF::track_metadata() const
     GsfTags *tags;
     gsf_get_tags(emu, &tags);
     Metadata metadata = {
-        .length = static_cast<int>(gsf_length(emu)),
+        .length = static_cast<int>(gsf_length(emu) + fade_out.length()),
         .info = {
             "Game Boy Advance",
             tags->game,
@@ -125,7 +138,7 @@ Metadata GSF::track_metadata(int which) const
 
 bool GSF::track_ended() const
 {
-    return gsf_ended(emu);
+    return gsf_tell(emu) > gsf_length(emu) + fade_out.length();
 }
 
 int GSF::channel_count() const

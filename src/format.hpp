@@ -82,7 +82,12 @@ public:
 };
 
 class GSF : public FormatInterface {
-    GsfEmu *emu;
+    GsfEmu *emu = nullptr;
+    Fade fade_out;
+    // long fade_start  = 0;
+    // long fade_step   = 0;
+    // long fade_length = 0;
+
 public:
     explicit GSF(GsfEmu *emu) : emu{emu} {}
     ~GSF();
