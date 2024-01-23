@@ -36,7 +36,6 @@
 #include <QLineEdit>
 #include "qtutils.hpp"
 #include "io.hpp"
-#include "appinfo.hpp"
 #include "math.hpp"
 #include "visualizer.hpp"
 #include "config.hpp"
