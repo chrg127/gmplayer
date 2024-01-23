@@ -122,8 +122,6 @@ void Player::audio_callback(std::span<u8> stream)
     if (format->track_ended()) {
         pause();
         track_ended();
-        // if (options.autoplay)
-        //     next();
         return;
     }
     std::fill(stream.begin(), stream.end(), 0); // fill stream with silence
@@ -169,17 +167,9 @@ std::vector<Player::AddFileError> Player::add_files(std::span<fs::path> paths)
         if (file) {
             file_cache.push_back(std::move(file.value()));
             files.order.push_back(file_cache.size() - 1);
-        }
-        else {
+        } else {
             errors.push_back(std::make_pair(p.filename(), file.error()));
         }
-        /*.map([&](auto&& file) {
-                file_cache.emplace_back(file);
-                files.order.push_back(file_cache.size() - 1);
-            }).or_else([&](auto err) {
-                errors.push_back(std::make_pair(p.filename(), err));
-            });
-            */
     }
     if (files.size() > 0)
         playlist_changed(Playlist::File);
@@ -413,13 +403,13 @@ const std::vector<Metadata> Player::file_tracks(int i)
 void Player::loop_tracks(std::function<void(int, const Metadata &)> fn) const
 {
     for (auto i : tracks.order)
-        fn(i, track_info(i));
+        fn(i, track_cache[i]);
 }
 
 void Player::loop_files(std::function<void(int, const io::MappedFile &)> fn) const
 {
     for (auto i : files.order)
-        fn(i, file_info(i));
+        fn(i, file_cache[i]);
 }
 
 std::vector<std::string> Player::channel_names()
