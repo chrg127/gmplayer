@@ -510,6 +510,8 @@ std::string format_status(std::string_view fmt, const gmplayer::Player &player)
 {
     auto file_id = player.current_file();
     auto track_id = player.current_track();
+    if (file_id == -1 || track_id == -1)
+        return "";
     const auto &file = player.file_info(file_id);
     const auto &m = player.track_info(track_id);
     return format(fmt, [&](char c) -> std::string {

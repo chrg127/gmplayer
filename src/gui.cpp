@@ -230,7 +230,7 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
         if (r == QDialog::Accepted) {
             config.set<int>("fade", fade_secs->value() * 1000);
             config.set<int>("fade_in", fade_in_secs->value() * 1000);
-            config.set<int>("default_duration", default_duration->value());
+            config.set<int>("default_duration", default_duration->value() * 1000);
             config.set<std::string>("status_format_string", status_format->text().toStdString());
             config.set<std::string>("file_format_string",   file_format  ->text().toStdString());
             config.set<std::string>("track_format_string",  track_format ->text().toStdString());
