@@ -82,11 +82,18 @@ Error GME::start_track(int which)
 Error GME::play(std::span<i16> out)
 {
     auto err = gme_play(emu, out.size(), out.data());
-    return !err ? Error{}
-                : Error { .code = Error::Type::Play,
-                          .details = err,
-                          .file_path = file_path,
-                          .track_name = metadata.info[Metadata::Song] };
+    if (!err) {
+        auto num_samples = gme_tell_samples(emu);
+        if (fade_in.is_set() && num_samples <= fade_in.get_start() + fade_in.length())
+            fade_in.put_in(out, num_samples);
+        return Error{};
+    }
+    return Error {
+        .code = Error::Type::Play,
+        .details = err,
+        .file_path = file_path,
+        .track_name = metadata.info[Metadata::Song]
+    };
 }
 
 Error GME::seek(int n)
@@ -98,7 +105,8 @@ Error GME::seek(int n)
                        .file_path = file_path,
                        .track_name = metadata.info[Metadata::Song] };
     // fade disappears on seek for some reason
-    set_fade(fade_from, fade_len);
+    if (fade_len != 0)
+        gme_set_fade(emu, metadata.length, fade_len);
     return Error{};
 }
 
@@ -140,12 +148,16 @@ void GME::mute_channel(int index, bool mute)
     gme_mute_voice(emu, index, mute);
 }
 
-void GME::set_fade(int from, int length)
+void GME::set_fade_out(int length)
 {
-    fade_from = from;
-    fade_len  = length;
+    fade_len = length;
     if (length != 0)
-        gme_set_fade(emu, fade_from, fade_len);
+        gme_set_fade(emu, metadata.length, fade_len);
+}
+
+void GME::set_fade_in(int length)
+{
+    fade_in = Fade(Fade::Type::In, 0, length, 44100, 2 * (is_multi_channel() ? 8 : 1));
 }
 
 void GME::set_tempo(double tempo)

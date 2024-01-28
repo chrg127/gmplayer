@@ -21,7 +21,8 @@ struct FormatInterface {
     virtual Error       play(std::span<i16> out)                 = 0;
     virtual Error       seek(int n)                              = 0;
     virtual void        mute_channel(int index, bool mute)       = 0;
-    virtual void        set_fade(int from, int length)           = 0;
+    virtual void        set_fade_out(int length)                 = 0;
+    virtual void        set_fade_in(int length)                  = 0;
     virtual void        set_tempo(double tempo)                  = 0;
     virtual int         position()                         const = 0;
     virtual int         track_count()                      const = 0;
@@ -39,7 +40,8 @@ struct Default : public FormatInterface {
     Error       play(std::span<i16> out)                 override { return Error{}; }
     Error       seek(int n)                              override { return Error{}; }
     void        mute_channel(int index, bool mute)       override { }
-    void        set_fade(int from, int length)           override { }
+    void        set_fade_out(int length)                 override { }
+    void        set_fade_in(int length)                  override { }
     void        set_tempo(double tempo)                  override { }
     int         position()                         const override { return 0; }
     int         track_count()                      const override { return 0; }
@@ -53,9 +55,11 @@ struct Default : public FormatInterface {
 
 class GME : public FormatInterface {
     Music_Emu *emu = nullptr;
-    int fade_from = 0, fade_len = 0, default_length = 0, track_len = 0;
+    int fade_len = 0, default_length = 0;
     std::filesystem::path file_path = {};
     Metadata metadata;
+    Fade fade_in;
+
 public:
     GME(Music_Emu *emu, int default_length, std::filesystem::path file_path)
         : emu{emu}
@@ -67,7 +71,8 @@ public:
     Error       play(std::span<i16> out)                 override;
     Error       seek(int n)                              override;
     void        mute_channel(int index, bool mute)       override;
-    void        set_fade(int from, int length)           override;
+    void        set_fade_out(int length)                 override;
+    void        set_fade_in(int length)                  override;
     void        set_tempo(double tempo)                  override;
     int         position()                         const override;
     int         track_count()                      const override;
@@ -84,9 +89,7 @@ public:
 class GSF : public FormatInterface {
     GsfEmu *emu = nullptr;
     Fade fade_out;
-    // long fade_start  = 0;
-    // long fade_step   = 0;
-    // long fade_length = 0;
+    Fade fade_in;
 
 public:
     explicit GSF(GsfEmu *emu) : emu{emu} {}
@@ -95,7 +98,8 @@ public:
     Error       play(std::span<i16> out)                 override;
     Error       seek(int n)                              override;
     void        mute_channel(int index, bool mute)       override;
-    void        set_fade(int from, int length)           override;
+    void        set_fade_out(int length)                 override;
+    void        set_fade_in(int length)                  override;
     void        set_tempo(double tempo)                  override;
     int         position()                         const override;
     int         track_count()                      const override;

@@ -31,7 +31,7 @@ endif()
 
 add_executable(gmplayer
     src/player.cpp src/io.cpp src/conf.cpp src/mpris_server.cpp
-    src/format.cpp src/gsf_format.cpp src/gme_format.cpp
+    src/format.cpp src/gsf_format.cpp src/gme_format.cpp src/audio.cpp
 )
 
 target_include_directories(gmplayer

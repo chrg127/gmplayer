@@ -67,9 +67,10 @@ Error GSF::play(std::span<i16> out)
 {
     gsf_play(emu, out.data(), out.size());
     auto num_samples = gsf_tell_samples(emu);
-    if (fade_out.is_set() && num_samples >= fade_out.get_start()) {
+    if (fade_in.is_set() && num_samples <= fade_in.get_start() + fade_in.length())
+        fade_in.put_in(out, num_samples);
+    if (fade_out.is_set() && num_samples >= fade_out.get_start())
         fade_out.put_in(out, num_samples);
-    }
     return Error{};
 }
 
@@ -84,16 +85,14 @@ void GSF::mute_channel(int index, bool mute)
 
 }
 
-void GSF::set_fade(int from, int length)
+void GSF::set_fade_out(int length)
 {
-    fade_out.set(from, length, gsf_sample_rate(emu), gsf_num_channels(emu));
-    // auto sample_rate  = gsf_sample_rate(emu);
-    // auto num_channels = gsf_num_channels(emu);
-    // fade_step = sample_rate * (length / 1000) * num_channels
-    //           / (FADE_BLOCK_SIZE * FADE_SHIFT);
-    // fade_start  = millis_to_samples(from,   sample_rate, num_channels);
-    // // fade_length = millis_to_samples(length, sample_rate, num_channels);
-    // fade_length = length;
+    fade_out = Fade(Fade::Type::Out, gsf_length(emu), length, gsf_sample_rate(emu), gsf_num_channels(emu));
+}
+
+void GSF::set_fade_in(int length)
+{
+    fade_in = Fade(Fade::Type::In, 0, length, gsf_sample_rate(emu), gsf_num_channels(emu));
 }
 
 void GSF::set_tempo(double tempo)
@@ -115,8 +114,9 @@ Metadata GSF::track_metadata() const
 {
     GsfTags *tags;
     gsf_get_tags(emu, &tags);
+    auto len = samples_to_millis(fade_out.length(), gsf_sample_rate(emu), gsf_num_channels(emu));
     Metadata metadata = {
-        .length = static_cast<int>(gsf_length(emu) + fade_out.length()),
+        .length = static_cast<int>(gsf_length(emu) + len),
         .info = {
             "Game Boy Advance",
             tags->game,
@@ -156,4 +156,4 @@ bool GSF::is_multi_channel() const
     return false;
 }
 
-} // namespace gmplayer const
+} // namespace gmplayer

@@ -34,6 +34,8 @@
 #include <QList>
 #include <QScrollArea>
 #include <QLineEdit>
+#include <limits>
+#include <qlabel.h>
 #include "qtutils.hpp"
 #include "io.hpp"
 #include "math.hpp"
@@ -213,6 +215,7 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
     : QDialog(parent)
 {
     auto *fade_secs         = make_spinbox(std::numeric_limits<int>::max(), config.get<int>("fade") / 1000);
+    auto *fade_in_secs      = make_spinbox(std::numeric_limits<int>::max(), config.get<int>("fade_in") / 1000);
     auto *default_duration  = make_spinbox(10_min / 1000, config.get<int>("default_duration") / 1000);
     auto *status_format     = new QLineEdit(QString::fromStdString(config.get<std::string>("status_format_string")));
     auto *file_format       = new QLineEdit(QString::fromStdString(config.get<std::string>("file_format_string")));
@@ -226,6 +229,7 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
     connect(this, &QDialog::finished, this, [=, this] (int r) {
         if (r == QDialog::Accepted) {
             config.set<int>("fade", fade_secs->value() * 1000);
+            config.set<int>("fade_in", fade_in_secs->value() * 1000);
             config.set<int>("default_duration", default_duration->value());
             config.set<std::string>("status_format_string", status_format->text().toStdString());
             config.set<std::string>("file_format_string",   file_format  ->text().toStdString());
@@ -243,19 +247,22 @@ SettingsWindow::SettingsWindow(gmplayer::Player *player, QWidget *parent)
             make_layout<QGridLayout>(
                 std::tuple { new QLabel("Fade seconds:"), 0, 0 },
                 std::tuple { fade_secs, 0, 1 },
-                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FADE_HELP)), 0, 2 },
-                std::tuple { new QLabel("Default duration:"), 1, 0 },
-                std::tuple { default_duration, 1, 1 },
-                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(DEFAULT_DURATION_HELP)), 1, 2 },
-                std::tuple { new QLabel("Status format string:"), 2, 0 },
-                std::tuple { status_format, 2, 1 },
-                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FORMAT_STRING_HELP_HEADER.arg("track metadata"), TRACK_FORMAT_STRING_HELP, "</ul>")), 2, 2 },
-                std::tuple { new QLabel("File playlist item format string: "), 3, 0 },
-                std::tuple { file_format, 3, 1 },
-                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FORMAT_STRING_HELP_HEADER.arg("files"), FILE_FORMAT_STRING_HELP, "</ul>")), 3, 2 },
-                std::tuple { new QLabel("Track playlist item format string: "), 4, 0 },
-                std::tuple { track_format, 4, 1 },
-                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, status_help), 4, 2 }
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FADE_HELP)), 1, 2 },
+                std::tuple { new QLabel("Fade in seconds:"), 1, 0 },
+                std::tuple { fade_in_secs, 1, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FADE_HELP)), 1, 2 },
+                std::tuple { new QLabel("Default duration:"), 2, 0 },
+                std::tuple { default_duration, 2, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(DEFAULT_DURATION_HELP)), 2, 2 },
+                std::tuple { new QLabel("Status format string:"), 3, 0 },
+                std::tuple { status_format, 3, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FORMAT_STRING_HELP_HEADER.arg("track metadata"), TRACK_FORMAT_STRING_HELP, "</ul>")), 3, 2 },
+                std::tuple { new QLabel("File playlist item format string: "), 4, 0 },
+                std::tuple { file_format, 4, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, get_help_fn(FORMAT_STRING_HELP_HEADER.arg("files"), FILE_FORMAT_STRING_HELP, "</ul>")), 4, 2 },
+                std::tuple { new QLabel("Track playlist item format string: "), 5, 0 },
+                std::tuple { track_format, 5, 1 },
+                std::tuple { make_tool_btn(this, QStyle::SP_MessageBoxInformation, status_help), 5, 2 }
             ),
             button_box
         )

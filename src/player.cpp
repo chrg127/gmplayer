@@ -72,9 +72,17 @@ Player::Player()
     config.when_set("fade", [&](const conf::Value &v) {
         std::lock_guard<SDLMutex> lock(audio.mutex);
         if (tracks.current != -1) {
-            format->set_fade(length(), v.as<int>());
-            // reset song to start position
-            // (this is due to the modified fade applying to the song)
+            format->set_fade_out(v.as<int>());
+            // reset song to start position, due to the modified
+            // fade applying to the song
+            seek(0);
+        }
+    });
+
+    config.when_set("fade_in", [&](const conf::Value &v) {
+        std::lock_guard<SDLMutex> lock(audio.mutex);
+        if (tracks.current != -1) {
+            format->set_fade_in(v.as<int>());
             seek(0);
         }
     });
@@ -221,7 +229,8 @@ void Player::load_track(int id)
         return;
     }
     auto &metadata = track_cache[num];
-    format->set_fade(metadata.length, config.get<int>("fade"));
+    format->set_fade_out(config.get<int>("fade"));
+    format->set_fade_in(config.get<int>("fade_in"));
     format->set_tempo(int_to_tempo(config.get<int>("tempo")));
     mpris->set_metadata({
         { mpris::Field::TrackId, fmt::format("/{}{}", files.current, tracks.current)    },
