@@ -44,13 +44,6 @@ installed with the following command:
 
 For other distributions the specific names of the package may vary.
 
-GME must be built and installed manually. Installation instruction for GME can
-be found in the link above. As a note, to simplify building gmplayer itself,
-you should use $THIS_REPO/external/gme as the prefix when building GME.
-
-On Windows, the program should be built using MSYS2. Visual Studio has been
-tested, but only with the program's console interface.
-
 COMPILING AND INSTALLING
 
 Once the dependencies above have been installed, the project can simply be
@@ -88,10 +81,21 @@ On Windows, you must install both conan and Qt already. You should install Qt
 through the online installer.
 When everything is installed, issue the following commands on the project root:
 
-    QT_DIR=/path/to/qt
+    set QT_DIR=/path/to/qt
     conan install . --output-folder=build --build=missing
     cd build
     cmake .. -DGMP_INTERFACE=qt -DBUILD_MPRIS=OFF -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_PREFIX_PATH=%QT_DIR%
     cmake --build . --config Release
+    cmake --install .
 
+Where:
 
+    - /path/to/qt is where your Qt installation is located. Note that it's not
+      enough to specify C:\Qt here; for example, if you've got an installation
+      with Qt 6.6.1 and MSVC 2019, you should specify C:\Qt\6.6.1\msvc2019_64
+    - conan will install the needed libraries (zlib, sdl, fmt) inside the build/
+      directory
+    - The CMake command specifies the Qt interface and turns off MPRIS support
+    - The second CMake command specifies to build in Release mode
+    - In the third CMake command you may specify a directory to install to by
+      using --prefix <dir>
