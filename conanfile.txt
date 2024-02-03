@@ -1,0 +1,8 @@
+[requires]
+zlib/1.2.11
+sdl/2.28.5
+fmt/10.2.1
+
+[generators]
+CMakeDeps
+CMakeToolchain

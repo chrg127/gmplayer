@@ -13,12 +13,13 @@ auto read_file(const io::MappedFile &file, std::vector<io::MappedFile> &cache, i
         return std::move(gsf.value());
     if (auto gme = GME::make(file, frequency, default_length); gme)
         return std::move(gme.value());
-    return tl::unexpected<Error>({
+    auto err = Error {
         .code = Error::Type::LoadFile,
         .details = "no suitable interface found",
         .file_path = file.path(),
         .track_name = "",
-    });
+    };
+    return tl::unexpected<Error>(err);
 }
 
 } // namespace gmplayer

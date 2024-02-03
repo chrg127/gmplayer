@@ -80,5 +80,18 @@ You can also choose to build with or without MPRIS support by passing
 -DBUILD_MPRIS=ON or OFF.
 
 For make, -C specifies the directory where to find the Makefile.
+When compilation is completed, the executable should be found inside build/.
 
-When the compilation is completed, the executable should be found inside build/.
+WINDOWS
+
+On Windows, you must install both conan and Qt already. You should install Qt
+through the online installer.
+When everything is installed, issue the following commands on the project root:
+
+    QT_DIR=/path/to/qt
+    conan install . --output-folder=build --build=missing
+    cd build
+    cmake .. -DGMP_INTERFACE=qt -DBUILD_MPRIS=OFF -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_PREFIX_PATH=%QT_DIR%
+    cmake --build . --config Release
+
+

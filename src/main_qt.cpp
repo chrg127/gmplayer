@@ -1,4 +1,5 @@
 #include <thread>
+#define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <fmt/core.h>
 #include <QApplication>
@@ -28,6 +29,7 @@ std::vector<fs::path> args_to_paths(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+    SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_AUDIO) < 0) {
         fmt::print("error: cannot initialize SDL: {}\n", SDL_GetError());
         return 1;

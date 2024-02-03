@@ -122,7 +122,7 @@ struct Terminal {
 
 std::pair<int, int> get_terminal_size()
 {
-    auto is_native_out_vt(HANDLE handle) -> bool {
+    auto is_native_out_vt = [](HANDLE handle) -> bool {
         DWORD cmode;
         return GetConsoleMode(handle, &cmode) &&
                (cmode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) &&

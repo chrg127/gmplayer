@@ -1,3 +1,6 @@
 [submodule "external/libgsf"]
 	path = external/libgsf
 	url = https://github.com/chrg127/libgsf
+[submodule "external/game-music-emu"]
+	path = external/game-music-emu
+	url = https://github.com/libgme/game-music-emu

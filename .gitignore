@@ -13,3 +13,4 @@ external/gme
 .cache
 .vs
 CMakeSettings.json
+CMakeUserPresets.json

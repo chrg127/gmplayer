@@ -106,7 +106,7 @@ Error GME::seek(int n)
                        .track_name = metadata.info[Metadata::Song] };
     // fade disappears on seek for some reason
     if (fade_len != 0)
-        gme_set_fade(emu, metadata.length, fade_len);
+        gme_set_fade_msecs(emu, metadata.length, fade_len);
     return Error{};
 }
 
@@ -152,7 +152,7 @@ void GME::set_fade_out(int length)
 {
     fade_len = length;
     if (length != 0)
-        gme_set_fade(emu, metadata.length, fade_len);
+        gme_set_fade_msecs(emu, metadata.length, fade_len);
 }
 
 void GME::set_fade_in(int length)

@@ -12,8 +12,9 @@
 #include <memory>
 #include <initializer_list>
 #include <filesystem>
+#include "common.hpp"
 
-#ifdef _WIN32
+#if defined(PLATFORM_WINDOWS) && !defined(MPRIS_SERVER_NO_IMPL)
     #define MPRIS_SERVER_NO_IMPL
 #endif
 
