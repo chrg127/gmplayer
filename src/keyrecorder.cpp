@@ -12,6 +12,7 @@
 #include <QEvent>
 #include <QKeyEvent>
 #include <array>
+#include <qnamespace.h>
 
 constexpr int MAX_KEY_COUNT = 4;
 
@@ -23,14 +24,17 @@ constexpr Qt::KeyboardModifiers MASK = Qt::ShiftModifier | Qt::ControlModifier |
 
 namespace {
 
-QKeySequence append_to_sequence(const QKeySequence &sequence, int key, int key_count)
+QKeySequence append_to_sequence(const QKeySequence &sequence, QKeyCombination comb, int key_count)
 {
     if (sequence.count() >= key_count) {
-        qDebug() << "Cannot append to a key to a sequence which is already of length" << sequence.count();
+        qDebug() << "Cannot append to a key to a sequence which is already of length"
+                 << sequence.count();
         return sequence;
     }
-    std::array<int, MAX_KEY_COUNT> keys{sequence[0], sequence[1], sequence[2], sequence[3]};
-    keys[sequence.count()] = key;
+    std::array<QKeyCombination, MAX_KEY_COUNT> keys{
+        sequence[0], sequence[1], sequence[2], sequence[3]
+    };
+    keys[sequence.count()] = comb;
     return QKeySequence(keys[0], keys[1], keys[2], keys[3]);
 }
 
@@ -115,10 +119,11 @@ void KeyRecorder::handle_key_press(QKeyEvent *event)
         update_timer();
         break;
     default: {
-        key = (key == Qt::Key_Backtab) && (cur_modifiers & Qt::ShiftModifier)
-            ? Qt::Key_Tab | cur_modifiers
-            : key | cur_modifiers;
-        cur_sequence = append_to_sequence(cur_sequence, key, key_count);
+        // auto the_key = static_cast<Qt::Key>(key);
+        QKeyCombination comb = (key == Qt::Key_Backtab) && (cur_modifiers & Qt::ShiftModifier)
+            ? QKeyCombination(cur_modifiers, Qt::Key_Tab)
+            : QKeyCombination(cur_modifiers, static_cast<Qt::Key>(key));
+        cur_sequence = append_to_sequence(cur_sequence, comb, key_count);
         if (cur_sequence.count() == key_count) {
             finish();
             break;
