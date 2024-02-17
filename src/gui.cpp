@@ -152,13 +152,10 @@ QString format_error(const gmplayer::Error &error)
     }
 }
 
-void handle_error(const gmplayer::Error &error)
+void handle_error(const gmplayer::Error &err)
 {
-    if (error)
-        msgbox(
-            format_error(error),
-            QString::fromStdString(error.details.data())
-        );
+    if (err)
+        msgbox(format_error(err), QString::fromStdString(err.details.data()));
 }
 
 std::vector<QString> get_names(gmplayer::Player *player, gmplayer::Playlist::Type type)
@@ -423,29 +420,28 @@ ChannelWidget::ChannelWidget(int index, gmplayer::Player *player, QWidget *paren
         checkbox->setChecked(false);
     });
 
-    // volume = new QSlider(Qt::Horizontal);
-    // volume->setRange(0, MAX_VOLUME_VALUE);
-    // volume->setValue(MAX_VOLUME_VALUE/2);
-    // connect(volume, &QSlider::sliderMoved, this, [=, this] (int value) {
-    //     player->set_channel_volume(index, value);
-    // });
-    // player->on_channel_volume_changed([=, this] (int i, int v) {
-    //     if (i == index)
-    //         volume->setValue(v);
-    // });
-    //
+     volume = new QSlider(Qt::Horizontal);
+     volume->setRange(0, MAX_VOLUME_VALUE);
+     volume->setValue(MAX_VOLUME_VALUE/2);
+     connect(volume, &QSlider::sliderMoved, this, [=, this] (int value) {
+         player->set_channel_volume(index, value);
+     });
+     player->on_channel_volume_changed([=, this] (int i, int v) {
+         if (i == index)
+             volume->setValue(v);
+     });
 
     setLayout(
         make_layout<QVBoxLayout>(
-            label, checkbox
-            // make_layout<QHBoxLayout>(new QLabel("Volume:"), volume)
+            label, checkbox,
+            make_layout<QHBoxLayout>(new QLabel("Volume:"), volume)
         )
     );
 }
 
 void ChannelWidget::set_name(const QString &name) { setEnabled(true);  label->setText(name);                             }
 void ChannelWidget::reset()                       { setEnabled(false); label->setText(QString("Channel %1").arg(index)); }
-// void ChannelWidget::enable_volume(bool enable)    { volume->setEnabled(enable); }
+void ChannelWidget::enable_volume(bool enable)    { volume->setEnabled(enable); }
 
 
 
@@ -466,7 +462,7 @@ VoicesTab::VoicesTab(gmplayer::Player *player, QWidget *parent)
             c->reset();
         for (int i = 0; i < names.size(); i++) {
             channels[i]->set_name(QString::fromStdString(names[i]));
-            // channels[i]->enable_volume(multi);
+            channels[i]->enable_volume(multi);
         }
     });
 

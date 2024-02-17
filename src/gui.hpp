@@ -131,7 +131,7 @@ public:
     ChannelWidget(int index, gmplayer::Player *player, QWidget *parent = nullptr);
     void set_name(const QString &name);
     void reset();
-    // void enable_volume(bool enable);
+    void enable_volume(bool enable);
 };
 
 class VoicesTab : public QWidget {
