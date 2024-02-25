@@ -148,7 +148,7 @@ int GSF::channel_count() const
 
 std::string GSF::channel_name(int index) const
 {
-    return "";
+    return "GBA";
 }
 
 bool GSF::is_multi_channel() const
