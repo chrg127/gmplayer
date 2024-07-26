@@ -28,7 +28,7 @@ OTHER FEATURES
 - GUI and console/terminal interfaces.
 - Very, very small.
 
-DEPENDECIES
+DEPENDENCIES
 
 The following libraries have been used for building this player and are required
 when installing:
@@ -37,12 +37,16 @@ when installing:
     - Qt5 (base, gui, widgets): https://www.qt.io/
     - SDL2: https://www.libsdl.org
 
-Assuming you are in a debian-based distribution, Qt5 and SDL2 can be
-installed with the following command:
+Assuming you are in a debian-based distribution, required libs can be installed
+with the following command:
 
-    sudo apt install qtbase5-dev libsdl2-dev
+    sudo apt install qtbase5-dev libsdl2-dev libfmt-dev libsdbus-c++-dev
 
 For other distributions the specific names of the package may vary.
+
+Also, make sure to check this repository's submodules:
+
+    git submodule update --init --recursive
 
 COMPILING AND INSTALLING
 
