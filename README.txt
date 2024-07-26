@@ -36,15 +36,20 @@ when installing:
     - Game_Music_Emu (GME): https://bitbucket.org/mpyne/game-music-emu/wiki/Home
     - Qt5 (base, gui, widgets): https://www.qt.io/
     - SDL2: https://www.libsdl.org
+    - libfmt: https://fmt.dev
+    - sdbus-c++: https://github.com/Kistler-Group/sdbus-cpp
 
 Assuming you are in a debian-based distribution, required libs can be installed
 with the following command:
 
     sudo apt install qtbase5-dev libsdl2-dev libfmt-dev libsdbus-c++-dev
 
-For other distributions the specific names of the package may vary.
+For other distributions the specific names of the package may vary. Note that
+only Qt, SDL, fmt and sdbus-c++ must be installed externally; GME is bundled
+using submodules.
 
-Also, make sure to check this repository's submodules:
+If you didn't clone using --recursive, make sure to checkout this repository's
+submodules:
 
     git submodule update --init --recursive
 
@@ -81,7 +86,7 @@ When compilation is completed, the executable should be found inside build/.
 
 WINDOWS
 
-On Windows, you must install both conan and Qt already. You should install Qt
+On Windows, you must install both conan and Qt. You should install Qt
 through the online installer.
 When everything is installed, issue the following commands on the project root:
 
@@ -103,3 +108,4 @@ Where:
     - The second CMake command specifies to build in Release mode
     - In the third CMake command you may specify a directory to install to by
       using --prefix <dir>
+
